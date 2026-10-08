@@ -7,4 +7,246 @@ datasource db {
   provider = "postgresql"
 }
 
-// Add application models here when the business schema is defined.
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum Role {
+  ORG_ADMIN
+  SERVER_ADMIN
+  CLIENT_EDITOR
+  SERVER_EDITOR
+  REVIEWER
+  PUBLISHER
+  RELEASE_OPERATOR
+  READ_ONLY
+}
+
+enum DraftStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  RELEASED
+}
+
+model Account {
+  id           String               @id @default(uuid()) @db.Uuid
+  displayName  String
+  status       AccountStatus        @default(ACTIVE)
+  isSuperAdmin Boolean              @default(false)
+  createdAt    DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(6)
+  credential   LocalCredential?
+  sessions     Session[]
+  memberships  OrganizationMember[] @relation("MemberAccount")
+  memberGrants OrganizationMember[] @relation("MemberGrantor")
+  serverGrants ServerGrant[]        @relation("ServerGrantee")
+  grantsIssued ServerGrant[]        @relation("ServerGrantor")
+  drafts       ClientDraft[]        @relation("DraftCreator")
+  reviews      ClientDraft[]        @relation("DraftReviewer")
+  approvals    ClientRelease[]      @relation("ReleaseApprover")
+  releases     ClientRelease[]      @relation("ReleasePublisher")
+  publications ServerPublication[]
+  auditEvents  AuditEvent[]
+}
+
+model LocalCredential {
+  accountId    String   @id @db.Uuid
+  username     String   @unique @db.VarChar(64)
+  passwordHash String
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+}
+
+model Session {
+  tokenHash String   @id @db.Char(64)
+  accountId String   @db.Uuid
+  expiresAt DateTime @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId])
+  @@index([expiresAt])
+}
+
+model LoginThrottle {
+  key      String   @id @db.Char(64)
+  attempts Int      @default(0)
+  resetAt  DateTime @db.Timestamptz(6)
+}
+
+model Organization {
+  id              String               @id @default(uuid()) @db.Uuid
+  displayName     String
+  description     String               @default("")
+  avatarObjectKey String?
+  archivedAt      DateTime?            @db.Timestamptz(6)
+  createdAt       DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @db.Timestamptz(6)
+  members         OrganizationMember[]
+  servers         Server[]
+  clients         Client[]
+  auditEvents     AuditEvent[]
+}
+
+model OrganizationMember {
+  organizationId String        @db.Uuid
+  accountId      String        @db.Uuid
+  status         AccountStatus @default(ACTIVE)
+  roles          Role[]        @default([])
+  grantedById    String        @db.Uuid
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  account        Account       @relation("MemberAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  grantedBy      Account       @relation("MemberGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+  serverGrants   ServerGrant[]
+
+  @@id([organizationId, accountId])
+  @@index([accountId])
+}
+
+model Server {
+  serverId       String             @id @db.VarChar(5)
+  organizationId String             @db.Uuid
+  displayName    String
+  description    String             @default("")
+  gameAddress    String?
+  iconObjectKey  String?
+  sortOrder      Int                @default(0)
+  themeColor     String?            @db.VarChar(7)
+  isListed       Boolean            @default(false)
+  archivedAt     DateTime?          @db.Timestamptz(6)
+  createdAt      DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(6)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client         Client?
+  publication    ServerPublication?
+  grants         ServerGrant[]
+  auditEvents    AuditEvent[]
+
+  @@unique([organizationId, serverId])
+  @@index([organizationId])
+}
+
+model Client {
+  serverId       String          @id @db.VarChar(5)
+  organizationId String          @db.Uuid
+  archivedAt     DateTime?       @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
+  server         Server          @relation(fields: [organizationId, serverId], references: [organizationId, serverId], onDelete: Restrict)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  drafts         ClientDraft[]
+  releases       ClientRelease[]
+
+  @@unique([organizationId, serverId])
+}
+
+model ServerGrant {
+  accountId      String             @db.Uuid
+  serverId       String             @db.VarChar(5)
+  organizationId String             @db.Uuid
+  roles          Role[]             @default([])
+  grantedById    String             @db.Uuid
+  createdAt      DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(6)
+  member         OrganizationMember @relation(fields: [organizationId, accountId], references: [organizationId, accountId], onDelete: Restrict)
+  account        Account            @relation("ServerGrantee", fields: [accountId], references: [id], onDelete: Restrict)
+  server         Server             @relation(fields: [organizationId, serverId], references: [organizationId, serverId], onDelete: Restrict)
+  grantedBy      Account            @relation("ServerGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@id([accountId, serverId])
+}
+
+model ClientDraft {
+  id                      String         @id @default(uuid()) @db.Uuid
+  serverId                String         @db.VarChar(5)
+  versionLabel            String?
+  name                    String?
+  description             String         @default("")
+  changelog               String         @default("")
+  candidateMetadata       Json?
+  sourceObjectKey         String?
+  candidateManifestKey    String?
+  candidateManifestSha256 String?        @db.Char(64)
+  contentRevision         Int            @default(1)
+  status                  DraftStatus    @default(DRAFT)
+  createdById             String         @db.Uuid
+  reviewedById            String?        @db.Uuid
+  reviewedRevision        Int?
+  reviewedAt              DateTime?      @db.Timestamptz(6)
+  reviewNote              String?
+  archivedAt              DateTime?      @db.Timestamptz(6)
+  createdAt               DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime       @updatedAt @db.Timestamptz(6)
+  client                  Client         @relation(fields: [serverId], references: [serverId], onDelete: Restrict)
+  createdBy               Account        @relation("DraftCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy              Account?       @relation("DraftReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  release                 ClientRelease?
+
+  @@unique([serverId, id])
+}
+
+model ClientRelease {
+  id                  String             @id @default(uuid()) @db.Uuid
+  serverId            String             @db.VarChar(5)
+  sourceDraftId       String             @unique @db.Uuid
+  versionLabel        String
+  name                String
+  description         String
+  changelog           String
+  environmentSnapshot Json
+  manifestObjectKey   String
+  manifestSha256      String             @db.Char(64)
+  packObjectKey       String?
+  signingKeyId        String
+  signature           String
+  approvedById        String             @db.Uuid
+  publishedById       String             @db.Uuid
+  publishedAt         DateTime           @default(now()) @db.Timestamptz(6)
+  archivedAt          DateTime?          @db.Timestamptz(6)
+  client              Client             @relation(fields: [serverId], references: [serverId], onDelete: Restrict)
+  sourceDraft         ClientDraft        @relation(fields: [serverId, sourceDraftId], references: [serverId, id], onDelete: Restrict)
+  approvedBy          Account            @relation("ReleaseApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  publishedBy         Account            @relation("ReleasePublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  publication         ServerPublication?
+
+  @@unique([serverId, versionLabel])
+  @@unique([serverId, sourceDraftId])
+  @@unique([serverId, id])
+}
+
+model ServerPublication {
+  serverId    String         @id @db.VarChar(5)
+  releaseId   String?        @unique @db.Uuid
+  revision    Int            @default(0)
+  changedById String         @db.Uuid
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
+  server      Server         @relation(fields: [serverId], references: [serverId], onDelete: Restrict)
+  release     ClientRelease? @relation(fields: [serverId, releaseId], references: [serverId, id], onDelete: Restrict)
+  changedBy   Account        @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@unique([serverId, releaseId])
+}
+
+model AuditEvent {
+  id             String        @id @default(uuid()) @db.Uuid
+  actorId        String        @db.Uuid
+  organizationId String?       @db.Uuid
+  serverId       String?       @db.VarChar(5)
+  action         String
+  targetType     String
+  targetId       String
+  details        Json
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  actor          Account       @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  server         Server?       @relation(fields: [organizationId, serverId], references: [organizationId, serverId], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+}

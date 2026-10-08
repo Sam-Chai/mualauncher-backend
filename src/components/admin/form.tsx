@@ -1,0 +1,47 @@
+"use client";
+import { useState, type ReactNode } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { LoaderCircle, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { api, useAdmin } from "./provider";
+export type Values = Record<string, string | boolean | string[]>;
+export type Field = { name: string; label: string; type?: "text" | "password" | "textarea" | "number" | "checkbox" | "select" | "roles"; hint?: string; placeholder?: string; options?: { value: string; label: string; disabled?: boolean }[]; autoComplete?: string };
+export const nameSchema = z.string().trim().min(1, "请填写名称").max(200, "最多 200 个字符");
+export const textSchema = (max = 5000) => z.string().trim().max(max, `最多 ${max} 个字符`);
+export const passwordSchema = z.string().min(12, "密码至少 12 个字符").max(128, "密码最多 128 个字符");
+export function SchemaForm({ schema, fields, defaults, onSubmit, disabled = false, label = "保存" }: { schema: z.ZodType<Values>; fields: Field[]; defaults: Values; onSubmit: (values: Values) => Promise<boolean>; disabled?: boolean; label?: string }) {
+  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: defaults });
+  return <Form {...form}><form onSubmit={form.handleSubmit(async values => { await onSubmit(values); })} className="space-y-5">
+    <fieldset disabled={disabled || form.formState.isSubmitting} className="space-y-5">
+      {fields.map(spec => <FormField key={spec.name} control={form.control} name={spec.name} render={({ field }) => <FormItem>
+        {spec.type !== "checkbox" && <FormLabel>{spec.label}</FormLabel>}
+        {spec.type === "checkbox" ? <div className="flex items-center gap-2"><FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={disabled || form.formState.isSubmitting} /></FormControl><FormLabel>{spec.label}</FormLabel></div>
+          : spec.type === "roles" ? <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">{spec.options?.map(option => <label key={option.value} className="flex items-center gap-2 text-sm"><Checkbox checked={Array.isArray(field.value) && field.value.includes(option.value)} disabled={disabled || form.formState.isSubmitting || option.disabled} onCheckedChange={checked => field.onChange(checked ? [...(Array.isArray(field.value) ? field.value : []), option.value] : (Array.isArray(field.value) ? field.value : []).filter(value => value !== option.value))} />{option.label}</label>)}</div>
+          : spec.type === "select" ? <Select value={String(field.value ?? "")} onValueChange={field.onChange} disabled={disabled || form.formState.isSubmitting}><FormControl><SelectTrigger className="w-full"><SelectValue placeholder="请选择" /></SelectTrigger></FormControl><SelectContent>{spec.options?.map(option => <SelectItem key={option.value} value={option.value} disabled={option.disabled}>{option.label}</SelectItem>)}</SelectContent></Select>
+          : spec.type === "textarea" ? <FormControl><Textarea {...field} value={String(field.value ?? "")} rows={4} placeholder={spec.placeholder} /></FormControl>
+          : <FormControl><Input {...field} value={String(field.value ?? "")} type={spec.type || "text"} autoComplete={spec.autoComplete} placeholder={spec.placeholder} /></FormControl>}
+        {spec.hint && <FormDescription>{spec.hint}</FormDescription>}<FormMessage />
+      </FormItem>} />)}
+      <Button type="submit" disabled={disabled || form.formState.isSubmitting}>{form.formState.isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{label}</Button>
+    </fieldset>
+  </form></Form>;
+}
+export function EditorDialog({ title, description = "保存后立即生效，操作会记录到审计日志。", trigger, children, disabled = false }: { title: string; description?: string; trigger?: ReactNode; children: (close: () => void) => ReactNode; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild>{trigger ?? <Button disabled={disabled}><Plus className="size-4" />{title}</Button>}</DialogTrigger><DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>{open && children(() => setOpen(false))}</DialogContent></Dialog>;
+}
+export function ArchiveButton({ kind, id, archived, disabled = false }: { kind: "organizations" | "servers" | "clients"; id: string; archived: boolean; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { busy, run } = useAdmin();
+  const label = archived ? "恢复" : "归档";
+  return <AlertDialog open={open} onOpenChange={setOpen}><AlertDialogTrigger asChild><Button variant="outline" size="sm" disabled={disabled || busy}>{label}</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{label}此资源？</AlertDialogTitle><AlertDialogDescription>{archived ? "恢复保留的记录。上架与当前版本绑定不会自动恢复。" : "归档会停止分发并清除当前版本绑定，历史记录将保留。"}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>取消</AlertDialogCancel><Button disabled={busy} variant={archived ? "default" : "destructive"} onClick={async () => { if (await run(() => api(`/api/admin/${kind}/${id}/archive`, "POST", { archived: !archived }), archived ? "已恢复" : "已归档")) setOpen(false); }}>{label}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>;
+}

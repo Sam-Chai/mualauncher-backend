@@ -10,9 +10,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 管理界面采用 shadcn/ui dashboard-01 基础，保留用户指定的七个分组菜单与 `/admin` 路由；参见 [docs/admin-ui.md](docs/admin-ui.md)。Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod 为统一组件体系，Tremor Raw 仅用于图表。
+- 页面不得使用模板模拟业务指标。未接入的 Storage、Worker、签名、内容与 CDN 显示明确待接入状态；审计曲线仅超管可读，按完整时间窗口聚合。共享角色定义在 `src/lib/roles.ts`，服务端仍在每次请求中检查 RBAC。
+
 - 产品需求和启动器代码观察记录见 [docs/mua-backend-requirements.md](docs/mua-backend-requirements.md)。后续设计或实现前先阅读该文档，区分确定需求、设计建议和待确定事项。
-- 最小数据库模型与权限矩阵提案见 [docs/minimal-data-model.md](docs/minimal-data-model.md) 和 [docs/permission-matrix.md](docs/permission-matrix.md)；字段及默认权限仍是设计提案，按用户反馈更新后再落实到代码或迁移。
-- 当前阶段（2026-10-08）：仅记录需求、查看代码，不实现面板、API、Worker、数据库业务模型、迁移或 OSS 部署。后续用户明确要求实现时，再按其授权范围推进。
+- 数据库模型与权限矩阵见 [docs/minimal-data-model.md](docs/minimal-data-model.md) 和 [docs/permission-matrix.md](docs/permission-matrix.md)；具体完成范围见 [docs/implementation-status.md](docs/implementation-status.md)，不要把完整发布流程的设计当作已实现功能。
+- 当前阶段（2026-10-08）：用户已授权开始实现。已落地业务模型与迁移、本地白名单登录／会话、应用层 RBAC、组织／服务器／成员管理及版本资料草稿。Worker、OSS、CAS、审核签名发布、Launcher 安装和 RLS 留在后续阶段，不擅自冻结尚未确定的协议。
 - 启动器源码位于 `G:\Projects\Minecraft\BotWMCS\launcher-template-26.1`。它是基于 Fabric 的 Minecraft 客户端；后端对外提供 REST API，不能把现有占位界面视为已完成后端接入。
 - 联合服以既有的 3–5 位纯英文字母 MUA server ID 作为底层标识；展示名称采用别名。不要另造 server ID 体系，大小写规范仍待确定。
 - 用户已要求增加 Organization：内部 ID、别名、头像、简介，以及 members、servers、clients。组织管理员统一管理本组织全部服务器和专用客户端，包括正式服、测试服及后续新增资源；普通成员可按单服务器细分授权，不能越权到其他组织。

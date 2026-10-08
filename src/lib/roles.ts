@@ -1,0 +1,19 @@
+import type { Role } from "@/generated/prisma/client";
+export type Permission = "ORG_EDIT" | "ORG_MEMBERS_READ" | "ORG_MEMBERS_MANAGE" | "SERVER_READ" | "SERVER_EDIT" |
+  "DRAFT_READ" | "DRAFT_CREATE" | "DRAFT_EDIT" | "DRAFT_SUBMIT" | "DRAFT_ARCHIVE" | "RELEASE_READ" | "DRAFT_REVIEW" | "RELEASE_PUBLISH" | "RELEASE_ACTIVATE";
+const base: Permission[] = ["SERVER_READ", "SERVER_EDIT", "DRAFT_READ", "DRAFT_CREATE", "DRAFT_EDIT", "DRAFT_SUBMIT", "DRAFT_ARCHIVE", "RELEASE_READ"];
+export const rolePermissions: Record<Role, readonly Permission[]> = {
+  ORG_ADMIN: [...base, "ORG_EDIT", "ORG_MEMBERS_READ", "ORG_MEMBERS_MANAGE"],
+  SERVER_ADMIN: base,
+  CLIENT_EDITOR: base.filter(permission => permission !== "SERVER_EDIT"),
+  SERVER_EDITOR: ["SERVER_READ", "SERVER_EDIT"],
+  REVIEWER: ["SERVER_READ", "DRAFT_READ", "RELEASE_READ", "DRAFT_REVIEW"],
+  PUBLISHER: ["SERVER_READ", "DRAFT_READ", "RELEASE_READ", "RELEASE_PUBLISH"],
+  RELEASE_OPERATOR: ["SERVER_READ", "RELEASE_READ", "RELEASE_ACTIVATE"],
+  READ_ONLY: ["SERVER_READ", "DRAFT_READ", "RELEASE_READ"],
+};
+export const reservedRoles: readonly Role[] = ["ORG_ADMIN", "REVIEWER", "PUBLISHER", "RELEASE_OPERATOR"];
+export const roleLabels: Record<Role, string> = {
+  ORG_ADMIN: "组织管理员", SERVER_ADMIN: "服务器管理员", CLIENT_EDITOR: "客户端编辑", SERVER_EDITOR: "服务器编辑",
+  REVIEWER: "审核员", PUBLISHER: "发布人员", RELEASE_OPERATOR: "版本切换人员", READ_ONLY: "只读人员",
+};
