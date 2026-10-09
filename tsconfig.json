@@ -36,7 +36,11 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts",
     ".next/mua-prism/types/**/*.ts",
-    ".next/mua-prism/dev/types/**/*.ts"
+    ".next/mua-prism/dev/types/**/*.ts",
+    ".next/mua-inspection/types/**/*.ts",
+    ".next/mua-inspection/dev/types/**/*.ts",
+    ".next/mua-recycle/types/**/*.ts",
+    ".next/mua-recycle/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

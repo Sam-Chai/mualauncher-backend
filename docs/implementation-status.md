@@ -1,90 +1,57 @@
-# 实施进度：第一阶段管理闭环
+# 实施进度
 
-更新时间：2026-10-08。用户已授权开始实现。此文档区分已运行的功能、仅有数据库基础的功能和后续工作。
+更新时间：2026-10-09。当前阶段已完成手动 .minecraft ZIP 上传、更新与审核发布。本文区分实际运行功能与后续工作；详细协议见[客户端上传文档](client-upload-api.md)。
 
-## 已实现并接通本地 PostgreSQL
+## 已实现
 
-- 已迁移至 shadcn/ui dashboard-01 的 MUA 管理界面，入口 `/admin`，菜单与路由见 [管理界面](admin-ui.md)。表格采用 TanStack Table，表单采用 React Hook Form / Zod，Tremor Raw 仅用于真实图表；现有 CRUD、RBAC 与归档功能均接入新页面。
-- 超管图表按上海时区聚合完整近 14 天审计并补齐无记录日；普通成员仅显示可访问组织的资源分布。CDN 流量尚未接入。
+- Next.js App Router、shadcn/ui dashboard-01、TanStack Table、React Hook Form／Zod 与 Tremor Raw 图表；导航按真实权限隐藏入口和空分组。
+- 20 个 Prisma 模型、4 个枚举、7 份已应用迁移。账号、组织、成员、单服授权、独立客户端／可变服务器绑定、草稿、不可变 Release、当前发布引用、审计、本地认证，以及 ClientUpload、ApiToken、WorkerHeartbeat。
+- 白名单用户名／密码登录、scrypt、数据库会话和限流；来源校验、Cookie 保护、成员撤权及停用立即生效。MUA OIDC／YGG 尚未接入。
+- 组织与服务器资料、成员管理、展示排序／颜色／上架、归档／恢复和审计。组织／服务器登记与全局展示仍由超管控制。客户端归档要求 CLIENT_ARCHIVE，默认授予组织管理员和服务器管理员。
+- 同组织允许多个独立客户端；组织内名称归一化查重，同名提示更新。每服同时至多绑定一个客户端，每客户端同时至多绑定一个服务器。新增绑定／解绑与替换确认；解绑保留客户端当前发布及历史，待绑定新客户端在审核发布并启用后替换。新 Manifest v2 使用 clientId，旧 v1 保留字节与签名、限制原服使用。
+- 单一“客户端管理”表格，添加／更新上传窗口、拖拽和点击选择、分片进度、Java 7–25、版本资料、自动识别的只读模组表格（搜索／排序／分页）、Summary 与 Markdown Description。更新预填旧资料，必须上传完整 ZIP 并填写新版本号。
+- 浏览器直传私有 MinIO 分片对象；服务端检查分片大小、数量与 ETag 后排队。大对象合并不持有数据库业务写锁。上传任务支持取消、失败重试和过期分片回收。
+- 格式、游戏根目录、运行环境与模组发现统一在 pack-inspection 格式适配器注册表。支持 .minecraft ZIP 的 PCL clientVersion、HMCL patches、标准 JSON／继承与游戏 JAR 内 version.json；MC、Java、加载器及来源可识别。Worker 先持久化 detectedInfo／detectedMods，再开始 CAS，前端显示“正在识别客户端信息”并提前回填，之后显示校验／去重。客户端发布版本手工填写；缺失或冲突可确认，回填不覆盖后续手工调整。
+- 多独立实例暂停等待选择，选择接口检查上传所有者、RBAC 与基准，再由 Worker 重新识别。支持版本隔离 mods，保留真实路径并忽略其他版本目录；隔离个人设置使用 preserve，私有 PCL／HMCL 设置不分发。detectedMods 为提交事实来源，API／自动化可省略 mods 与已识别的 MC／Java。模组 JAR 内名称、版本和依赖解析仍未实现。
+- 官方正式版 Java 对照已生成 103 条记录，runtime:sync 按官方 SHA-1 校验更新，可选加入快照。旧版无 Java 声明时标注推荐值，未知未来版本不猜测；Worker 正常导入无需外网。元数据仅安全读取，不执行上传代码或访问包内下载 URL。
+- 独立 Worker 使用 PostgreSQL 持久任务、租约、心跳、中断恢复。ZIP64／压缩 ZIP／UTF-8 路径、路径校验、CRC32／SHA-256、安全流式处理；不会直接将用户路径解压到文件系统。
+- 文件策略 managed／preserve、SHA-256 CAS 去重、与当前 Release 对比、新增／修改／删除数量、客户端大小、新增 CAS 数据、玩家预计下载量和 CAS 文件复用率。指标是实际解析结果，预计下载量不包含玩家本地缓存和网络开销。
+- 提交即冻结候选内容；审核绑定修订和 Manifest 摘要，审核通过后生成不可变 Ed25519 签名 Release。发布与启用分别检查权限；审核期间旧版本继续使用，批准发布切换才更新绑定。发布基准发生变化返回冲突。
+- Cookie 与受服务器／权限限制的 API Token 使用相同客户端标准 REST 接口。Token 权限与账号当前 RBAC 取交集；没有独立 GitHub Release 系统。client:upload 脚本上传并提交审核，不自动审核或发布。
+- 对外服务器目录只包含未归档、已上架且有当前可用 Release 的服务器。当前 Manifest 提供精确字节、摘要与签名；文件下载检查属于当前清单后返回短期 CAS URL。原始 ZIP 私有，未提供公开原包下载。
+- Worker／Storage／Signing Keys 页面显示真实运行状态；Settings 支持 Token 创建、撤销和自助改密。
+- 客户端条件删除与 OSS 回收站：已归档、从未发布、无实际／待绑定服务器且 Worker 未处理中才可删除；记录退出列表、释放名称，保留不可恢复标记和审计。CAS 按引用保留共享文件，回收文件校验后可取回复用。默认保留 7 天，仅超管可在 Settings 修改；Worker 每分钟后台维护。详见[回收站](client-recycle.md)。
 
-- 13 个 Prisma 模型、3 个枚举及两份已执行迁移。账号、组织、成员、服务器、专用客户端、单服角色授权、草稿、发布快照、当前发布引用及审计均已建表；另有独立本地凭据、会话及登录限流表。
-- 白名单用户名／密码登录，无公开注册。用户名不区分大小写并保存为小写；密码长度 12–128 位，以随机盐 scrypt（N=131072、r=8、p=1）存储。参考 [OWASP 密码存储建议](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)。本地凭据与稳定账号 ID 分离，后续 YGG 身份绑定不需更换账号 ID。
-- 12 小时数据库会话：256 位随机令牌，数据库只保存 SHA-256 摘要；Cookie 设置 HttpOnly、SameSite=Strict、Path=/，APP_ORIGIN 为 HTTPS 时设置 Secure。退出、停用账号或重设密码撤销会话。参考 [OWASP 会话管理建议](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)。
-- 数据库共享登录限流：每用户名 15 分钟最多 10 次尝试，全站 5 分钟最多 60 次尝试，成功登录也计入。管理写接口检查配置的 APP_ORIGIN、JSON 类型及 32 KiB 正文限制。
-- 应用层 RBAC：预置角色统一展开为权限，组织角色与单服角色取并集；每个接口重新读取会话、成员和真实资源归属。组织管理员自动覆盖后续新增服务器；普通成员不能读取无授权的服务器。
-- 组织资料、服务器资料、展示排序／颜色／上架标记、白名单账号、组织成员与单服角色的管理页面及 REST 接口。组织创建、服务器登记、全局展示、归档和特权角色分配仍为 MUA 超管专属。普通组织管理员只管理已有白名单中的普通成员，不能调整管理员或审核／发布／切换人员的成员资格。
-- 组织、服务器及客户端容器的归档／恢复；归档清空相关当前发布并下架，恢复不自动上架或恢复当前发布。客户端归档同时下架该服务器。
-- 客户端版本资料草稿的创建、编辑、读取、归档／恢复；编辑检查 contentRevision，旧修订返回冲突。简介、更新日志与版本名称均为该草稿的内容。当前不开放上传、提交审核或发布动作。
-- MUA 超管查看最近 50 条审计；管理变更与审计同事务写入，审计记录不可修改或删除，凭据和令牌不写入审计。
-- 所有管理写操作、登录最终建会话及授权撤销使用同一 PostgreSQL 事务级 advisory lock，并在锁内重新认证。第一阶段以较粗的锁保证白名单系统的撤权和“至少一个启用超管”约束；后续扩大并发时再细化。
-- `GET /api/v1/servers` 提供公开服务器目录基础，仅返回未归档、标记上架且已有可用当前发布的服务器，并按排序值、server ID 排列。现在没有发布版本，目录返回空数组。
+## 数据库与安全边界
 
-头像／图标当前可保存 OSS 对象键，界面采用组织文字头像。文件上传和图片分发尚未接入，不把对象键当成可直接访问的图片 URL。
+服务器稳定 ID 为 3–5 位 ASCII 字母，大小写无关唯一，归档不释放。未删除客户端名称组织内唯一、同组织绑定、每服与每客户端至多一个绑定、当前版本同客户端外键及绑定同步、版本唯一性、审批修订匹配和发布内容不可变由数据库约束保护。业务记录禁止硬删除；客户端条件删除采用不可恢复标记，审计仅追加。
 
-## 已落实的数据库业务约束
+ClientUpload 的来源、所有者、基准与准备完成的内容不可修改；状态迁移和草稿绑定受触发器约束。业务写入、发布切换与授权撤销在事务中重新认证。Worker 处理文件期间使用租约，提交结果前重新验证任务所有者当前权限和资源状态。源码包与 CAS bucket 私有，公开下载不接受任意对象键。
 
-- MUA server ID 为 3–5 位 ASCII 字母；原始大小写保留，大小写无关唯一；归档不释放 ID。
-- 服务端创建服务器、专用 Client 和空 ServerPublication 同事务完成，延迟约束阻止缺少客户端或发布引用容器的服务器提交。
-- Client 的组织必须与 Server 相符；服务器 ID 与组织归属不可修改。
-- 单服授权必须关联同组织的成员和服务器，禁止单服 ORG_ADMIN。
-- 每服最多一个当前发布，复合外键及触发器拒绝跨服引用，包含同组织其他服务器。
-- ClientRelease 内容只读，仅 archivedAt 可变；版本标签和源草稿唯一性保留，发布须匹配已批准草稿修订及 Manifest 摘要。已提交草稿内容锁定，已发布源草稿不可修改。
-- 已归档资源不能被重新绑定为当前发布；业务表阻止硬删除，审计只允许追加。
-
-这些数据库约束不等于签名验证服务。当前 SQL 只检查签名字段存在；真正的密钥管理、签名生成和 Launcher 验签仍属于发布阶段。使用 postgres 的现有开发连接也不代表生产环境完成数据库最小权限配置。
+本机已应用全部七份迁移、初始化开发 MinIO bucket 和 Ed25519 密钥。开发密钥只在不存在时生成，保存在 Git 忽略的 .local 中。数据库尚未启用 PostgreSQL RLS，仍使用用户指定的开发连接。生产运行账号及可信公钥分发需部署时配置。
 
 ## 尚待实施
 
 | 工作 | 当前状态 |
 | --- | --- |
-| MinIO、上传会话、原始包下载与图片分发 | 未接入 |
-| MultiMC／CurseForge／Modrinth／传统 .minecraft 自动识别 | 未实现 |
-| Worker 队列、解析进度、重试与安全解压 | 未实现 |
-| .muac／.muapack 归一化、逐文件 SHA-256、CAS 去重 | 未实现 |
-| Manifest 协议及 managed／preserve 文件政策 | 需求已记录，未生成或分发 Manifest |
-| 提交／撤回审核、审核通过／驳回、审核修订绑定 | 模型与 RBAC 权限已预留，无业务接口或面板按钮 |
-| 签名发布、历史版本切换、发布版本归档／恢复 | 模型与只读历史已具备，写流程尚未接通 |
-| 草稿复制、跨服复制并重新审核 | 未实现 |
-| Launcher REST 目录接入、Manifest 验签与增量安装 | 启动器源码未修改 |
-| PostgreSQL RLS、非超级用户运行连接 | 第二阶段，未启用 |
-| YGG 认证接入 | 未实现，当前使用本地白名单凭据 |
+| CurseForge／Modrinth／MultiMC 自动识别与元数据填充 | 当前明确拒绝，只支持手动 .minecraft ZIP |
+| .muac／.muapack 导出、图标与许可证整理 | 已生成逐文件 Manifest，专有打包导出未实现 |
+| Launcher Manifest 验签和增量安装 | 后端分发 API 已有，未修改 Launcher 源码 |
+| Redis 队列 | 当前使用 PostgreSQL 持久任务，不依赖 Redis |
+| 任意孤儿对象扫描、未删除客户端源码包清理 | 未实现；只清理过期分片和已追踪的删除回收对象，归档本身保留对象 |
+| 草稿跨服复制、撤回审核、Release 归档／恢复及撤销流程 | 当前管理上传、审核、发布和历史版本切换；这些额外流程尚未开放 |
+| 图片上传／分发、资讯、活动与 Launcher UI 编辑 | 尚未实现 |
+| CDN 流量、在线检测与容量计费指标 | 尚未接入，不显示模拟数字 |
+| PostgreSQL RLS、MUA OIDC／YGG | 后续阶段 |
 
-下一步建议接入 MinIO 与上传任务，完成一个受授权约束的原始整合包上传／解析闭环，再落实 Manifest 和发布流程。包扩展名、Manifest 协议、签名方案和旧文件清理仍需定稿。
+## 验证与本机运行
 
-## 接口约定
+TypeScript、ESLint、生产构建、迁移和存储初始化通过。50 项测试通过（包含真实 PostgreSQL／MinIO 与隔离 HTTP 流程），包括 mods 自动识别／替换、非 JAR 与其他目录过滤、API 模组篡改忽略及无 mods 参数的自动化上传、格式适配器共用入口、旧记录迁移兼容、多客户端名称查重、确认绑定／解绑、审核后替换与绑定并发冲突、65 MiB 两分片、ZIP64／压缩／Unicode、损坏和危险 ZIP、CAS 增量统计、不可变版本、过期租约恢复、RBAC／Token 撤权，以及隔离 Next 实例的标准 API 上传脚本、审核发布与签名下载。
 
-管理接口使用 HttpOnly 会话 Cookie；非 GET 请求须带 `Origin: <APP_ORIGIN>` 与 `Content-Type: application/json`。没有公开注册或物理删除接口。身份无效返回 401，无操作权限返回 403，无读取权限的资源返回 404，资源状态或修订冲突返回 409。
+HTTP 本机检查覆盖登录、来源／输入保护、会话撤销、权限收缩、19 个模块入口与旧路径跳转、客户端 API 和实际存储状态。上一阶段内置浏览器验证过统一表格、更新预填、上传区、Java 7–25、Markdown 预览及窗口／输入跨轮询保留，旧截图在 .local/client-upload-preview.png。本次界面检查工具仍无法启动 Node runtime，新增模组表格及绑定界面的交互和视觉复验尚未完成。完整上传／审核／发布和绑定 API 在隔离 HTTP 集成测试中完成，没有向现有业务服务器写入测试整合包。移动端视觉检查尚未完成。
 
-| 方法与路径 | 用途 |
-| --- | --- |
-| POST `/api/auth/login` | `{username,password}` 登录 |
-| POST `/api/auth/logout` | `{}` 退出 |
-| POST `/api/auth/password` | `{currentPassword,newPassword}` 改密并撤销会话 |
-| GET `/api/admin/state` | 返回按权限收窄的面板数据，不返回凭据／令牌 |
-| POST `/api/admin/organizations` | 创建组织 |
-| PATCH `/api/admin/organizations/:id` | 修改组织资料 |
-| POST `/api/admin/servers` | 登记服务器，自动创建专用客户端与空当前引用 |
-| PATCH `/api/admin/servers/:serverId` | 修改服务器；展示字段仅超管可写 |
-| POST `/api/admin/{organizations,servers,clients}/:id/archive` | `{archived:true/false}` 归档／恢复 |
-| POST `/api/admin/accounts`、PATCH `/api/admin/accounts/:id` | 创建／调整白名单账号 |
-| GET `/api/admin/organizations/:id/account-search?q=...` | 有成员管理权限时搜索已有白名单，至少 3 字符、最多 10 条 |
-| PUT `/api/admin/organizations/:id/members/:accountId` | `{roles,status}` 组织角色与成员状态 |
-| PUT `/api/admin/organizations/:id/members/:accountId/servers/:serverId` | `{roles}` 单服授权，空数组为撤销并保留记录 |
-| GET `/api/admin/servers/:serverId/clients` | 按权限返回草稿与发布历史 |
-| POST `/api/admin/servers/:serverId/drafts` | 新建版本资料草稿 |
-| PATCH `/api/admin/servers/:serverId/drafts/:draftId` | 编辑，携带 contentRevision |
-| POST `/api/admin/servers/:serverId/drafts/:draftId/archive` | 草稿归档／恢复 |
-| GET `/api/v1/servers` | 公开目录基础；当前阶段无 Manifest 下载端点 |
+本次新增验证覆盖识别先于 CAS、CAS 期间可轮询到环境、PCL／HMCL／继承／JAR／冲突、官方 Java 边界、多实例暂停／权限／HTTP 选择、隔离模组与 preserve／隐私排除、运行环境缺省 API 及回填保留手工编辑。直接只读识别用户 test_client 样本得到 PCL MC 1.21.1／Java 21／NeoForge 21.1.256、HMCL MC 26.1／Java 25／Fabric 0.19.5，均无识别警告。浏览器工具仍报 Node runtime 路径不存在，新阶段提示和选择菜单尚未进行可视化复验。
 
-## 验证与当前运行
+删除验证覆盖真实 RBAC／条件、数据库保护、名称重用、取消任务、原包与 CAS 回收、共享及已发布历史保留、七天过期、回收命中零新增数据、损坏对象拒绝、并发上传／清理、历史索引异常暂停与晚到 S3 完成重试。实际 HTTP 覆盖删除、超管设置及来源保护。删除确认和设置表单尚未完成浏览器视觉复验。
 
-- `npm run db:validate`、`npm run db:deploy`、`npm run typecheck`、`npm run lint` 与独立目录生产构建通过。
-- `npm test`：16 项测试通过，包括本地来源别名与跨站拒绝、完整审计统计、平台指标权限隔离、平台超管切换为组织管理员的身份回归及真实 PostgreSQL 集成测试。自动建立随机临时 schema，并只移除该测试 schema；不写入 public 的业务记录。
-- `npm run check:http`：真实 HTTP 登录页面、`/admin` 总览及 21 个模块入口、未认证拒绝、跨站拒绝、字段／正文限制、Cookie 属性、数据收窄及退出撤销通过。
-- 已修复本地登录的来源不匹配：本地配置兼容同协议、同端口的回环地址别名，`localhost:3001` 与 `127.0.0.1:3001` 的真实登录检查均通过。其他端口、非回环来源、缺失 Origin 和跨站请求继续拒绝；生产域名仍精确匹配配置。
-- 浏览器扩展桥接返回 `nodeRepl.fetch request failed`，因此尚未完成浏览器交互与截图视觉验收；HTTP 页面和接口验证已完成。
-- 当前 Prisma／pg 8 组合在关联查询时输出排队查询的弃用提示；当前查询、事务及并发测试通过，后续升级 pg 主版本时需重新验证适配器兼容性。
-- 本次本地面板运行在 `http://localhost:3001`，仅绑定 127.0.0.1。使用 `.next/mua-prism` 独立构建目录避开现有进程占用的默认 `.next` 日志，不改变现有进程。
-- 已初始化本地超管 `mua-admin`。随机初始密码在 `.local/initial-admin-*.txt`；该目录被 Git 忽略。首次登录后在“系统 → Settings → 账号安全”修改密码，并删除本地凭据文件。
-
-上述服务是本次启动的本地进程，不是 Windows 自动启动服务。生产环境还需 HTTPS、运行数据库账号及对象存储等部署配置。
+本机生产预览地址 http://localhost:3001，构建目录 .next/mua-recycle，Worker 独立运行。重启步骤见 [README](../README.md) 和[客户端上传文档](client-upload-api.md)。这些是本地进程，不是 Windows 自动启动服务。

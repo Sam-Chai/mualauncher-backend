@@ -8,7 +8,7 @@ export function visiblePaths(state: NavigationState) {
   const organizationPermission = (permission: Permission) => superAdmin ||
     state.organizations.some(organization => organization.permissions.includes(permission));
   const serverPermission = (permission: Permission) => superAdmin ||
-    state.organizations.some(organization => organization.servers.some(server => server.permissions.includes(permission)));
+    state.organizations.some(organization => organization.permissions.includes(permission) || organization.servers.some(server => server.permissions.includes(permission)));
   const canSee = {
     "/admin": true,
     "/admin/organizations": organizationPermission("ORG_EDIT"),
@@ -18,13 +18,10 @@ export function visiblePaths(state: NavigationState) {
     "/admin/listings": superAdmin,
     "/admin/servers/status": serverPermission("SERVER_READ"),
     "/admin/clients": serverPermission("DRAFT_READ") || serverPermission("RELEASE_READ"),
-    "/admin/clients/releases": serverPermission("RELEASE_READ"),
-    "/admin/clients/artifacts": serverPermission("DRAFT_CREATE") || serverPermission("DRAFT_EDIT"),
-    "/admin/clients/runtime": serverPermission("DRAFT_EDIT"),
     "/admin/news": superAdmin,
     "/admin/events": superAdmin,
     "/admin/launcher-ui": superAdmin,
-    "/admin/releases/review": serverPermission("DRAFT_REVIEW"),
+    "/admin/releases/review": serverPermission("DRAFT_REVIEW") || serverPermission("RELEASE_PUBLISH"),
     "/admin/releases/published": serverPermission("RELEASE_READ"),
     "/admin/releases/revoked": serverPermission("RELEASE_READ"),
     "/admin/system/workers": superAdmin,

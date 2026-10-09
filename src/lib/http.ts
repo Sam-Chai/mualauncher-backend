@@ -29,7 +29,7 @@ function localOriginAlias(request: Request, origin: string | null, expected: str
       source.protocol === target.protocol && source.port === target.port;
   } catch { return false; }
 }
-export async function readJson(request: Request) {
+export async function readJson(request: Request, maximumBytes = 32768) {
   invariant(request.headers.get("content-type")?.split(";")[0].trim() === "application/json", 415, "请使用 application/json");
   invariant(request.body, 400, "请求内容不能为空");
   const reader = request.body.getReader();
@@ -39,7 +39,7 @@ export async function readJson(request: Request) {
     const { done, value } = await reader.read();
     if (done) break;
     length += value.byteLength;
-    if (length > 32768) { await reader.cancel(); throw new AppError(413, "请求内容超过 32 KiB"); }
+    if (length > maximumBytes) { await reader.cancel(); throw new AppError(413, `请求内容超过 ${maximumBytes / 1024} KiB`); }
     chunks.push(value);
   }
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))); }

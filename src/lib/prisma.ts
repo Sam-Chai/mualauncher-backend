@@ -16,7 +16,7 @@ function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString,
     connectionTimeoutMillis: 5_000,
-  });
+  }, { schema: process.env.DATABASE_SCHEMA ?? "public" });
 
   return new PrismaClient({ adapter });
 }

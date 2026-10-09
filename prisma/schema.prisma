@@ -31,6 +31,16 @@ enum DraftStatus {
   RELEASED
 }
 
+enum UploadStatus {
+  UPLOADING
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+  SUBMITTED
+  CANCELLED
+}
+
 model Account {
   id           String               @id @default(uuid()) @db.Uuid
   displayName  String
@@ -50,6 +60,8 @@ model Account {
   releases     ClientRelease[]      @relation("ReleasePublisher")
   publications ServerPublication[]
   auditEvents  AuditEvent[]
+  uploads      ClientUpload[]
+  apiTokens    ApiToken[]
 }
 
 model LocalCredential {
@@ -123,7 +135,7 @@ model Server {
   createdAt      DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime           @updatedAt @db.Timestamptz(6)
   organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  client         Client?
+  scopedClients  Client[]
   publication    ServerPublication?
   grants         ServerGrant[]
   auditEvents    AuditEvent[]
@@ -133,17 +145,69 @@ model Server {
 }
 
 model Client {
-  serverId       String          @id @db.VarChar(5)
-  organizationId String          @db.Uuid
-  archivedAt     DateTime?       @db.Timestamptz(6)
-  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime        @updatedAt @db.Timestamptz(6)
-  server         Server          @relation(fields: [organizationId, serverId], references: [organizationId, serverId], onDelete: Restrict)
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  drafts         ClientDraft[]
-  releases       ClientRelease[]
+  id                     String          @id @default(uuid())
+  organizationId         String          @db.Uuid
+  name                   String
+  nameKey                String
+  scopeServerId          String?         @db.VarChar(5)
+  currentReleaseId       String?         @db.Uuid
+  revision               Int             @default(0)
+  requestedServerId      String?         @db.VarChar(5)
+  requestedRevision      Int?
+  expectedClientId       String?
+  deletedAt              DateTime?       @db.Timestamptz(6)
+  storageIndexedAt       DateTime?       @db.Timestamptz(6)
+  recycledAt             DateTime?       @db.Timestamptz(6)
+  archivedAt             DateTime?       @db.Timestamptz(6)
+  createdAt              DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime        @updatedAt @db.Timestamptz(6)
+  scopeServer            Server?         @relation(fields: [organizationId, scopeServerId], references: [organizationId, serverId], onDelete: Restrict)
+  organization           Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  binding                ServerPublication?
+  drafts                 ClientDraft[]
+  releases               ClientRelease[]
+  uploads                ClientUpload[]
+  casReferences          CasReference[]
+  recycleObjects         RecycleObject[]
 
-  @@unique([organizationId, serverId])
+  @@unique([organizationId, id])
+  // Active-name uniqueness is a partial unique index in the recycle migration.
+  @@index([organizationId, nameKey])
+}
+
+model CasObject {
+  sha256     String         @id @db.Char(64)
+  size       BigInt
+  trashedAt  DateTime?      @db.Timestamptz(6)
+  purgedAt   DateTime?      @db.Timestamptz(6)
+  references CasReference[]
+}
+
+model CasReference {
+  clientId String
+  sha256   String    @db.Char(64)
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  object   CasObject @relation(fields: [sha256], references: [sha256], onDelete: Restrict)
+  @@id([clientId, sha256])
+  @@index([sha256])
+}
+
+model RecycleObject {
+  bucket     String
+  objectKey  String
+  trashKey   String
+  clientId   String
+  trashedAt  DateTime? @db.Timestamptz(6)
+  purgedAt   DateTime? @db.Timestamptz(6)
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  @@id([bucket, objectKey])
+  @@unique([bucket, trashKey])
+}
+
+model PlatformSettings {
+  id                   String   @id @default("platform")
+  recycleRetentionDays Int      @default(7)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(6)
 }
 
 model ServerGrant {
@@ -164,11 +228,12 @@ model ServerGrant {
 
 model ClientDraft {
   id                      String         @id @default(uuid()) @db.Uuid
-  serverId                String         @db.VarChar(5)
+  clientId                String
   versionLabel            String?
   name                    String?
   description             String         @default("")
   changelog               String         @default("")
+  summary                 String         @default("")
   candidateMetadata       Json?
   sourceObjectKey         String?
   candidateManifestKey    String?
@@ -183,22 +248,24 @@ model ClientDraft {
   archivedAt              DateTime?      @db.Timestamptz(6)
   createdAt               DateTime       @default(now()) @db.Timestamptz(6)
   updatedAt               DateTime       @updatedAt @db.Timestamptz(6)
-  client                  Client         @relation(fields: [serverId], references: [serverId], onDelete: Restrict)
+  client                  Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdBy               Account        @relation("DraftCreator", fields: [createdById], references: [id], onDelete: Restrict)
   reviewedBy              Account?       @relation("DraftReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
   release                 ClientRelease?
+  upload                  ClientUpload?
 
-  @@unique([serverId, id])
+  @@unique([clientId, id])
 }
 
 model ClientRelease {
   id                  String             @id @default(uuid()) @db.Uuid
-  serverId            String             @db.VarChar(5)
+  clientId            String
   sourceDraftId       String             @unique @db.Uuid
   versionLabel        String
   name                String
   description         String
   changelog           String
+  summary             String             @default("")
   environmentSnapshot Json
   manifestObjectKey   String
   manifestSha256      String             @db.Char(64)
@@ -209,28 +276,89 @@ model ClientRelease {
   publishedById       String             @db.Uuid
   publishedAt         DateTime           @default(now()) @db.Timestamptz(6)
   archivedAt          DateTime?          @db.Timestamptz(6)
-  client              Client             @relation(fields: [serverId], references: [serverId], onDelete: Restrict)
-  sourceDraft         ClientDraft        @relation(fields: [serverId, sourceDraftId], references: [serverId, id], onDelete: Restrict)
+  client              Client             @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  sourceDraft         ClientDraft        @relation(fields: [clientId, sourceDraftId], references: [clientId, id], onDelete: Restrict)
   approvedBy          Account            @relation("ReleaseApprover", fields: [approvedById], references: [id], onDelete: Restrict)
   publishedBy         Account            @relation("ReleasePublisher", fields: [publishedById], references: [id], onDelete: Restrict)
   publication         ServerPublication?
 
-  @@unique([serverId, versionLabel])
-  @@unique([serverId, sourceDraftId])
-  @@unique([serverId, id])
+  @@unique([clientId, versionLabel])
+  @@unique([clientId, sourceDraftId])
+  @@unique([clientId, id])
+}
+
+model ClientUpload {
+  id                      String        @id @default(uuid()) @db.Uuid
+  clientId                String
+  createdById             String        @db.Uuid
+  fileName                String
+  size                    BigInt
+  partSize                Int
+  multipartId             String
+  sourceObjectKey         String        @unique
+  sourceSha256            String?       @db.Char(64)
+  baseReleaseId           String?       @db.Uuid
+  basePublicationRevision Int
+  status                  UploadStatus  @default(UPLOADING)
+  attempts                Int           @default(0)
+  progress                Int           @default(0)
+  leaseToken              String?       @db.Uuid
+  leaseUntil              DateTime?     @db.Timestamptz(6)
+  error                   String?
+  filesObjectKey          String?
+  filesSha256             String?       @db.Char(64)
+  statistics              Json?
+  detectedMods            String[]      @default([])
+  processingPhase         String?
+  detectedInfo            Json?
+  selectedInstanceId      String?
+  warnings                String[]      @default([])
+  draftId                 String?       @unique @db.Uuid
+  expiresAt               DateTime      @db.Timestamptz(6)
+  createdAt               DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime      @updatedAt @db.Timestamptz(6)
+  client                  Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy               Account       @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  draft                   ClientDraft?  @relation(fields: [clientId, draftId], references: [clientId, id], onDelete: Restrict)
+
+  @@unique([clientId, draftId])
+  @@index([status, leaseUntil, createdAt])
+  @@index([clientId, createdAt])
+}
+
+model ApiToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  accountId   String    @db.Uuid
+  name        String
+  tokenHash   String    @unique @db.Char(64)
+  permissions String[]
+  serverIds   String[]
+  expiresAt   DateTime  @db.Timestamptz(6)
+  revokedAt   DateTime? @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+}
+
+model WorkerHeartbeat {
+  id        String   @id
+  startedAt DateTime @default(now()) @db.Timestamptz(6)
+  lastSeen  DateTime @default(now()) @db.Timestamptz(6)
 }
 
 model ServerPublication {
   serverId    String         @id @db.VarChar(5)
+  clientId    String?        @unique
+  client      Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   releaseId   String?        @unique @db.Uuid
   revision    Int            @default(0)
   changedById String         @db.Uuid
   updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
   server      Server         @relation(fields: [serverId], references: [serverId], onDelete: Restrict)
-  release     ClientRelease? @relation(fields: [serverId, releaseId], references: [serverId, id], onDelete: Restrict)
+  release     ClientRelease? @relation(fields: [clientId, releaseId], references: [clientId, id], onDelete: Restrict)
   changedBy   Account        @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@unique([serverId, releaseId])
+  @@unique([clientId, releaseId])
 }
 
 model AuditEvent {

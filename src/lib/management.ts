@@ -4,7 +4,7 @@ import type { Actor, Db } from "./auth";
 import { invariant } from "./errors";
 import * as input from "./input";
 import { hashPassword } from "./password";
-import { expandRoles, organizationScope, requireOrganization, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
+import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
 const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true, credential: { select: { username: true } } } as const;
 const accountDto = (account: { id: string; displayName: string; status: string; isSuperAdmin: boolean; credential: { username: string } | null }) =>
@@ -19,7 +19,8 @@ export async function getState(db: Db, actor: Actor) {
   const organizations = await db.organization.findMany({
     where: actor.isSuperAdmin ? {} : { members: { some: { accountId: actor.id, status: "ACTIVE" } } },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { displayName: "asc" }],
-    include: { servers: { orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }], include: { client: true, publication: { include: { release: { select: { archivedAt: true } } } } } },
+    include: { servers: { orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }], include: { publication: { include: { client: true, release: { select: { archivedAt: true } } } } } },
+      clients: { where: { deletedAt: null }, select: { archivedAt: true, scopeServerId: true, binding: { select: { serverId: true } } } },
       members: { where: { accountId: actor.id }, include: { serverGrants: true } } },
   });
   const organizationDtos = [];
@@ -32,16 +33,22 @@ export async function getState(db: Db, actor: Actor) {
       if (!rights.includes("SERVER_READ")) return [];
       return [{ serverId: server.serverId, organizationId: organization.id, displayName: server.displayName, description: server.description,
         gameAddress: server.gameAddress, iconObjectKey: server.iconObjectKey, sortOrder: server.sortOrder, themeColor: server.themeColor,
-        isListed: server.isListed, archivedAt: server.archivedAt, clientArchivedAt: server.client?.archivedAt ?? null,
+        isListed: server.isListed, archivedAt: server.archivedAt, clientArchivedAt: server.publication?.client?.archivedAt ?? null,
         currentReleaseId: server.publication?.releaseId ?? null, currentReleaseActive: !!server.publication?.release && !server.publication.release.archivedAt,
-        publicationRevision: server.publication?.revision ?? 0, permissions: [...new Set(rights)] }];
+        publicationRevision: server.publication?.revision ?? 0, boundClientId: server.publication?.clientId ?? null, boundClientName: server.publication?.client?.name ?? null, permissions: [...new Set(rights)] }];
     });
     const members = permissions.includes("ORG_MEMBERS_READ") ? (await db.organizationMember.findMany({
       where: { organizationId: organization.id }, orderBy: { createdAt: "asc" }, include: { account: { select: accountSelect }, serverGrants: true },
     })).map(member => ({ account: accountDto(member.account), status: member.status, roles: member.roles,
       grants: member.serverGrants.map(grant => ({ serverId: grant.serverId, roles: grant.roles })),
       protected: member.account.isSuperAdmin || member.roles.some(role => reservedRoles.includes(role)) || member.serverGrants.some(grant => grant.roles.some(role => reservedRoles.includes(role))) })) : [];
-    organizationDtos.push({ id: organization.id, displayName: organization.displayName, description: organization.description,
+    const clientCount = organization.clients.filter(client => {
+      const serverId = client.binding?.serverId ?? client.scopeServerId;
+      const grant = member?.serverGrants.find(grant => grant.serverId === serverId);
+      const rights = actor.isSuperAdmin ? Object.values(rolePermissions).flat() : expandRoles([...(member?.roles ?? []), ...(grant?.roles ?? [])]);
+      return !organization.archivedAt && !client.archivedAt && (rights.includes("DRAFT_READ") || rights.includes("RELEASE_READ"));
+    }).length;
+    organizationDtos.push({ id: organization.id, displayName: organization.displayName, description: organization.description, clientCount,
       avatarObjectKey: organization.avatarObjectKey, archivedAt: organization.archivedAt, permissions: [...new Set(permissions)], servers, members });
   }
   const accounts = actor.isSuperAdmin ? (await db.account.findMany({ select: accountSelect, orderBy: { createdAt: "asc" } })).map(accountDto) : [];
@@ -99,7 +106,6 @@ export async function createServer(db: Db, actor: Actor, raw: unknown) {
     description: data.description === undefined ? "" : input.text(data, "description", 5000, false),
     gameAddress: data.gameAddress === undefined ? null : input.optionalText(data, "gameAddress", 255),
     iconObjectKey: data.iconObjectKey === undefined ? null : input.optionalText(data, "iconObjectKey") } });
-  await db.client.create({ data: { serverId: id, organizationId } });
   await db.serverPublication.create({ data: { serverId: id, changedById: actor.id } });
   await audit(db, actor, "SERVER_CREATE", "Server", id, organizationId, id);
   return { serverId: id };
@@ -133,7 +139,8 @@ export async function updateServer(db: Db, actor: Actor, id: string, raw: unknow
 }
 
 export async function archiveResource(db: Db, actor: Actor, kind: "organizations" | "servers" | "clients", id: string, raw: unknown) {
-  superOnly(actor);
+  if (kind !== "clients") superOnly(actor);
+  else await requireClient(db, actor, id, "CLIENT_ARCHIVE", false);
   const archived = input.bool(input.fields(raw, ["archived"]), "archived");
   const archivedAt = archived ? new Date() : null;
   let organizationId: string;
@@ -143,17 +150,24 @@ export async function archiveResource(db: Db, actor: Actor, kind: "organizations
     await db.organization.update({ where: { id }, data: { archivedAt } });
     if (archived) {
       await db.server.updateMany({ where: { organizationId }, data: { isListed: false } });
-      await db.serverPublication.updateMany({ where: { server: { organizationId } }, data: { releaseId: null, revision: { increment: 1 }, changedById: actor.id } });
+      await db.serverPublication.updateMany({ where: { server: { organizationId } }, data: { clientId: null, releaseId: null, revision: { increment: 1 }, changedById: actor.id } });
+    }
+  } else if (kind === "clients") {
+    const { client } = await requireClient(db, actor, id, "CLIENT_ARCHIVE", false);
+    organizationId = client.organizationId; serverId = client.binding?.serverId;
+    await db.client.update({ where: { id }, data: { archivedAt, ...(archived ? { requestedServerId: null, requestedRevision: null, expectedClientId: null } : {}) } });
+    if (archived && serverId) {
+      await db.serverPublication.update({ where: { serverId }, data: { clientId: null, releaseId: null, revision: { increment: 1 }, changedById: actor.id } });
+      await db.server.update({ where: { serverId }, data: { isListed: false } });
     }
   } else {
     const { server } = await requireServer(db, actor, id, "SERVER_READ", false);
     organizationId = server.organizationId;
     serverId = id;
     if (kind === "servers") await db.server.update({ where: { serverId: id }, data: { archivedAt, ...(archived ? { isListed: false } : {}) } });
-    else await db.client.update({ where: { serverId: id }, data: { archivedAt } });
     if (archived) {
       await db.server.update({ where: { serverId: id }, data: { isListed: false } });
-      await db.serverPublication.update({ where: { serverId: id }, data: { releaseId: null, revision: { increment: 1 }, changedById: actor.id } });
+      await db.serverPublication.update({ where: { serverId: id }, data: { clientId: null, releaseId: null, revision: { increment: 1 }, changedById: actor.id } });
     }
   }
   const targetType = kind === "organizations" ? "Organization" : kind === "servers" ? "Server" : "Client";
@@ -240,38 +254,48 @@ export async function updateAccount(db: Db, actor: Actor, id: string, raw: unkno
 
 export async function getClients(db: Db, actor: Actor, id: string) {
   const scope = await requireServer(db, actor, id, "SERVER_READ", false);
-  const drafts = scope.permissions.includes("DRAFT_READ") ? await db.clientDraft.findMany({ where: { serverId: id }, orderBy: { createdAt: "desc" },
-    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, status: true, contentRevision: true, archivedAt: true, createdAt: true } }) : [];
-  const releases = scope.permissions.includes("RELEASE_READ") ? await db.clientRelease.findMany({ where: { serverId: id }, orderBy: { publishedAt: "desc" },
-    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, publishedAt: true, archivedAt: true } }) : [];
+  const clientId = scope.server.publication?.clientId;
+  if (!clientId) return { drafts: [], releases: [] };
+  await requireClient(db, actor, clientId, "SERVER_READ", false);
+  const drafts = scope.permissions.includes("DRAFT_READ") ? await db.clientDraft.findMany({ where: { clientId }, orderBy: { createdAt: "desc" },
+    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true, reviewNote: true, status: true, contentRevision: true, archivedAt: true, createdAt: true, upload: { select: { id: true, statistics: true } } } }) : [];
+  const releases = scope.permissions.includes("RELEASE_READ") ? await db.clientRelease.findMany({ where: { clientId }, orderBy: { publishedAt: "desc" },
+    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true, sourceDraft: { select: { upload: { select: { statistics: true } } } } } }) : [];
   return { drafts, releases };
 }
 
 // Metadata drafts are useful before the upload Worker. Submission is not exposed until a verified artifact exists.
 export async function saveDraft(db: Db, actor: Actor, id: string, raw: unknown, draftId?: string) {
   const scope = await requireServer(db, actor, id, draftId ? "DRAFT_EDIT" : "DRAFT_CREATE", true, true);
+  const clientId = scope.server.publication?.clientId;
+  invariant(clientId, 409, "服务器尚未绑定客户端，请先添加或绑定客户端");
+  await requireClient(db, actor, clientId, draftId ? "DRAFT_EDIT" : "DRAFT_CREATE");
   const data = input.fields(raw, draftId ? ["versionLabel", "name", "description", "changelog", "contentRevision"] : ["versionLabel", "name", "description", "changelog"]);
   const content = { versionLabel: input.text(data, "versionLabel", 100), name: input.text(data, "name"),
     description: input.text(data, "description", 10000, false), changelog: input.text(data, "changelog", 10000, false) };
   let result;
   if (draftId) {
-    const draft = await db.clientDraft.findUnique({ where: { id: draftId } });
-    invariant(draft?.serverId === id, 404, "草稿不存在");
+    const draft = await db.clientDraft.findUnique({ where: { id: draftId }, include: { upload: true } });
+    invariant(draft?.clientId === clientId, 404, "草稿不存在");
+    invariant(!draft.upload, 409, "上传版本请通过完整整合包创建新版本，不能原地修改");
     invariant(!draft.archivedAt && ["DRAFT", "REJECTED"].includes(draft.status), 409, "此草稿不能编辑");
     invariant(Number.isInteger(data.contentRevision) && draft.contentRevision === data.contentRevision, 409, "草稿已被修改，请刷新后重试");
     result = await db.clientDraft.update({ where: { id: draftId }, data: { ...content, contentRevision: { increment: 1 }, status: "DRAFT",
       reviewedById: null, reviewedRevision: null, reviewedAt: null, reviewNote: null,
       candidateManifestKey: null, candidateManifestSha256: null } });
-  } else result = await db.clientDraft.create({ data: { ...content, serverId: id, createdById: actor.id } });
+  } else result = await db.clientDraft.create({ data: { ...content, clientId, createdById: actor.id } });
   await audit(db, actor, draftId ? "DRAFT_EDIT" : "DRAFT_CREATE", "ClientDraft", result.id, scope.server.organizationId, id, { contentRevision: result.contentRevision });
   return { id: result.id };
 }
 
 export async function archiveDraft(db: Db, actor: Actor, id: string, draftId: string, raw: unknown) {
   const scope = await requireServer(db, actor, id, "DRAFT_ARCHIVE", true, true);
+  const clientId = scope.server.publication?.clientId;
+  invariant(clientId, 404, "服务器没有绑定客户端");
+  await requireClient(db, actor, clientId, "DRAFT_ARCHIVE");
   const archived = input.bool(input.fields(raw, ["archived"]), "archived");
   const draft = await db.clientDraft.findUnique({ where: { id: draftId } });
-  invariant(draft?.serverId === id, 404, "草稿不存在");
+  invariant(draft?.clientId === clientId, 404, "草稿不存在");
   invariant(["DRAFT", "REJECTED"].includes(draft.status), 409, "只有未提交的草稿可以归档或恢复");
   await db.clientDraft.update({ where: { id: draftId }, data: { archivedAt: archived ? new Date() : null } });
   await audit(db, actor, archived ? "DRAFT_ARCHIVE" : "DRAFT_RESTORE", "ClientDraft", draftId, scope.server.organizationId, id);

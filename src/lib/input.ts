@@ -30,6 +30,10 @@ export function serverId(value: string) {
   invariant(/^[A-Za-z]{3,5}$/.test(value), 400, "MUA server ID 必须是 3–5 位英文字母");
   return value;
 }
+export function clientId(value: string) {
+  // Existing client IDs are retained during migration; new clients use UUIDs.
+  return /^[A-Za-z]{3,5}$/.test(value) ? value : uuid(value);
+}
 export function username(value: string) {
   const result = value.trim().toLowerCase();
   invariant(/^[a-z0-9_.-]{3,64}$/.test(result), 400, "用户名须为 3–64 位英文字母、数字或 _ . -");

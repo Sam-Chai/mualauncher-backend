@@ -1,4 +1,4 @@
-import { LayoutDashboard, Building2, Users, ShieldCheck, Server, ListOrdered, Activity, Boxes, GitBranch, Package, Cpu, Newspaper, CalendarDays, PanelsTopLeft, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ShieldCheck, Server, ListOrdered, Activity, Boxes, Newspaper, CalendarDays, PanelsTopLeft, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings } from "lucide-react";
 export const navigation = [
   { title: "", items: [{ title: "总览", href: "/admin", icon: LayoutDashboard }] },
   { title: "联盟管理", items: [
@@ -10,10 +10,7 @@ export const navigation = [
     { title: "Listing", href: "/admin/listings", icon: ListOrdered },
     { title: "状态", href: "/admin/servers/status", icon: Activity }] },
   { title: "客户端", items: [
-    { title: "Client Profiles", href: "/admin/clients", icon: Boxes },
-    { title: "Releases", href: "/admin/clients/releases", icon: GitBranch },
-    { title: "Artifacts", href: "/admin/clients/artifacts", icon: Package },
-    { title: "Runtime", href: "/admin/clients/runtime", icon: Cpu }] },
+    { title: "客户端管理", href: "/admin/clients", icon: Boxes }] },
   { title: "内容", items: [
     { title: "资讯", href: "/admin/news", icon: Newspaper },
     { title: "活动", href: "/admin/events", icon: CalendarDays },

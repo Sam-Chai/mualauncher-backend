@@ -1,7 +1,7 @@
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -14,6 +14,8 @@ import { requireServer, expandRoles } from "../src/lib/rbac";
 import { sameOrigin } from "../src/lib/http";
 import { publishedServers } from "../src/lib/catalog";
 import * as m from "../src/lib/management";
+import * as c from "../src/lib/client-service";
+import { requireClient } from "../src/lib/rbac";
 import { roleLabel } from "../src/components/admin/role-label";
 import { visibleNavigation, visiblePaths } from "../src/components/admin/navigation-access";
 
@@ -27,7 +29,7 @@ const rollback = new Error("test rollback");
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants"]) {
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle"]) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -68,6 +70,10 @@ async function fixture(db: Db) {
   await m.createServer(db, root, { organizationId: org.id, serverId: "NPR", displayName: "NPU RELEASE" });
   await m.createServer(db, root, { organizationId: org.id, serverId: "NPB", displayName: "NPU BETA" });
   await m.createServer(db, root, { organizationId: other.id, serverId: "OTH", displayName: "Other server" });
+  for (const server of await db.server.findMany()) {
+    await db.client.create({ data: { id: server.serverId, organizationId: server.organizationId, name: server.displayName, nameKey: server.displayName.trim().normalize("NFKC").toLowerCase(), scopeServerId: server.serverId } });
+    await db.serverPublication.update({ where: { serverId: server.serverId }, data: { clientId: server.serverId } });
+  }
   await m.setMember(db, root, org.id, admin.id, { roles: ["ORG_ADMIN"], status: "ACTIVE" });
   await m.setMember(db, root, org.id, beta.id, { roles: [], status: "ACTIVE" });
   await m.setGrant(db, root, org.id, beta.id, "NPB", { roles: ["SERVER_ADMIN"] });
@@ -103,12 +109,12 @@ test("sidebar reflects organization, server and platform permissions after grant
   const f = await fixture(db);
   const links = async (actor: Actor) => [...visiblePaths(await m.getState(db, actor))];
   const root = await links(f.root);
-  assert.equal(root.length, 22);
+  assert.equal(root.length, 19);
   const admin = await links(f.admin);
   assert(admin.includes("/admin/organizations"));
   assert(admin.includes("/admin/members"));
   assert(admin.includes("/admin/servers"));
-  assert(admin.includes("/admin/clients/runtime"));
+  assert(admin.includes("/admin/clients"));
   assert(!admin.includes("/admin/listings"));
   assert(!admin.includes("/admin/releases/review"));
   assert(!admin.includes("/admin/system/audit"));
@@ -226,12 +232,13 @@ test("database rejects invalid IDs, cross-scope grants, missing clients and hard
 }));
 
 async function releaseFixture(db: Db, actor: Actor) {
-  const draft = await db.clientDraft.create({ data: { serverId: "NPR", createdById: actor.id, versionLabel: "v1", name: "approved", description: "", changelog: "",
+  const draft = await db.clientDraft.create({ data: { clientId: "NPR", createdById: actor.id, versionLabel: "v1", name: "approved", description: "", changelog: "",
     status: "APPROVED", reviewedById: actor.id, reviewedRevision: 1, reviewedAt: new Date(), candidateManifestKey: "test/manifest", candidateManifestSha256: "a".repeat(64) } });
-  const release = await db.clientRelease.create({ data: { serverId: "NPR", sourceDraftId: draft.id, versionLabel: "v1", name: "approved", description: "", changelog: "",
+  const release = await db.clientRelease.create({ data: { clientId: "NPR", sourceDraftId: draft.id, versionLabel: "v1", name: "approved", description: "", changelog: "",
     environmentSnapshot: {}, manifestObjectKey: "test/manifest", manifestSha256: "a".repeat(64), signingKeyId: "test-only", signature: "test-only-not-real",
     approvedById: actor.id, publishedById: actor.id } });
   await db.clientDraft.update({ where: { id: draft.id }, data: { status: "RELEASED" } });
+  await db.client.update({ where: { id: "NPR" }, data: { currentReleaseId: release.id } });
   return { draft, release };
 }
 
@@ -381,4 +388,81 @@ test("a queued write rechecks permissions after a committed revocation", async (
   const check = assert.rejects(write, denied(404));
   release(); await revoke; await check;
   assert.equal((await client.server.findUniqueOrThrow({ where: { serverId: "RCE" } })).displayName, "unchanged");
+});
+
+test("independent clients enforce organization names, client scope and confirmed binding changes", () => isolated(async db => {
+  const f = await fixture(db);
+  const one = await c.createClient(db, f.admin, { organizationId: f.org.id, name: "  NPUcraft  " });
+  const two = await c.createClient(db, f.admin, { organizationId: f.org.id, name: "NPU Vanilla" });
+  assert.notEqual(one.clientId, two.clientId);
+  assert.equal((await db.client.findUniqueOrThrow({ where: { id: one.clientId } })).currentReleaseId, null);
+  await assert.rejects(c.createClient(db, f.admin, { organizationId: f.org.id, name: "ＮＰＵＣＲＡＦＴ" }), denied(409));
+  await m.archiveResource(db, f.admin, "clients", one.clientId, { archived: true });
+  await assert.rejects(c.createClient(db, f.admin, { organizationId: f.org.id, name: "npucraft" }), denied(409));
+  await c.createClient(db, f.root, { organizationId: f.other.id, name: "NPUcraft" });
+  await assert.rejects(requireClient(db, f.beta, two.clientId, "DRAFT_READ"), denied(404));
+  await assert.rejects(c.createClient(db, f.beta, { organizationId: f.org.id, name: "No server scope" }), denied(403));
+  await assert.rejects(c.bindClient(db, f.reviewer, two.clientId, { serverId: "NPR", publicationRevision: 0, expectedClientId: "NPR", replaceConfirmed: true }), denied(403));
+  await assert.rejects(c.bindClient(db, f.admin, two.clientId, { serverId: "NPR", publicationRevision: 0, expectedClientId: "NPR", replaceConfirmed: false }), denied(409));
+  const pending = await c.bindClient(db, f.admin, two.clientId, { serverId: "NPR", publicationRevision: 0, expectedClientId: "NPR", replaceConfirmed: true });
+  assert(pending.pending);
+  assert.equal((await db.serverPublication.findUniqueOrThrow({ where: { serverId: "NPR" } })).clientId, "NPR");
+  await c.unbindClient(db, f.admin, two.clientId, { serverId: null, publicationRevision: null });
+  assert.equal((await db.client.findUniqueOrThrow({ where: { id: two.clientId } })).requestedServerId, null);
+  await assert.rejects(c.bindClient(db, f.beta, two.clientId, { serverId: "NPB", publicationRevision: 0, expectedClientId: "NPB", replaceConfirmed: true }), denied(404));
+  await c.unbindClient(db, f.admin, "NPR", { serverId: "NPR", publicationRevision: 0 });
+  const oldDraft = await db.clientDraft.create({ data: { clientId: "NPR", name: "Former client", versionLabel: "0.1", createdById: f.root.id } });
+  assert.deepEqual(await m.getClients(db, f.admin, "NPR"), { drafts: [], releases: [] });
+  await assert.rejects(m.saveDraft(db, f.admin, "NPR", { name: "No binding", versionLabel: "1", description: "", changelog: "" }), denied(409));
+  await c.bindClient(db, f.admin, two.clientId, { serverId: "NPR", publicationRevision: 1, expectedClientId: null, replaceConfirmed: false });
+  assert(!(await m.getClients(db, f.admin, "NPR")).drafts.some(draft => draft.id === oldDraft.id));
+  await assert.rejects(c.bindClient(db, f.admin, two.clientId, { serverId: "NPB", publicationRevision: 0, expectedClientId: "NPB", replaceConfirmed: true }), denied(409));
+  await assert.rejects(c.unbindClient(db, f.admin, two.clientId, { serverId: "NPR", publicationRevision: 1 }), denied(409));
+  await sqlDenied(db, () => db.serverPublication.update({ where: { serverId: "NPB" }, data: { clientId: two.clientId } }));
+  await sqlDenied(db, () => db.serverPublication.update({ where: { serverId: "OTH" }, data: { clientId: two.clientId } }));
+  assert.equal((await m.getState(db, f.admin)).organizations[0].clientCount, 3);
+  await db.$executeRawUnsafe("SET CONSTRAINTS ALL IMMEDIATE");
+}));
+
+test("the client migration preserves legacy releases, source keys, current selection and duplicate-name histories", async () => {
+  const legacySchema = "mua_legacy_test_" + randomBytes(8).toString("hex");
+  const legacy = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: "-c search_path=" + legacySchema + ",pg_catalog" });
+  const account = randomUUID(), org = randomUUID(), draft = randomUUID(), release = randomUUID(), upload = randomUUID();
+  const hash = "b".repeat(64);
+  try {
+    await legacy.query('CREATE SCHEMA "' + legacySchema + '"');
+    for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity"])
+      await legacy.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+    // Create both legacy one-server-one-client resources in one transaction, as the old API did.
+    const connection = await legacy.connect();
+    try {
+      await connection.query("BEGIN");
+      await connection.query('INSERT INTO "Account" ("id","displayName","updatedAt") VALUES ($1,\'root\',now())', [account]);
+      await connection.query('INSERT INTO "Organization" ("id","displayName","updatedAt") VALUES ($1,\'Legacy\',now())', [org]);
+      for (const id of ["LGA", "LGB"]) {
+        await connection.query('INSERT INTO "Server" ("serverId","organizationId","displayName","updatedAt") VALUES ($1,$2,\'Same name\',now())', [id, org]);
+        await connection.query('INSERT INTO "Client" ("serverId","organizationId","updatedAt") VALUES ($1,$2,now())', [id, org]);
+        await connection.query('INSERT INTO "ServerPublication" ("serverId","changedById","updatedAt") VALUES ($1,$2,now())', [id, account]);
+      }
+      await connection.query('INSERT INTO "ClientDraft" ("id","serverId","versionLabel","name","status","candidateManifestKey","candidateManifestSha256","createdById","reviewedById","reviewedRevision","reviewedAt","updatedAt") VALUES ($1,\'LGA\',\'1.0\',\'Same name\',\'APPROVED\',\'legacy/manifest.json\',$2,$3,$3,1,now(),now())', [draft, hash, account]);
+      await connection.query('INSERT INTO "ClientRelease" ("id","serverId","sourceDraftId","versionLabel","name","description","changelog","environmentSnapshot","manifestObjectKey","manifestSha256","signingKeyId","signature","approvedById","publishedById") VALUES ($1,\'LGA\',$2,\'1.0\',\'Same name\',\'\',\'\',\'{}\',\'legacy/manifest.json\',$3,\'legacy-key\',\'legacy-signature\',$4,$4)', [release, draft, hash, account]);
+      await connection.query('UPDATE "ClientDraft" SET "status"=\'RELEASED\' WHERE "id"=$1', [draft]);
+      await connection.query('UPDATE "ServerPublication" SET "releaseId"=$1,"revision"=7 WHERE "serverId"=\'LGA\'', [release]);
+      await connection.query('INSERT INTO "ClientUpload" ("id","serverId","createdById","fileName","size","partSize","multipartId","sourceObjectKey","baseReleaseId","basePublicationRevision","expiresAt","updatedAt") VALUES ($1,\'LGA\',$2,\'legacy.zip\',10,67108864,\'legacy-multipart\',\'legacy/source.zip\',$3,7,now()+interval \'1 day\',now())', [upload, account, release]);
+      await connection.query("COMMIT");
+    } catch (error) { await connection.query("ROLLBACK"); throw error; } finally { connection.release(); }
+    const before = (await legacy.query('SELECT "id","manifestObjectKey","manifestSha256","signature" FROM "ClientRelease"')).rows;
+    await legacy.query(await readFile("prisma/migrations/202610090001_independent_clients/migration.sql", "utf8"));
+    assert.deepEqual((await legacy.query('SELECT "id","manifestObjectKey","manifestSha256","signature" FROM "ClientRelease"')).rows, before);
+    const migrated = (await legacy.query('SELECT "id","scopeServerId","currentReleaseId","revision","nameKey" FROM "Client" ORDER BY "id"')).rows;
+    assert.deepEqual(migrated.map(row => row.id), ["LGA", "LGB"]);
+    assert.equal(migrated[0].scopeServerId, "LGA"); assert.equal(migrated[0].currentReleaseId, release); assert.equal(migrated[0].revision, 7);
+    assert.notEqual(migrated[0].nameKey, migrated[1].nameKey);
+    assert.equal((await legacy.query('SELECT "clientId" FROM "ClientDraft" WHERE "id"=$1', [draft])).rows[0].clientId, "LGA");
+    assert.equal((await legacy.query('SELECT "clientId","sourceObjectKey" FROM "ClientUpload" WHERE "id"=$1', [upload])).rows[0].sourceObjectKey, "legacy/source.zip");
+    assert.deepEqual((await legacy.query('SELECT "clientId","releaseId" FROM "ServerPublication" WHERE "serverId"=\'LGA\'')).rows[0], { clientId: "LGA", releaseId: release });
+  } finally {
+    assert.match(legacySchema, /^mua_legacy_test_[0-9a-f]{16}$/);
+    await legacy.query('DROP SCHEMA IF EXISTS "' + legacySchema + '" CASCADE'); await legacy.end();
+  }
 });

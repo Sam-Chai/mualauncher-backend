@@ -1,2 +1,2 @@
-import { ReleasesPage } from "@/components/admin/clients";
-export default function Page() { return <ReleasesPage mode="all" />; }
+import { redirect } from "next/navigation";
+export default function Page() { redirect("/admin/clients"); }

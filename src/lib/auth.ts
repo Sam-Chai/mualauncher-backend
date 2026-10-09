@@ -5,12 +5,13 @@ import { prisma } from "./prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { AppError, invariant } from "./errors";
 import { dummyHash, verifyPassword } from "./password";
+import type { Permission } from "./roles";
 
 export const COOKIE_NAME = "mua_session";
 export const SESSION_SECONDS = 60 * 60 * 12;
 export const tokenDigest = (token: string) => createHash("sha256").update(token).digest("hex");
 export type Db = Prisma.TransactionClient;
-export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string };
+export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string; apiScope?: { permissions: Permission[]; serverIds: string[] } };
 
 export async function actorFromToken(db: Db, token: string | undefined): Promise<Actor> {
   invariant(token && /^[0-9a-f]{64}$/.test(token), 401, "请先登录");

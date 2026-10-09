@@ -37,6 +37,10 @@ async function main() {
     const data = await state.json();
     assert.equal(data.actor.isSuperAdmin, true); assert(Array.isArray(data.organizations));
     assert.equal(data.auditActivity.length, 14);
+    const clients = await fetch(base + "/api/v1/clients", { headers: { Cookie: cookie } });
+    assert.equal(clients.status, 200); assert(Array.isArray(await clients.json()));
+    const pipeline = await fetch(base + "/api/admin/pipeline", { headers: { Cookie: cookie } });
+    assert.equal(pipeline.status, 200); assert.equal((await pipeline.json()).storageReady, true);
     assert(!JSON.stringify(data).includes("passwordHash")); assert(!JSON.stringify(data).includes(password));
     const root = await fetch(base, { headers: { Cookie: cookie }, redirect: "manual" });
     assert.equal(root.status, 307); assert.equal(root.headers.get("location"), "/admin");
@@ -46,8 +50,10 @@ async function main() {
     assert(panelHtml.includes('tremor-id="tremor-raw"'), "Dashboard must render the Tremor chart");
     assert(/<div width="[1-9]\d*" height="[1-9]\d*" class="recharts-wrapper"/.test(panelHtml), "Chart must have positive initial dimensions");
     assert(!/:E\{[^\n]*digest/.test(panelHtml), "Panel rendered a React server error");
+    assert(!panelHtml.includes('href="/admin/clients/runtime"')); assert(!panelHtml.includes('href="/admin/clients/artifacts"'));
+    assert(!panelHtml.includes('href="/admin/clients/releases"')); assert(panelHtml.includes("客户端管理"));
     for (const path of ["/admin/organizations", "/admin/members", "/admin/permissions", "/admin/servers", "/admin/listings",
-      "/admin/servers/status", "/admin/clients", "/admin/clients/releases", "/admin/clients/artifacts", "/admin/clients/runtime",
+      "/admin/servers/status", "/admin/clients",
       "/admin/news", "/admin/events", "/admin/launcher-ui", "/admin/releases/review", "/admin/releases/published",
       "/admin/releases/revoked", "/admin/system/workers", "/admin/system/storage", "/admin/system/signing-keys",
       "/admin/system/audit", "/admin/system/settings"]) {
@@ -55,6 +61,17 @@ async function main() {
       const html = await response.text();
       assert.equal(response.status, 200, path); assert(html.includes("MUA Platform"), path);
       assert(!/:E\{[^\n]*digest/.test(html), `React server error at ${path}`);
+    }
+    for (const path of ["/admin/clients/releases", "/admin/clients/artifacts", "/admin/clients/runtime"]) {
+      const response = await fetch(base + path, { headers: { Cookie: cookie }, redirect: "manual" });
+      if (response.status === 307) assert.equal(response.headers.get("location"), "/admin/clients");
+      else {
+        assert.equal(response.status, 200);
+        const html = await response.text();
+        assert(html.includes('url=/admin/clients') || html.includes('NEXT_REDIRECT;replace;/admin/clients;307;'), `Missing legacy redirect at ${path}`);
+        const digests = [...html.matchAll(/:E\{[^\n]*?"digest":"([^"]+)"/g)].map(match => match[1]);
+        assert(digests.every(digest => digest.startsWith('NEXT_REDIRECT;')), `Unexpected React error at ${path}`);
+      }
     }
     const directory = await fetch(base + "/api/v1/servers");
     assert.equal(directory.status, 200); assert(Array.isArray((await directory.json()).servers));
@@ -64,7 +81,7 @@ async function main() {
     const deniedHtml = await denied.text();
     assert(denied.url.endsWith("/login") || deniedHtml.includes('url=/login') || deniedHtml.includes('NEXT_REDIRECT'), "Admin pages must redirect after session revocation");
     cookie = "";
-    console.log("HTTP checks passed: /admin dashboard and 21 module routes, authentication, origin/field/body guards, cookie flags, safe DTOs, complete audit metrics, public directory and session revocation.");
+    console.log("HTTP checks passed: dashboard, unified client management, 19 module entries and legacy redirects, authentication, input/origin guards, client API, live storage, public directory and session revocation.");
   } finally { if (cookie) await post("/api/auth/logout", {}); }
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "HTTP check failed"); process.exitCode = 1; });

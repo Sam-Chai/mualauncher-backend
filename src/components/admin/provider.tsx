@@ -22,6 +22,7 @@ type Context = {
   organizations: Organization[]; servers: Server[]; busy: boolean; epoch: number;
   run: (work: () => Promise<unknown>, message?: string, refresh?: boolean) => Promise<boolean>;
   logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 const AdminContext = createContext<Context | null>(null);
 export function AdminProvider({ initial, children }: { initial: State; children: ReactNode }) {
@@ -37,6 +38,7 @@ export function AdminProvider({ initial, children }: { initial: State; children:
     return () => window.removeEventListener("storage", onStorage);
   }, []);
   const organizations = state.organizations.filter(org => organizationId === "all" || org.id === organizationId);
+  async function refresh() { setState(await api<State>("/api/admin/state")); setEpoch(value => value + 1); }
   async function run(work: () => Promise<unknown>, message = "已保存", refresh = true) {
     setBusy(true);
     try {
@@ -54,7 +56,7 @@ export function AdminProvider({ initial, children }: { initial: State; children:
     await run(async () => { await api("/api/auth/logout", "POST", {}); navigateAfterAuthChange("/login"); }, "", false);
   }
   return <AdminContext.Provider value={{ state, organizationId, setOrganizationId, organizations,
-    servers: organizations.flatMap(org => org.servers), busy, epoch, run, logout }}>{children}</AdminContext.Provider>;
+    servers: organizations.flatMap(org => org.servers), busy, epoch, run, logout, refresh }}>{children}</AdminContext.Provider>;
 }
 export function useAdmin() {
   const value = useContext(AdminContext);
