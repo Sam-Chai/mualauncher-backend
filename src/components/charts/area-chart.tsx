@@ -4,6 +4,7 @@
 "use client"
 
 import React from "react"
+import { useI18n } from "@/components/preferences"
 import { ChevronLeft as RiArrowLeftSLine, ChevronRight as RiArrowRightSLine } from "lucide-react"
 import {
   Area,
@@ -93,13 +94,16 @@ interface ScrollButtonProps {
 }
 
 // Lucide icons and a standard click target replace the upstream hold-to-scroll control.
-const ScrollButton = ({ icon: Icon, onClick, disabled }: ScrollButtonProps) => (
-  <button type="button" disabled={disabled} aria-label={Icon === RiArrowLeftSLine ? "向左滚动图例" : "向右滚动图例"}
+const ScrollButton = ({ icon: Icon, onClick, disabled }: ScrollButtonProps) => {
+  const { t } = useI18n()
+  return (
+  <button type="button" disabled={disabled} aria-label={t(Icon === RiArrowLeftSLine ? "向左滚动图例" : "向右滚动图例")}
     className="group inline-flex size-5 items-center rounded-sm text-gray-700 transition disabled:cursor-not-allowed disabled:text-gray-400"
     onClick={(event) => { event.stopPropagation(); onClick?.(); }}>
     <Icon className="size-full" aria-hidden="true" />
   </button>
-)
+  )
+}
 
 interface LegendProps extends React.OlHTMLAttributes<HTMLOListElement> {
   categories: string[]

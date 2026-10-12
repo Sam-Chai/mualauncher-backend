@@ -1,3 +1,4 @@
+import { translator, localizedDate, type Locale } from "./i18n";
 export const DEFAULT_HIGH_LATENCY_MS = 300;
 export const SERVER_PROBE_CACHE_MS = 30_000;
 export type ServerProbeResult = {
@@ -7,13 +8,14 @@ export type ServerProbeResult = {
   message: string; version: string | null; playersOnline: number | null;
 };
 
-export function probeTooltip(result: ServerProbeResult | null) {
-  if (!result) return "正在探测 Minecraft 服务器…";
-  const parts = [result.message];
-  if (result.latencyMs !== null) parts.push(`延迟 ${result.latencyMs} ms（${result.latencyKind === "PONG" ? "Ping 往返" : "状态请求往返"}，后端探测）`);
-  if (result.state === "HIGH_LATENCY") parts.push(`高延迟阈值：${result.highLatencyMs} ms`);
-  if (result.version) parts.push(`版本：${result.version}`);
-  if (result.playersOnline !== null) parts.push(`在线玩家：${result.playersOnline}`);
-  if (result.checkedAt) parts.push(`检查时间：${new Date(result.checkedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })}`);
+export function probeTooltip(result: ServerProbeResult | null, locale: Locale = "zh-CN") {
+  const t = translator(locale);
+  if (!result) return t("正在探测 Minecraft 服务器…");
+  const parts = [t(result.message)];
+  if (result.latencyMs !== null) parts.push(t("延迟 {0} ms（{1}，后端探测）", { "0": result.latencyMs, "1": t(result.latencyKind === "PONG" ? "Ping 往返" : "状态请求往返") }));
+  if (result.state === "HIGH_LATENCY") parts.push(t("高延迟阈值：{0} ms", { "0": result.highLatencyMs }));
+  if (result.version) parts.push(t("版本：{0}", { "0": result.version }));
+  if (result.playersOnline !== null) parts.push(t("在线玩家：{0}", { "0": result.playersOnline }));
+  if (result.checkedAt) parts.push(t("检查时间：{0}", { "0": localizedDate(result.checkedAt, locale) }));
   return parts.join("\n");
 }

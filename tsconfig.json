@@ -72,7 +72,9 @@
     ".next/mua-v2-delta/types/**/*.ts",
     ".next/mua-v2-delta/dev/types/**/*.ts",
     ".next/server-motto-test/types/**/*.ts",
-    ".next/server-motto-test/dev/types/**/*.ts"
+    ".next/server-motto-test/dev/types/**/*.ts",
+    ".next/i18n-build/types/**/*.ts",
+    ".next/i18n-build/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

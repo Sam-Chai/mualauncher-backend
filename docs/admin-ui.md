@@ -2,6 +2,8 @@
 
 更新时间：2026-10-12。入口 /admin，本机地址 http://localhost:3001/admin。根路径与旧 /dashboard 跳转至 /admin。
 
+登录页和后台顶部提供中英文与黑白主题切换，默认中文／白色，保存浏览器偏好；切换保留表单内容、路由和权限行为，业务名称及说明保持原文。实现与验证见[界面偏好](interface-preferences.md)。
+
 ## 技术栈与来源
 
 - Next.js 16 App Router、TypeScript、React 19、PostgreSQL／Prisma。

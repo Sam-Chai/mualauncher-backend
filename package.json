@@ -19,7 +19,7 @@
     "auth:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
     "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui",
     "test:package-format": "node --import tsx --test tests/package-format.test.ts",
-    "test:admin-ui": "node --import tsx --test tests/server-management.test.tsx",
+    "test:admin-ui": "node --import tsx --test tests/server-management.test.tsx tests/preferences.test.tsx",
     "test:server-motto": "node --conditions=react-server --import tsx --test tests/server-motto.test.ts",
     "test:server-probe": "node --conditions=react-server --import tsx --test tests/server-probe.test.ts",
     "test:muapack": "node --conditions=react-server --import tsx --test tests/muapack.test.ts",

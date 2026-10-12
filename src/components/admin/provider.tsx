@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@/components/preferences";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { getState, getClients } from "@/lib/management";
@@ -26,6 +27,7 @@ type Context = {
 };
 const AdminContext = createContext<Context | null>(null);
 export function AdminProvider({ initial, children }: { initial: State; children: ReactNode }) {
+  const { t } = useI18n();
   const [state, setState] = useState(initial);
   const [organizationId, setOrganizationId] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,7 @@ export function AdminProvider({ initial, children }: { initial: State; children:
   }, []);
   const organizations = state.organizations.filter(org => organizationId === "all" || org.id === organizationId);
   async function refresh() { setState(await api<State>("/api/admin/state")); setEpoch(value => value + 1); }
-  async function run(work: () => Promise<unknown>, message = "已保存", refresh = true) {
+  async function run(work: () => Promise<unknown>, message = t("已保存"), refresh = true) {
     setBusy(true);
     try {
       await work();
@@ -48,7 +50,7 @@ export function AdminProvider({ initial, children }: { initial: State; children:
       return true;
     } catch (error) {
       if (error instanceof RequestError && error.status === 401) navigateAfterAuthChange("/login");
-      toast.error(error instanceof Error ? error.message : "操作失败");
+      toast.error(error instanceof Error ? t(error.message) : t("操作失败"));
       return false;
     } finally { setBusy(false); }
   }

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useI18n } from "@/components/preferences"
 import { cn } from "cn"
 import type { Label as LabelPrimitive } from "radix-ui"
 import { Slot } from "radix-ui"
@@ -136,6 +137,7 @@ function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
 }
 
 function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
+  const { t } = useI18n()
   const { error, formMessageId } = useFormField()
   const body = error ? String(error?.message ?? "") : props.children
 
@@ -150,7 +152,7 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
       className={cn("text-sm text-destructive", className)}
       {...props}
     >
-      {body}
+      {typeof body === "string" ? t(body) : body}
     </p>
   )
 }

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 管理界面与登录页支持 zh-CN／en-US 及白色／黑色主题，顶部切换、浏览器持久化，默认中文／白色。语言通过请求 Cookie 和 React Context，主题采用 next-themes／html.dark；保留 /admin 路由和原认证重定向。仅翻译界面文案及已知系统提示，不改业务名称、说明、地址、版本／权限标识。新文案加入 src/lib/locales，详见 [docs/interface-preferences.md](docs/interface-preferences.md)。
+
 - muapack 最大源包上传大小由 Settings 管理，默认 1024 MB（1 GB），1 MB=1024² 字节，整数范围 1–20480 MB；仅 MUA 超管面板会话可修改并审计，普通后台账号可读取当前上限。网页、标准 API 和 Actions 新建 v1／v2 上传共用实时上限，超出配置返回 413；调整不取消已有上传／组包／审核／发布，不限制生成产物、不改历史和签名。见 [docs/upload-size-settings.md](docs/upload-size-settings.md)。
 
 - 更新上传默认采用首次发布的 muapack 格式（没有发布历史沿用最近草稿），上传前可手动改选。Settings 的 enabledPackageFormats 默认 [1,2]，至少保留一种，只允许超管面板会话修改并审计；所有后台账号可读取开放选项。关闭格式隐藏新上传选项并在标准上传创建 API 返回 409，不取消已有上传／组包／审核／发布，不下架历史、不改签名；Actions 沿用同一门槛。恢复已有上传保留锁定格式。详见 [docs/package-format-settings.md](docs/package-format-settings.md)。
