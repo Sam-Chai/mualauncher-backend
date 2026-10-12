@@ -11,6 +11,7 @@ import { packageSelectionSchema, packageArtifactsSchema } from "./package-contra
 import { packagesBucket, readObject, digest, signedDownload } from "./storage";
 import { storedHead } from "./package-storage";
 import { recipeDraftTarget, recipeReleaseTarget } from "./recipe-package-service";
+import { releaseDetails } from "./database-security";
 
 export async function queuePackageBuilds(db: Db, draftId: string, platforms = defaultMuaPlatforms()) {
   const draft = await db.clientDraft.findUnique({ where: { id: draftId } });
@@ -84,11 +85,14 @@ export async function managementFullPackage(db: Db, actor: Actor, clientId: stri
   const version = kind === "drafts" ? await db.clientDraft.findUnique({ where: { id: versionId } }) : await db.clientRelease.findUnique({ where: { id: versionId } });
   invariant(version?.clientId === clientId, 404, "客户端版本不存在");
   const draftId = "sourceDraftId" in version ? version.sourceDraftId : version.id;
-  const draft = await db.clientDraft.findUniqueOrThrow({ where: { id: draftId } });
+  const published = kind === "releases" ? await releaseDetails(db, versionId) : null;
+  const draft = kind === "drafts" ? await db.clientDraft.findUniqueOrThrow({ where: { id: draftId } }) : published;
+  invariant(draft, 404, "版本组包信息不存在");
   const parsedPlatform = muaPlatformSchema.safeParse(platformInput);
   invariant(version.packageFormatVersion === 2 ? platformInput === null || platformInput === "universal" || draft.supportedPlatforms.includes(platformInput) : parsedPlatform.success, 400, "平台参数无效");
   const platform = version.packageFormatVersion === 2 ? "universal" : parsedPlatform.data!;
-  const build = await db.packageBuild.findUnique({ where: { draftId_platform_revision: { draftId, platform, revision: version.packageFormatVersion === 2 ? draft.packageRevision : 1 } } });
+  const revision = version.packageFormatVersion === 2 ? draft.packageRevision : 1;
+  const build = kind === "releases" ? published?.packageBuilds.find(build => build.platform === platform && build.revision === revision) : await db.packageBuild.findUnique({ where: { draftId_platform_revision: { draftId, platform, revision } } });
   invariant(build?.required, 404, "此版本未选择该平台");
   const artifacts = packageArtifactsSchema.safeParse(build.artifacts);
   invariant(build.status === "READY" && artifacts.success, 409, "该平台的完整 .muapack 尚未生成完毕");

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { prisma } from "../src/lib/prisma";
+import { workerPrisma as prisma, validateDatabase } from "../src/lib/prisma";
 import { runUploadWorker, expireIncompleteUploads } from "../src/lib/client-worker";
 import { maintainRecycleBin } from "../src/lib/recycle-storage";
 import { runPackageWorker } from "../src/lib/package-worker";
@@ -8,13 +8,14 @@ import { runPackageWorker } from "../src/lib/package-worker";
 const workerId = randomUUID(); let running = true;
 process.on("SIGINT", () => { running = false; }); process.on("SIGTERM", () => { running = false; });
 async function main() {
+  await validateDatabase("worker");
   const heartbeat = setInterval(() => { void prisma.workerHeartbeat.upsert({ where: { id: workerId }, create: { id: workerId }, update: { lastSeen: new Date() } }).catch(() => console.error("Worker heartbeat failed")); }, 10000);
   await prisma.workerHeartbeat.create({ data: { id: workerId } });
   console.log(`MUA client Worker ready (${workerId})`);
   let maintenance: Promise<void> | undefined;
   const packages = (async () => {
     while (running) {
-      try { if (!await runPackageWorker()) await new Promise(resolve => setTimeout(resolve, 1500)); }
+      try { if (!await runPackageWorker(prisma)) await new Promise(resolve => setTimeout(resolve, 1500)); }
       catch (error) { console.error("Package queue failed", error instanceof Error ? error.message : "unknown"); await new Promise(resolve => setTimeout(resolve, 3000)); }
     }
   })();
@@ -23,13 +24,13 @@ async function main() {
     while (running) {
       try {
         if (Date.now() - lastMaintenance > 60000) {
-          await expireIncompleteUploads(); lastMaintenance = Date.now();
+          await expireIncompleteUploads(prisma); lastMaintenance = Date.now();
           // A recycling error must not stop the upload queue. Retry next minute.
-          if (!maintenance) maintenance = maintainRecycleBin().catch(error => {
+          if (!maintenance) maintenance = maintainRecycleBin(prisma).catch(error => {
             console.error("Recycle maintenance failed", error instanceof Error ? error.message : "unknown");
           }).finally(() => { maintenance = undefined; });
         }
-        if (!await runUploadWorker()) await new Promise(resolve => setTimeout(resolve, 1500));
+        if (!await runUploadWorker(prisma)) await new Promise(resolve => setTimeout(resolve, 1500));
       }
       catch (error) { console.error("Worker queue failed", error instanceof Error ? error.message : "unknown"); await new Promise(resolve => setTimeout(resolve, 3000)); }
     }

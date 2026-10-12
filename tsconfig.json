@@ -74,7 +74,9 @@
     ".next/server-motto-test/types/**/*.ts",
     ".next/server-motto-test/dev/types/**/*.ts",
     ".next/i18n-build/types/**/*.ts",
-    ".next/i18n-build/dev/types/**/*.ts"
+    ".next/i18n-build/dev/types/**/*.ts",
+    ".next/rls-build/types/**/*.ts",
+    ".next/rls-build/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

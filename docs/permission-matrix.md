@@ -4,7 +4,7 @@
 
 更新日期：2026-10-10。状态：本地白名单登录、应用层 RBAC、整合包上传、审核与签名发布、未发布上传版本归档及超管下载设置已实现，与[最小数据库模型](minimal-data-model.md)配套；具体操作完成范围见[实施进度](implementation-status.md)。本文还包含尚待实施的复制及发布归档权限，不能视为所有动作均已开放。
 
-用户已确定实施顺序：第一阶段应用层 RBAC，第二阶段 PostgreSQL RLS。第一阶段采用组织／单服范围的预置角色，统一角色映射在 `src/lib/roles.ts`、服务端范围检查在 `src/lib/rbac.ts`；不开放自定义角色或按账号编辑任意权限集合。RLS 尚未启用。
+用户已确定实施顺序：第一阶段应用层 RBAC，第二阶段 PostgreSQL RLS。第一阶段采用组织／单服范围的预置角色，统一角色映射在 `src/lib/roles.ts`、服务端范围检查在 `src/lib/rbac.ts`；不开放自定义角色或按账号编辑任意权限集合。RLS 已接入，见[部署说明](postgresql-rls.md)。
 
 客户端管理的完整 muapack 下载复用读取权限：草稿包需要 DRAFT_READ，发布／历史包需要 RELEASE_READ，并检查客户端组织／单服范围。只下载 READY、当前选定平台且 OSS 元数据匹配的完整包；无需发布或上架，不能据此开放玩家下载。已归档记录仍可由有权限的后台账号读取，删除客户端不可读；短期签名链接五分钟到期。
 
@@ -153,7 +153,7 @@ HTTP 错误建议：未认证 `401`，无操作权限 `403`，无权读取的管
 
 服务端从已认证会话设置账号与组织/服务器访问上下文，在同一个事务内执行相关查询，使用事务局部设置避免连接池复用带入旧身份。缺失或无效身份默认拒绝管理数据，公开分发和 Worker 采用明确的独立策略。事务上下文是数据库策略的输入，不是前端可以自行指定的管理员标记，也不替代用户认证。
 
-RLS 不保护字段级修改或整个发布业务流程，现有字段白名单、不可变快照保护、审计、归档及并发控制继续保留。政策设计还需处理成员/角色查询、后台任务及策略递归等问题，并以实际运行账号验证。实现细节参考 [PostgreSQL RLS](https://www.postgresql.org/docs/current/ddl-rowsecurity.html) 和 [事务局部 SET](https://www.postgresql.org/docs/current/sql-set.html)。当前没有启用 RLS。
+RLS 不保护字段级修改或整个发布业务流程，现有字段白名单、不可变快照保护、审计、归档及并发控制继续保留。政策设计还需处理成员/角色查询、后台任务及策略递归等问题，并以实际运行账号验证。实现细节参考 [PostgreSQL RLS](https://www.postgresql.org/docs/current/ddl-rowsecurity.html) 和 [事务局部 SET](https://www.postgresql.org/docs/current/sql-set.html)。当前已启用 RLS，实际角色与受限函数边界见[部署说明](postgresql-rls.md)。
 
 ## 7. 实现后的验收场景
 

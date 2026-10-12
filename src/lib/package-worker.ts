@@ -8,7 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { ZipFile } from "yazl";
 import type { PrismaClient, PackageBuild } from "@/generated/prisma/client";
 import { Prisma } from "@/generated/prisma/client";
-import { prisma } from "./prisma";
+import { workerPrisma as prisma } from "./prisma";
 import { locked, type Db } from "./auth";
 import { requireClient } from "./rbac";
 import { AppError, invariant } from "./errors";

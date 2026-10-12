@@ -45,10 +45,14 @@ import { maxUploadSizeMb, uploadSizeSettings, updateUploadSizeSettings } from ".
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "../src/lib/upload-size-policy";
 
 const suffix = randomBytes(8).toString("hex"); const schema = "mua_upload_test_" + suffix;
+process.env.DATABASE_SCHEMA = schema;
+const migrationUrl = new URL(process.env.DATABASE_MIGRATION_URL!); migrationUrl.searchParams.delete("options");
+process.env.DATABASE_MIGRATION_URL = migrationUrl.toString();
 process.env.S3_PACKAGES_BUCKET = "mua-upload-test-" + suffix + "-packages"; process.env.S3_CAS_BUCKET = "mua-upload-test-" + suffix + "-cas";
 process.env.S3_ENVIRONMENTS_BUCKET = "mua-upload-test-" + suffix + "-environments";
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: "-c search_path=" + schema + ",pg_catalog", pipeline: true });
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner -c search_path=" + schema + ",pg_catalog", pipeline: true });
 const client = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
+const workerClient = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_WORKER_URL, options: `-c search_path=${schema},pg_catalog`, pipeline: true }, { schema }) });
 let created = false; let temp = "";
 let root: Actor; let admin: Actor; let reviewer: Actor; let publisher: Actor; let operator: Actor; let reader: Actor;
 const denied = (status: number) => (error: unknown) => error instanceof AppError && error.status === status;
@@ -94,14 +98,14 @@ async function prepare(bytes: Buffer, actor = admin, serverId = "NPA", processNo
   }
   await c.transferCompletion(completion);
   await work(db => c.queueCompletedUpload(db, actor, upload.id));
-  if (processNow) assert.equal(await runUploadWorker(client), true);
+  if (processNow) assert.equal(await runUploadWorker(workerClient), true);
   return c.uploadView(await c.findUpload(client, actor, upload.id));
 }
 async function submitted(upload: UploadView, versionLabel: string) { return work(db => c.submitUpload(db, admin, upload.id, { ...fields, versionLabel })); }
 async function finishPackages(draftId: string) {
   for (let i = 0; i < 150; i++) {
     const remaining = await client.packageBuild.count({ where: { draftId, required: true, status: { not: "READY" } } }); if (!remaining) return;
-    assert.equal(await runPackageWorker(client, fixtureEnvironment), true, "Worker must have eligible package work");
+    assert.equal(await runPackageWorker(workerClient, fixtureEnvironment), true, "Worker must have eligible package work");
     const failed = await client.packageBuild.findFirst({ where: { draftId, required: true, status: "FAILED" } }); assert.equal(failed, null, failed?.error ?? "build failed");
   }
   assert.fail("Package pipeline did not finish");
@@ -112,7 +116,7 @@ async function approved(draftId: string) {
 }
 before(async () => {
   await pool.query('CREATE SCHEMA "' + schema + '"'); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
   temp = await mkdtemp(join(tmpdir(), "mua-upload-test-")); process.env.SIGNING_PRIVATE_KEY_PATH = join(temp, "key.pem");
   await writeFile(process.env.SIGNING_PRIVATE_KEY_PATH, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }));
   await initializeStorage();
@@ -139,8 +143,8 @@ after(async () => {
     for (;;) { const listed = await s3.send(new ListObjectsV2Command({ Bucket })); if (!listed.Contents?.length) break; await s3.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: listed.Contents.map(object => ({ Key: object.Key! })) } })); }
     await s3.send(new DeleteBucketCommand({ Bucket }));
   }
-  await client.$disconnect(); await pool.end(); await prisma.$disconnect();
-  if (created) { assert.match(schema, /^mua_upload_test_[0-9a-f]{16}$/); const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_URL }); await cleanup.query('DROP SCHEMA "' + schema + '" CASCADE'); await cleanup.end(); }
+  await client.$disconnect(); await workerClient.$disconnect(); await pool.end(); await prisma.$disconnect();
+  if (created) { assert.match(schema, /^mua_upload_test_[0-9a-f]{16}$/); const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner" }); await cleanup.query('DROP SCHEMA "' + schema + '" CASCADE'); await cleanup.query(`DROP SCHEMA IF EXISTS "${schema}_authz" CASCADE`); await cleanup.end(); }
   if (temp) { assert(resolve(temp).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/"))); await rm(temp, { recursive: true, force: true }); }
 });
 
@@ -203,7 +207,7 @@ test("lowering upload size keeps existing multipart completion and Worker proces
     const parts = [{ partNumber: 1, etag: response.headers.get("etag")! }];
     const completion = await work(db => c.prepareCompletion(db, root, upload.id, { parts }));
     await c.transferCompletion(completion); await work(db => c.queueCompletedUpload(db, root, upload.id));
-    assert.equal(await runUploadWorker(client), true);
+    assert.equal(await runUploadWorker(workerClient), true);
     const ready = await c.findUpload(client, root, upload.id); assert.equal(ready.status, "READY", ready.error ?? "existing upload should finish");
     await work(db => c.cancelUpload(db, root, upload.id));
   } finally { await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1024 })); }
@@ -316,7 +320,7 @@ test("persistent package jobs require review, retry expired leases, invalidate c
   await client.packageBuild.update({ where: { id: build.id }, data: { status: "PROCESSING", attempts: 1, leaseToken: randomBytes(16).toString("hex").replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5"), leaseUntil: new Date(0) } });
   for (let i = 0; i < 100; i++) {
     if ((await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } })).status === "PREPARED") break;
-    assert(await runPackageWorker(client, fixtureEnvironment));
+    assert(await runPackageWorker(workerClient, fixtureEnvironment));
   }
   const prepared = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(prepared.status, "PREPARED"); assert.equal(prepared.artifacts, null, "unreviewed content has no signed package");
   await assert.rejects(work(db => managementFullPackage(db, admin, identity.clientId, "drafts", draftId, "linux-amd64")), denied(409));
@@ -391,7 +395,7 @@ test("deflate, ZIP64 and Unicode paths are parsed; a crashed Worker lease can be
   const upload = await prepare(Buffer.concat(chunks), root, "OTH", false);
   const claimed = await claimUpload(client); assert.equal(claimed?.id, upload.id);
   await client.clientUpload.update({ where: { id: upload.id }, data: { leaseUntil: new Date(Date.now() - 1000) } });
-  assert.equal(await runUploadWorker(client), true);
+  assert.equal(await runUploadWorker(workerClient), true);
   const complete = await client.clientUpload.findUniqueOrThrow({ where: { id: upload.id } }); assert.equal(complete.status, "READY"); assert.equal(complete.attempts, 2);
   const inventory = await c.readInventory(complete.filesObjectKey!, complete.filesSha256!);
   assert(inventory.files.some(file => file.path === "config/中文.json"));
@@ -399,6 +403,11 @@ test("deflate, ZIP64 and Unicode paths are parsed; a crashed Worker lease can be
   await assert.rejects(client.clientUpload.update({ where: { id: upload.id }, data: { sourceObjectKey: "other.zip" } }));
 });
 test("the standard HTTP API and Actions upload script share the reviewed release pipeline", { skip: !process.env.MUA_HTTP_TEST_DIST, timeout: 45000 }, async () => {
+  // This integration test must also run independently of preceding release tests.
+  if (!await client.clientRelease.findFirst({ where: { clientId: "NPA" } })) {
+    const initial = await submitted(await prepare(v1), "1.0.0"); await approved(initial.draftId);
+    await work(db => c.publishClient(db, root, "NPA", initial.draftId, { activate: true }));
+  }
   const probe = createServer(); await new Promise<void>(resolve => probe.listen(0, "127.0.0.1", resolve));
   const port = (probe.address() as { port: number }).port; await new Promise<void>(resolve => probe.close(() => resolve()));
   const origin = "http://127.0.0.1:" + port;
@@ -504,7 +513,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     cli.stdout.on("data", chunk => { cliOutput += chunk.toString(); }); cli.stderr.on("data", chunk => { cliErrors += chunk.toString(); });
     const cliFinished = new Promise<number | null>(resolve => cli.once("exit", code => { done = true; resolve(code); }));
     const deadline = Date.now() + 20000;
-    while (!done && Date.now() < deadline) { await runUploadWorker(client); await new Promise(resolve => setTimeout(resolve, 250)); }
+    while (!done && Date.now() < deadline) { await runUploadWorker(workerClient); await new Promise(resolve => setTimeout(resolve, 250)); }
     if (!done) cli.kill(); assert.equal(await cliFinished, 0, cliErrors);
     const result = JSON.parse(cliOutput.split("\n").find(line => line.startsWith("{"))!);
     assert.equal(result.status, "SUBMITTED");
@@ -538,6 +547,12 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const fixedV1 = await refreshedV1.json(); assert.equal(fixedV1.sha256, packageData.sha256); assert.equal(fixedV1.releaseId, packageData.releaseId); assert(fixedV1.etag);
     assert.equal((await fetch(origin + packageData.refreshUrl.replace(packageData.sha256, "0".repeat(64)))).status, 409);
     const foreignRelease = await client.clientRelease.findFirstOrThrow({ where: { clientId: "NPA" } });
+    const operatorToken = randomBytes(32).toString("hex");
+    await client.session.create({ data: { accountId: operator.id, tokenHash: tokenDigest(operatorToken), expiresAt: new Date(Date.now() + 60000) } });
+    const operatorHeaders = { Cookie: `${COOKIE_NAME}=${operatorToken}` };
+    const operatorDetails = await fetch(origin + "/api/v1/clients/NPA", { headers: operatorHeaders }); assert.equal(operatorDetails.status, 200);
+    const operatorRow = await operatorDetails.json(); assert.equal(operatorRow.drafts.length, 0); assert(operatorRow.releases[0].sourceDraft.packageBuilds.length > 0);
+    assert.equal((await fetch(origin + `/api/v1/clients/NPA/releases/${foreignRelease.id}/package?platform=windows-amd64`, { headers: operatorHeaders })).status, 200);
     assert.equal((await fetch(origin + `/api/v1/servers/OTH/releases/${foreignRelease.id}/packages?platform=windows-amd64`)).status, 404);
     assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=linux-aarch64")).status, 404);
     const manifestResponse = await fetch(origin + "/api/v1/servers/OTH/manifest"); assert.equal(manifestResponse.status, 200);
@@ -557,11 +572,11 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const signed = await post(`/api/v1/clients/uploads/${multiUpload.id}/parts`, { partNumber: 1 });
     const put = await fetch(signed.url, { method: "PUT", body: new Uint8Array(multi) }); assert.equal(put.status, 200);
     await post(`/api/v1/clients/uploads/${multiUpload.id}/complete`, { parts: [{ partNumber: 1, etag: put.headers.get("etag") }] });
-    await runUploadWorker(client);
+    await runUploadWorker(workerClient);
     const paused = await (await fetch(origin + `/api/v1/clients/uploads/${multiUpload.id}`, { headers: authorization })).json();
     assert.equal(paused.processingPhase, "SELECT_INSTANCE"); assert.equal(paused.detectedInfo.candidates.length, 2);
     await post(`/api/v1/clients/uploads/${multiUpload.id}/select-instance`, { instanceId: "hmcl" });
-    await runUploadWorker(client);
+    await runUploadWorker(workerClient);
     const detected = await (await fetch(origin + `/api/v1/clients/uploads/${multiUpload.id}`, { headers: authorization })).json();
     assert.equal(detected.status, "READY"); assert.equal(detected.detectedInfo.minecraftVersion, "26.1"); assert.equal(detected.detectedInfo.javaVersion, 25);
     await post(`/api/v1/clients/uploads/${multiUpload.id}/cancel`, {});
@@ -573,7 +588,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     });
     let v2Output = "", v2Errors = "";
     v2Cli.stdout.on("data", chunk => { v2Output += chunk.toString(); }); v2Cli.stderr.on("data", chunk => { v2Errors += chunk.toString(); });
-    const v2Worker = setInterval(() => void runUploadWorker(client), 300);
+    const v2Worker = setInterval(() => void runUploadWorker(workerClient), 300);
     const v2Timeout = setTimeout(() => v2Cli.kill(), 15000);
     try { assert.equal(await new Promise<number | null>(resolve => v2Cli.once("exit", resolve)), 0, v2Errors); } finally { clearTimeout(v2Timeout); clearInterval(v2Worker); }
     const v2Result = JSON.parse(v2Output.split("\n").find(line => line.startsWith("{"))!);
@@ -581,10 +596,10 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const waitingResponse = await fetch(origin + `/api/v1/clients/uploads/${v2Result.uploadId}`, { headers: authorization }); assert.equal(waitingResponse.status, 200);
     const waiting = await waitingResponse.json(); assert.equal(waiting.status, "SUBMITTED"); assert.equal(waiting.attempts, undefined); assert.equal(waiting.recipeStatistics.remoteFiles, 4); assert.equal(waiting.statistics, null);
     const recipe = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/manifest`, { headers: authorization }); assert.equal(recipe.status, 200); assert.equal((await recipe.json()).format, "mua-recipe-manifest");
-    await runPackageWorker(client, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
+    await runPackageWorker(workerClient, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
     await post(`/api/v1/clients/OTH/drafts/${v2Result.draftId}/review`, { decision: "approve", note: "HTTP v2 verified", contentRevision: 1 });
     const pendingV2 = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/publish`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: '{"activate":false}' }); assert.equal(pendingV2.status, 409);
-    await runPackageWorker(client, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
+    await runPackageWorker(workerClient, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
     const v2Full = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/package?platform=universal`, { headers: authorization }); assert.equal(v2Full.status, 200);
     const v2Artifact = await v2Full.json(); assert.equal(v2Artifact.packageFormatVersion, 2); assert.equal(v2Artifact.packageType, "full");
     const v2Bytes = Buffer.from(await (await fetch(v2Artifact.url)).arrayBuffer()); assert.equal(digest(v2Bytes), v2Artifact.sha256);
@@ -596,7 +611,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const deltaUpload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), root, "OTH", true, "delta.mrpack", null, 2);
     const deltaDraft = await post(`/api/v1/clients/uploads/${deltaUpload.id}/submit`, { ...automaticMetadata, versionLabel: "1.2.0", platforms: ["windows-amd64"] });
     await post(`/api/v1/clients/OTH/drafts/${deltaDraft.draftId}/review`, { decision: "approve", note: "HTTP delta verified", contentRevision: 1 });
-    await runPackageWorker(client, async () => { assert.fail("HTTP delta must not resolve environments"); });
+    await runPackageWorker(workerClient, async () => { assert.fail("HTTP delta must not resolve environments"); });
     await post(`/api/v1/clients/OTH/drafts/${deltaDraft.draftId}/publish`, { activate: true });
     const deltaBase = await client.clientRelease.findUniqueOrThrow({ where: { id: v2Published.releaseId } });
     const query = `/api/v1/servers/OTH/packages?platform=windows-amd64&acceptedFormatVersions=2&baseReleaseId=${deltaBase.id}`;
@@ -774,12 +789,12 @@ test("multiple instances pause without CAS, selection enforces ownership and sco
   const before = (await storageClient().send(new ListObjectsV2Command({ Bucket: casBucket() }))).KeyCount;
   const upload = await prepare(bytes, root, identity.clientId);
   assert.equal(upload.status, "QUEUED"); assert.equal(upload.processingPhase, "SELECT_INSTANCE"); assert.equal(upload.detectedInfo?.candidates.length, 2);
-  assert.equal(await runUploadWorker(client), false, "paused tasks must not be repeatedly claimed");
+  assert.equal(await runUploadWorker(workerClient), false, "paused tasks must not be repeatedly claimed");
   assert.equal((await storageClient().send(new ListObjectsV2Command({ Bucket: casBucket() }))).KeyCount, before);
   await assert.rejects(work(db => c.selectUploadInstance(db, admin, upload.id, { instanceId: "hmcl" })), denied(404));
   await assert.rejects(work(db => c.selectUploadInstance(db, root, upload.id, { instanceId: "outside" })), denied(400));
   await work(db => c.selectUploadInstance(db, root, upload.id, { instanceId: "hmcl" }));
-  assert.equal(await runUploadWorker(client), true);
+  assert.equal(await runUploadWorker(workerClient), true);
   const saved = await c.findUpload(client, root, upload.id); const ready = c.uploadView(saved);
   assert.equal(ready.status, "READY"); assert.equal(ready.detectedInfo?.minecraftVersion, "26.1"); assert.equal(ready.detectedInfo?.javaVersion, 25);
   assert.deepEqual(ready.detectedMods, ["versions/hmcl/mods/new.jar"]);
@@ -807,7 +822,7 @@ test("Worker persists the detected runtime for polling while CAS is still proces
     ...Array.from({ length: 64 }, (_, i) => ({ name: `versions/pcl/mods/${i}.jar`, data: randomBytes(1024) }))]);
   const upload = await prepare(bytes, root, identity.clientId, false);
   let finished = false; let observed = false;
-  const worker = runUploadWorker(client).finally(() => { finished = true; });
+  const worker = runUploadWorker(workerClient).finally(() => { finished = true; });
   try {
     while (!finished) {
       const view = c.uploadView(await c.findUpload(client, root, upload.id));
@@ -832,7 +847,7 @@ async function indexedMaintenance(now = new Date()) {
   for (let attempt = 0; attempt < 100; attempt++) if (await indexClientStorage(client)) {
     // Maintenance reconciles four deleted owners per tick; HTTP tests add more owners.
     const owners = await client.client.count({ where: { deletedAt: { not: null } } });
-    for (let tick = 0; tick < Math.max(1, Math.ceil(owners / 4)); tick++) await maintainRecycleBin(client, now);
+    for (let tick = 0; tick < Math.max(1, Math.ceil(owners / 4)); tick++) await maintainRecycleBin(workerClient, now);
     return;
   }
   assert.fail("storage index did not converge");
@@ -1002,7 +1017,7 @@ test("concurrent upload restoration and expiry serialize by hash without deletin
   const a = await newRecycleClient("Concurrent A"), b = await newRecycleClient("Concurrent B");
   const first = await prepare(zip, admin, a.clientId, false), second = await prepare(zip, admin, b.clientId, false);
   while (!await indexClientStorage(client)) { /* Complete the safety barrier before racing. */ }
-  await Promise.all([runUploadWorker(client), runUploadWorker(client), maintainRecycleBin(client, new Date(now.getTime() + 8 * 86400000))]);
+  await Promise.all([runUploadWorker(workerClient), runUploadWorker(workerClient), maintainRecycleBin(workerClient, new Date(now.getTime() + 8 * 86400000))]);
   const views = await Promise.all([first.id, second.id].map(id => c.findUpload(client, admin, id).then(c.uploadView)));
   assert(views.every(view => view.status === "READY"));
   const added = views.reduce((total, view) => total + view.statistics!.newDataSize, 0); assert(added === 0 || added === bytes.length);
@@ -1022,7 +1037,7 @@ test("invalid legacy inventories stop recycling; reconciliation catches late com
   await indexedMaintenance(); assert.equal(await objectExists(casBucket(), "recycle/cas/" + casKey(sha)), true);
   // Simulate an S3 completion finishing just after the deletion was first reconciled.
   await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: saved.sourceObjectKey, Body: zip }));
-  for (let i = 0; i < 10 && await objectExists(packagesBucket(), saved.sourceObjectKey); i++) await maintainRecycleBin(client);
+  for (let i = 0; i < 10 && await objectExists(packagesBucket(), saved.sourceObjectKey); i++) await maintainRecycleBin(workerClient);
   assert.equal(await objectExists(packagesBucket(), saved.sourceObjectKey), false);
   assert.deepEqual(await readObject(`recycle/clients/${legacy.clientId}/${saved.sourceObjectKey}`), zip);
 });
@@ -1200,7 +1215,7 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, platforms: ["windows-amd64", "linux-amd64"] }));
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 must never download environment binaries"); };
   await assert.rejects(work(db => c.reviewClient(db, reader, identity.clientId, draftId, { decision: "approve", note: "test", contentRevision: 1 })), denied(403));
-  assert.equal(await runPackageWorker(client, neverResolve), true);
+  assert.equal(await runPackageWorker(workerClient, neverResolve), true);
   let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } });
   assert.equal(build.platform, "universal"); assert.equal(build.revision, 1); assert.equal(build.status, "PREPARED", build.error ?? "preparation failed");
   const candidate = await c.draftManifest(client, reviewer, identity.clientId, draftId); assert(candidate.format === "mua-recipe-manifest");
@@ -1208,7 +1223,7 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   assert.equal(candidate.files.filter(file => file.source.type === "remote").length, 4);
   await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Checked v2", contentRevision: 1, packageRevision: 1 }));
   await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true })), denied(409));
-  await runPackageWorker(client, neverResolve);
+  await runPackageWorker(workerClient, neverResolve);
   build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "build failed");
   const oldArtifacts = build.artifacts, oldTarget = build.targetSha256;
   const full = await managementFullPackage(client, admin, identity.clientId, "drafts", draftId, "universal");
@@ -1269,16 +1284,16 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
     return draftId;
   }
   const first = await submit(await readFile("docs/examples/muapack-v2/inputs/base.mrpack"), "1.0.0", ["windows-amd64"]);
-  await runPackageWorker(client, neverResolve);
+  await runPackageWorker(workerClient, neverResolve);
   await work(db => c.publishClient(db, root, identity.clientId, first, { activate: true }));
   const base = await client.clientRelease.findUniqueOrThrow({ where: { id: first } }), baseBytes = await readObject(base.manifestObjectKey);
   const draftId = await submit(source, "1.1.0", ["windows-amd64", "linux-amd64"]);
   // A corrupted published baseline must fail, rather than silently signing an unrelated full/update pair.
   await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: Buffer.from("{}") }));
-  await runPackageWorker(client, neverResolve);
+  await runPackageWorker(workerClient, neverResolve);
   let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "FAILED"); assert.match(build.error!, /基准.*摘要/);
   await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: baseBytes, Metadata: { sha256: base.manifestSha256 } }));
-  await work(db => retryPackages(db, admin, identity.clientId, draftId)); await runPackageWorker(client, neverResolve);
+  await work(db => retryPackages(db, admin, identity.clientId, draftId)); await runPackageWorker(workerClient, neverResolve);
   build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "delta build failed");
   const artifacts = packageArtifactsSchema.parse(build.artifacts); assert(artifacts.update); assert.equal(artifacts.update.baseReleaseId, base.id); assert.equal(artifacts.update.baseManifestSha256, base.manifestSha256);
   const publicKey = createPublicKey((await signingIdentity()).privateKey);
@@ -1306,7 +1321,7 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   }
   await assert.rejects(publicPackage(client, "VTD", "windows-amd64", first, "2", "bad"), denied(400));
   const management = await managementFullPackage(client, reader, identity.clientId, "releases", draftId, "universal"); assert.equal(management.sha256, artifacts.full.sha256);
-  const identical = await submit(source, "1.2.0", ["windows-amd64", "linux-amd64"]); await runPackageWorker(client, neverResolve);
+  const identical = await submit(source, "1.2.0", ["windows-amd64", "linux-amd64"]); await runPackageWorker(workerClient, neverResolve);
   const emptyBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: identical, required: true } }); assert.equal(emptyBuild.status, "READY", emptyBuild.error ?? "empty delta failed");
   const emptyArtifacts = packageArtifactsSchema.parse(emptyBuild.artifacts); assert(emptyArtifacts.update);
   const emptyPath = join(temp, "empty-delta-v2.muapack"); await writeFile(emptyPath, await readObject(emptyArtifacts.update.key));
@@ -1319,7 +1334,7 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   assert.deepEqual(await client.clientRelease.findUniqueOrThrow({ where: { id: first } }), base);
   assert.equal(digest(await readObject(base.manifestObjectKey)), base.manifestSha256);
   await indexClientStorage(client); assert(await objectExists(packagesBucket(), artifacts.update.key));
-  const differentPlatform = await submit(source, "1.3.0", ["macos-amd64"]); await runPackageWorker(client, neverResolve);
+  const differentPlatform = await submit(source, "1.3.0", ["macos-amd64"]); await runPackageWorker(workerClient, neverResolve);
   const platformBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: differentPlatform, required: true } }); assert.equal(platformBuild.status, "READY", platformBuild.error ?? "new platform failed");
   assert(packageArtifactsSchema.parse(platformBuild.artifacts).update, "legacy platform input cannot restrict new v2 packages or deltas");
   await work(db => c.archiveClientDraft(db, admin, identity.clientId, differentPlatform, { contentRevision: 1, packageRevision: 1 }));
@@ -1333,7 +1348,7 @@ test("v2 unpublished draft comparison does not become a player delta baseline", 
   const newUpload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), admin, identity.clientId, true, "target.mrpack", first.draftId, 2);
   const second = await work(db => c.submitUpload(db, admin, newUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { decision: "approve", note: "replacement", contentRevision: 1 }));
-  for (let i = 0; i < 2; i++) await runPackageWorker(client, async () => { assert.fail("v2 does not resolve environment binaries"); });
+  for (let i = 0; i < 2; i++) await runPackageWorker(workerClient, async () => { assert.fail("v2 does not resolve environment binaries"); });
   const build = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(build.status, "READY", build.error ?? "replacement failed");
   assert.equal(packageArtifactsSchema.parse(build.artifacts).update, null);
   await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { activate: false }));
@@ -1350,7 +1365,7 @@ test("format choice is sealed per upload; v2 imports only local files and does n
   const saved = await c.findUpload(client, admin, upload.id);
   assert.deepEqual(await readObject(saved.sourceObjectKey), bytes);
   assert.equal(saved.sourceSha256, null); assert.equal(saved.filesObjectKey, null);
-  assert.equal(await runUploadWorker(client), true);
+  assert.equal(await runUploadWorker(workerClient), true);
   const ready = c.uploadView(await c.findUpload(client, admin, upload.id));
   assert.equal(ready.status, "READY", ready.error ?? "v2 import failed"); assert.equal(ready.statistics, null);
   assert.equal(ready.recipeStatistics?.localFiles, 5); assert.equal(ready.recipeStatistics?.remoteFiles, 4);
@@ -1452,7 +1467,7 @@ test("one client can publish v1, remote-only v2 and v1 again without mixing sign
   const remote = await prepare(source, admin, identity.clientId, true, "remote.mrpack", null, 2); assert.equal(remote.status, "READY"); assert.equal(remote.recipeStatistics?.localFiles, 0);
   const second = await work(db => c.submitUpload(db, admin, remote.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { decision: "approve", note: "remote only", contentRevision: 1 }));
-  await runPackageWorker(client, noRuntime);
+  await runPackageWorker(workerClient, noRuntime);
   const b2 = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(b2.status, "READY", b2.error ?? "remote-only package failed");
   const full = packageArtifactsSchema.parse(b2.artifacts); assert.equal(full.update, null);
   const path = join(temp, "remote-only-v2.muapack"); await writeFile(path, await readObject(full.full.key));
@@ -1503,7 +1518,7 @@ test("v2 leases, failed retries, revoked owners and local CAS recycling preserve
   const upload = await prepare(source, admin, identity.clientId, false, "recipe.mrpack", null, 2);
   const lease = await claimUpload(client); assert.equal(lease?.id, upload.id);
   await client.clientUpload.update({ where: { id: upload.id }, data: { leaseUntil: new Date(0) } });
-  await runUploadWorker(client); const ready = c.uploadView(await c.findUpload(client, admin, upload.id));
+  await runUploadWorker(workerClient); const ready = c.uploadView(await c.findUpload(client, admin, upload.id));
   assert.equal(ready.status, "READY", ready.error ?? "lease recovery failed");
   assert.equal((await c.findUpload(client, admin, upload.id)).attempts, 2);
   assert.equal(await client.casReference.count({ where: { clientId: identity.clientId } }), 1);
@@ -1520,7 +1535,7 @@ test("v2 leases, failed retries, revoked owners and local CAS recycling preserve
   assert.equal(invalid.status, "FAILED"); assert.match(invalid.error!, /v2/);
   assert.equal((await work(db => c.retryUpload(db, admin, invalid.id))).status, "QUEUED");
   await client.account.update({ where: { id: admin.id }, data: { status: "DISABLED" } });
-  try { await runUploadWorker(client); assert.equal((await c.findUpload(client, root, invalid.id)).status, "FAILED"); }
+  try { await runUploadWorker(workerClient); assert.equal((await c.findUpload(client, root, invalid.id)).status, "FAILED"); }
   finally { await client.account.update({ where: { id: admin.id }, data: { status: "ACTIVE" } }); }
   await work(db => c.cancelUpload(db, admin, invalid.id));
 });
@@ -1555,9 +1570,9 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   assert(declared.length > 0); assert(declared.every(file => file.status === "DECLARED" && file.downloadedBytes === 0));
   const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, platforms: ["windows-amd64"] }));
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 must not resolve NeoForge or Java binaries"); };
-  await runPackageWorker(client, neverResolve);
+  await runPackageWorker(workerClient, neverResolve);
   await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Real PCL import", contentRevision: 1 }));
-  await runPackageWorker(client, neverResolve);
+  await runPackageWorker(workerClient, neverResolve);
   const build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "READY", build.error ?? "PCL v2 build failed");
   const full = await managementFullPackage(client, admin, identity.clientId, "drafts", draftId, "universal");
   const bytes = Buffer.from(await (await fetch(full.url)).arrayBuffer()); assert.equal(digest(bytes), full.sha256);
@@ -1576,7 +1591,7 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   assert.equal(nextUpload.recipeStatistics?.newLocalDataSize, 0);
   const next = await work(db => c.submitUpload(db, admin, nextUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, next.draftId, { decision: "approve", note: "Real PCL delta", contentRevision: 1 }));
-  await runPackageWorker(client, neverResolve);
+  await runPackageWorker(workerClient, neverResolve);
   const nextBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: next.draftId, required: true } }); assert.equal(nextBuild.status, "READY", nextBuild.error ?? "real PCL delta failed");
   const nextArtifacts = packageArtifactsSchema.parse(nextBuild.artifacts); assert(nextArtifacts.update); assert.equal(nextArtifacts.update.baseReleaseId, published.releaseId);
   const updateBytes = await readObject(nextArtifacts.update.key); assert.equal(digest(updateBytes), nextArtifacts.update.sha256);

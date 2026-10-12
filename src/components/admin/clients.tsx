@@ -154,7 +154,7 @@ export function ClientDetailPage() { return <ClientsPage serverId={useParams<{ i
 function VersionDetails({ version }: { version: Draft | Release }) {
   const { t } = useI18n();
   const data = metadata(version)!;
-  const upload = "upload" in version ? version.upload : version.sourceDraft.upload;
+  const upload = "upload" in version ? version.upload : version.sourceDraft?.upload;
   return <div className="space-y-5"><dl className="grid grid-cols-2 gap-3 text-sm"><div>{t("客户端版本：")}{data.versionLabel}</div><div>{t("客户端名称：")}{data.name}</div><div>MC：{data.minecraftVersion || t("未填写")}</div><div>Java：{data.javaVersion}</div></dl>
     <div><h3 className="mb-2 font-semibold">{data.summary || t("提交说明")}</h3><MarkdownText value={data.description} /></div>
     <div className="space-y-3"><h3 className="text-sm font-medium">{t("模组列表 ·") + " "}{data.mods.length}</h3><ModTable mods={data.mods} details={data.modDetails} /></div>

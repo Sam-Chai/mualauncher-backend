@@ -9,7 +9,7 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
-import { prisma } from "./prisma";
+import { workerPrisma as prisma } from "./prisma";
 import { locked, type Db } from "./auth";
 import { AppError, invariant } from "./errors";
 import { requireClient } from "./rbac";

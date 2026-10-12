@@ -51,6 +51,10 @@ export function json(value: unknown, status = 200) {
 export function failure(error: unknown) {
   if (error instanceof AppError) return json({ error: error.message }, error.status);
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : undefined;
+  const meta = error && typeof error === "object" && "meta" in error ? error.meta : undefined;
+  const sqlCode = meta && typeof meta === "object" && "code" in meta ? String(meta.code) : code;
+  if (sqlCode === "42501") return json({ error: "没有此资源操作权限" }, 403);
+  if (sqlCode === "40001") return json({ error: "资源已变化，请刷新后重试" }, 409);
   if (["P2002", "23505"].includes(code ?? "")) return json({ error: "标识或用户名已存在，归档记录的标识也不能重复使用" }, 409);
   if (["P2003", "P2004", "P2010", "P2025", "23503", "23514"].includes(code ?? "")) return json({ error: "操作不符合数据库约束或资源状态，请刷新后重试" }, 409);
   console.error("MUA request failed", { name: error instanceof Error ? error.name : "UnknownError", code });

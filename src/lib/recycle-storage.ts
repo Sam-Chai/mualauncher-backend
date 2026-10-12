@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { HeadObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand, CreateMultipartUploadCommand, UploadPartCopyCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { Db, Actor } from "./auth";
-import { prisma } from "./prisma";
+import { workerPrisma as prisma } from "./prisma";
 import { invariant } from "./errors";
 import { superOnly } from "./rbac";
 import { audit } from "./management";

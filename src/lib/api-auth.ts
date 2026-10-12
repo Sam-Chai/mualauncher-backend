@@ -2,7 +2,8 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { actorFromToken, locked, tokenDigest, type Db, type Actor } from "./auth";
-import { prisma } from "./prisma";
+import { prisma, validateDatabase } from "./prisma";
+import { securityFunction, setDatabaseActor } from "./database-security";
 import { sameOrigin } from "./http";
 import { invariant } from "./errors";
 import { rolePermissions, type Permission } from "./roles";
@@ -13,14 +14,14 @@ export async function apiActor(db: Db, request: Request, cookie: string | undefi
   const header = request.headers.get("authorization");
   if (!header) return actorFromToken(db, cookie);
   invariant(/^Bearer mua_[0-9a-f]{64}$/.test(header), 401, "无效的 API Token");
-  const record = await db.apiToken.findUnique({ where: { tokenHash: tokenDigest(header.slice(7)) }, include: { account: true } });
-  invariant(record && !record.revokedAt && record.expiresAt > new Date() && record.account.status === "ACTIVE", 401, "API Token 已失效");
-  return { id: record.accountId, displayName: record.account.displayName, isSuperAdmin: record.account.isSuperAdmin,
-    apiScope: { permissions: record.permissions as Permission[], serverIds: record.serverIds } };
+  const rows = await db.$queryRaw<{ actor: Actor | null }[]>`SELECT ${securityFunction("api_actor")}(${tokenDigest(header.slice(7))}) AS actor`;
+  invariant(rows[0]?.actor, 401, "API Token 已失效");
+  return rows[0].actor;
 }
-export function authorizeApi<T>(request: Request, cookie: string | undefined, write: boolean, work: (db: Db, actor: Actor) => Promise<T>) {
+export async function authorizeApi<T>(request: Request, cookie: string | undefined, write: boolean, work: (db: Db, actor: Actor) => Promise<T>) {
+  await validateDatabase("web");
   if (write && !request.headers.has("authorization")) sameOrigin(request);
-  const run = async (db: Db) => work(db, await apiActor(db, request, cookie));
+  const run = async (db: Db) => { const actor = await apiActor(db, request, cookie); await setDatabaseActor(db, actor); return work(db, actor); };
   return write ? locked(run) : prisma.$transaction(run);
 }
 export const tokenSelect = { id: true, name: true, permissions: true, serverIds: true, expiresAt: true, revokedAt: true, createdAt: true } as const;

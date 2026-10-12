@@ -19,8 +19,11 @@ import { mottoCrop, validMottoCrop, MAX_MOTTO_UPLOAD_BYTES, SERVER_MOTTO_RATIO }
 import { prepareMottoImage, readServerMotto, saveServerMotto, storeMottoImage } from "../src/lib/server-motto";
 
 const suffix = randomBytes(8).toString("hex"), schema = `mua_motto_test_${suffix}`, bucket = `mua-motto-test-${suffix}`;
+process.env.DATABASE_SCHEMA = schema;
+const migrationUrl = new URL(process.env.DATABASE_MIGRATION_URL!); migrationUrl.searchParams.delete("options");
+process.env.DATABASE_MIGRATION_URL = migrationUrl.toString();
 process.env.S3_PACKAGES_BUCKET = bucket;
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},pg_catalog`, pipeline: true });
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: `-c role=mua_owner -c search_path=${schema},pg_catalog`, pipeline: true });
 const client = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
 let created = false, bucketCreated = false;
 let root: Actor, editor: Actor, reader: Actor, other: Actor, organizationId: string, bytes: Buffer;
@@ -52,7 +55,7 @@ before(async () => {
 });
 after(async () => {
   await client.$disconnect();
-  if (created) { assert.match(schema, /^mua_motto_test_[a-f0-9]{16}$/); const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_URL }); await cleanup.query(`DROP SCHEMA "${schema}" CASCADE`); await cleanup.end(); }
+  if (created) { assert.match(schema, /^mua_motto_test_[a-f0-9]{16}$/); const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner" }); await cleanup.query(`DROP SCHEMA "${schema}" CASCADE`); await cleanup.query(`DROP SCHEMA IF EXISTS "${schema}_authz" CASCADE`); await cleanup.end(); }
   await pool.end(); await prisma.$disconnect();
   if (bucketCreated) {
     assert.match(bucket, /^mua-motto-test-[a-f0-9]{16}$/);

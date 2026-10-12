@@ -5,9 +5,10 @@ import { invariant } from "./errors";
 import { superOnly } from "./rbac";
 import { audit } from "./management";
 import { DEFAULT_MAX_UPLOAD_SIZE_MB, MAX_UPLOAD_SIZE_MB, maxUploadSizeMbSchema } from "./upload-size-policy";
+import { uploadOptions } from "./database-security";
 
 export async function maxUploadSizeMb(db: Db) {
-  const row = await db.platformSettings.findUnique({ where: { id: "platform" }, select: { maxUploadSizeMb: true } });
+  const row = await uploadOptions(db);
   return maxUploadSizeMbSchema.parse(row?.maxUploadSizeMb ?? DEFAULT_MAX_UPLOAD_SIZE_MB);
 }
 

@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 import { locked } from "../src/lib/auth";
 import { hashPassword } from "../src/lib/password";
 import { password, username } from "../src/lib/input";
-import { prisma } from "../src/lib/prisma";
+import { getPrisma } from "../src/lib/prisma";
+const prisma = getPrisma("migration");
 
 async function main() {
   const name = username(process.env.BOOTSTRAP_USERNAME ?? "mua-admin");

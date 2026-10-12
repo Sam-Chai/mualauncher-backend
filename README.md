@@ -2,7 +2,7 @@
 
 MUA 高校联盟启动器后端，使用 Next.js 16、Prisma 7 与 PostgreSQL。后台采用 shadcn/ui dashboard-01、Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod；图表仅使用 Tremor Raw。
 
-已实现白名单登录、组织／单服 RBAC、组织和服务器管理、成员授权、归档、审计，以及 .minecraft ZIP／Modrinth mrpack／PCL 封装上传、MinIO、Worker、SHA-256 CAS、版本差异统计、审核和 Ed25519 签名发布。Modrinth 远程下载、optional 全量打包与超管来源／代理设置见 [导入说明](docs/modrinth-import.md)。Launcher 增量安装／optional 选择与 PostgreSQL RLS 尚未接入。
+已实现白名单登录、组织／单服 RBAC、PostgreSQL RLS、组织和服务器管理、成员授权、归档、审计，以及 .minecraft ZIP／Modrinth mrpack／PCL 封装上传、MinIO、Worker、SHA-256 CAS、版本差异统计、审核和 Ed25519 签名发布。Modrinth 远程下载、optional 全量打包与超管来源／代理设置见 [导入说明](docs/modrinth-import.md)。Launcher 增量安装／optional 选择尚未接入。RLS 角色、连接、部署与恢复见[数据库行级保护](docs/postgresql-rls.md)。
 
 环境下载默认优先 BMCLAPI／中科大／南大和清华 Adoptium，失败回退官方；默认集成 JRE。超管在 Settings 管理下载源、JRE／JDK 与镜像代理开关（默认关闭）；官方环境和 mrpack 使用总代理设置，MinIO 不走代理。镜像覆盖范围、缓存兼容与验收记录见[环境下载源](docs/environment-download-sources.md)。
 
@@ -20,7 +20,10 @@ Forge／NeoForge 已接入官方客户端安装处理器、运行环境缓存与
 
 ~~~powershell
 npm ci
+# 首次配置：临时提供 DATABASE_ADMIN_URL；已有数据库追加 --adopt。
+npm run db:provision -- --write-env
 npm run db:deploy
+npm run db:check
 npm run auth:bootstrap
 npm run storage:init
 $env:APP_ORIGIN = 'http://localhost:3001'
@@ -59,12 +62,13 @@ npm run start -- -p 3001 -H 127.0.0.1
 ~~~powershell
 npm run db:validate
 npm run db:check
+npm run test:rls
 npm run typecheck
 npm run lint
 npm test
 ~~~
 
-测试使用真实 PostgreSQL 的随机临时 schema 和专用随机 MinIO bucket，应用本仓库迁移，验证 RBAC、不可变版本、并发、ZIP 安全、分片、CAS、签名及发布，最后只清理测试资源，不修改 public 业务记录。测试数据库账号需要创建 schema 的权限。
+测试使用真实 PostgreSQL 的随机临时 schema 和专用随机 MinIO bucket，应用本仓库迁移，验证 RBAC、RLS、不可变版本、并发、ZIP 安全、分片、CAS、签名及发布，最后只清理测试资源，不修改 public 业务记录。DATABASE_MIGRATION_URL 用于创建和清理测试 schema；四种受限运行连接用于 RLS 与 HTTP 验证。
 
 完整 HTTP／自动化脚本测试需要先完成独立生产构建：
 

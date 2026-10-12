@@ -20,7 +20,10 @@ import { roleLabel } from "../src/components/admin/role-label";
 import { visibleNavigation, visiblePaths } from "../src/components/admin/navigation-access";
 
 const schema = `mua_test_${randomBytes(8).toString("hex")}`;
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},pg_catalog`, pipeline: true });
+process.env.DATABASE_SCHEMA = schema;
+const migrationUrl = new URL(process.env.DATABASE_MIGRATION_URL!); migrationUrl.searchParams.delete("options");
+process.env.DATABASE_MIGRATION_URL = migrationUrl.toString();
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: `-c role=mua_owner -c search_path=${schema},pg_catalog`, pipeline: true });
 const client = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
 let created = false;
 let passwordHash: string;
@@ -51,7 +54,7 @@ test("pipelined Prisma transactions preserve dependency order, abort and rollbac
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings"]) {
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions"]) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -62,8 +65,8 @@ after(async () => {
   if (created) {
     // Only the random schema created by this test run is removed.
     assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
-    const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    await cleanup.query(`DROP SCHEMA "${schema}" CASCADE`); await cleanup.end();
+    const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner" });
+    await cleanup.query(`DROP SCHEMA "${schema}" CASCADE`); await cleanup.query(`DROP SCHEMA IF EXISTS "${schema}_authz" CASCADE`); await cleanup.end();
   }
   await pool.end(); await prisma.$disconnect();
 });
@@ -458,7 +461,7 @@ test("independent clients enforce organization names, client scope and confirmed
 
 test("the client migration preserves legacy releases, source keys, current selection and duplicate-name histories", async () => {
   const legacySchema = "mua_legacy_test_" + randomBytes(8).toString("hex");
-  const legacy = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: "-c search_path=" + legacySchema + ",pg_catalog" });
+  const legacy = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner -c search_path=" + legacySchema + ",pg_catalog" });
   const account = randomUUID(), org = randomUUID(), draft = randomUUID(), release = randomUUID(), upload = randomUUID();
   const hash = "b".repeat(64);
   try {

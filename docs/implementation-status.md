@@ -1,8 +1,10 @@
 # 实施进度
 
-更新时间：2026-10-11。当前阶段已完成 .minecraft ZIP、Modrinth mrpack 和 PCL 封装的上传／更新，及审核发布、muapack 组包与环境镜像下载。本文区分实际运行功能与后续工作；详细协议见[客户端上传文档](client-upload-api.md)、[Modrinth 导入](modrinth-import.md)、[环境下载源](environment-download-sources.md)、[Launcher 下载与刷新](launcher-download-api.md)。
+更新时间：2026-10-12。当前阶段已完成 .minecraft ZIP、Modrinth mrpack 和 PCL 封装的上传／更新，及审核发布、muapack 组包、环境镜像下载与 PostgreSQL RLS。本文区分实际运行功能与后续工作；详细协议见[客户端上传文档](client-upload-api.md)、[Modrinth 导入](modrinth-import.md)、[环境下载源](environment-download-sources.md)、[Launcher 下载与刷新](launcher-download-api.md)。
 
 ## 已实现
+
+- 2026-10-12：PostgreSQL RLS 已接入并部署本地数据库，21 张业务表强制行策略，web／auth／public／worker 独立受限账号与事务局部身份；原有应用 RBAC、完整性与签名保护保留。数据库备份位于被忽略的 `.local/mua-before-rls.dump`，四连接检查和 3001 HTTP 检查通过，前端／Worker 已在外置 PowerShell 窗口重启。实际受限角色、测试、生产部署与恢复边界见[行级保护](postgresql-rls.md)。
 
 - 2026-10-12：登录与管理界面支持简体中文／英文、白色／黑色主题；顶部可切换，Cookie／localStorage 恢复偏好，菜单、表单、表格、上传／审核／图片／设置及探测提示已适配。业务内容和协议标识保留，原认证、权限及路由不变，见[界面偏好](interface-preferences.md)。
 
@@ -47,7 +49,7 @@ muapack v2 第 1–5 步已接入：上传选择、共享识别、本地 CAS、�
 
 ClientUpload 的来源、所有者、基准与准备完成的内容不可修改；状态迁移和草稿绑定受触发器约束。业务写入、发布切换与授权撤销在事务中重新认证。Worker 处理文件期间使用租约，提交结果前重新验证任务所有者当前权限和资源状态。源码包与 CAS bucket 私有，公开下载不接受任意对象键。
 
-本机部署使用十五份迁移、初始化开发 MinIO 的源包／产物、CAS、环境三个私有 bucket 和 Ed25519 密钥。开发密钥只在不存在时生成，保存在 Git 忽略的 .local 中。数据库尚未启用 PostgreSQL RLS，仍使用本地开发连接（容器映射 127.0.0.1:15432）。生产运行账号及可信公钥分发需部署时配置。
+本机部署使用十九份迁移、初始化开发 MinIO 的源包／产物、CAS、环境三个私有 bucket 和 Ed25519 密钥。开发密钥只在不存在时生成，保存在 Git 忽略的 .local 中。数据库已启用 PostgreSQL RLS，运行连接为 web／auth／public／worker 独立受限角色（容器映射 127.0.0.1:15432）。生产秘密分离及可信公钥分发需部署时配置，见[部署说明](postgresql-rls.md)。
 
 ## 尚待实施
 
@@ -63,7 +65,8 @@ ClientUpload 的来源、所有者、基准与准备完成的内容不可修改�
 | 草稿跨服复制、撤回审核、Release 归档／恢复及撤销流程 | 当前管理上传、审核、发布和历史版本切换；这些额外流程尚未开放 |
 | 图片上传／分发、资讯、活动与 Launcher UI 编辑 | 服务器箴言图片上传／裁剪／后台预览已实现；组织头像、玩家公开图片、资讯、活动与 Launcher UI 编辑尚未接入 |
 | CDN 流量、在线检测与容量计费指标 | MC Java 在线／延迟状态灯已接入；历史在线监控、CDN 流量与容量计费尚未接入，不显示模拟数字 |
-| PostgreSQL RLS、MUA OIDC／YGG | 后续阶段 |
+| PostgreSQL RLS | 已接入 21 张业务表、分离角色／连接及事务身份；应用 RBAC 保留，见[部署与验证](postgresql-rls.md) |
+| MUA OIDC／YGG | 后续阶段 |
 
 ## 验证与本机运行
 

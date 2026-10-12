@@ -5,9 +5,10 @@ import { superOnly } from "./rbac";
 import { invariant } from "./errors";
 import { audit } from "./management";
 import { DEFAULT_PACKAGE_FORMATS, enabledPackageFormatsSchema } from "./package-format-policy";
+import { uploadOptions } from "./database-security";
 
 export async function enabledPackageFormats(db: Db) {
-  const row = await db.platformSettings.findUnique({ where: { id: "platform" }, select: { enabledPackageFormats: true } });
+  const row = await uploadOptions(db);
   return enabledPackageFormatsSchema.parse(row?.enabledPackageFormats ?? DEFAULT_PACKAGE_FORMATS);
 }
 export async function packageFormatSettings(db: Db, actor: Actor) {

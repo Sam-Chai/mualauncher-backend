@@ -6,16 +6,17 @@ import * as input from "./input";
 import { hashPassword } from "./password";
 import { enabledPackageFormats } from "./package-format-settings";
 import { maxUploadSizeMb } from "./upload-size-settings";
+import { accountDirectory, credentialCreate, credentialUpdate, revokeAccountSessions, serverSummaries, releaseDetails, securityFunction } from "./database-security";
 import { serverMottoUrl } from "./server-motto-contract";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
-const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true, credential: { select: { username: true } } } as const;
-const accountDto = (account: { id: string; displayName: string; status: string; isSuperAdmin: boolean; credential: { username: string } | null }) =>
-  ({ id: account.id, displayName: account.displayName, status: account.status, isSuperAdmin: account.isSuperAdmin, username: account.credential?.username ?? "" });
+const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true } as const;
+const accountDto = (account: { id: string; displayName: string; status: string; isSuperAdmin: boolean }, username = "") =>
+  ({ id: account.id, displayName: account.displayName, status: account.status, isSuperAdmin: account.isSuperAdmin, username });
 
 export async function audit(db: Db, actor: Actor, action: string, targetType: string, targetId: string,
   organizationId?: string, serverId?: string, details: Prisma.InputJsonObject = {}) {
-  await db.auditEvent.create({ data: { actorId: actor.id, action, targetType, targetId, organizationId, serverId, details } });
+  await db.auditEvent.createMany({ data: [{ actorId: actor.id, action, targetType, targetId, organizationId, serverId, details }] });
 }
 
 export async function getState(db: Db, actor: Actor) {
@@ -24,10 +25,13 @@ export async function getState(db: Db, actor: Actor) {
   const organizations = await db.organization.findMany({
     where: actor.isSuperAdmin ? {} : { members: { some: { accountId: actor.id, status: "ACTIVE" } } },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { displayName: "asc" }],
-    include: { servers: { orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }], include: { publication: { include: { client: true, release: { select: { archivedAt: true } } } } } },
+    include: { servers: { orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }], include: { publication: { include: { client: true } } } },
       clients: { where: { deletedAt: null }, select: { archivedAt: true, scopeServerId: true, binding: { select: { serverId: true } } } },
       members: { where: { accountId: actor.id }, include: { serverGrants: true } } },
   });
+  const directory = await accountDirectory(db);
+  const names = new Map(directory.map(account => [account.id, account.username ?? ""]));
+  const releaseStates = await serverSummaries(db, organizations.flatMap(org => org.servers.map(server => server.serverId)));
   const organizationDtos = [];
   for (const organization of organizations) {
     const member = organization.members[0];
@@ -40,12 +44,12 @@ export async function getState(db: Db, actor: Actor) {
         gameAddress: server.gameAddress, iconObjectKey: server.iconObjectKey, sortOrder: server.sortOrder, themeColor: server.themeColor,
         mottoImageUrl: serverMottoUrl(server.iconObjectKey, organization.id, server.serverId),
         isListed: server.isListed, archivedAt: server.archivedAt, clientArchivedAt: server.publication?.client?.archivedAt ?? null,
-        currentReleaseId: server.publication?.releaseId ?? null, currentReleaseActive: !!server.publication?.release && !server.publication.release.archivedAt,
+        currentReleaseId: server.publication?.releaseId ?? null, currentReleaseActive: releaseStates.get(server.serverId) ?? false,
         publicationRevision: server.publication?.revision ?? 0, boundClientId: server.publication?.clientId ?? null, boundClientName: server.publication?.client?.name ?? null, permissions: [...new Set(rights)] }];
     });
     const members = permissions.includes("ORG_MEMBERS_READ") ? (await db.organizationMember.findMany({
       where: { organizationId: organization.id }, orderBy: { createdAt: "asc" }, include: { account: { select: accountSelect }, serverGrants: true },
-    })).map(member => ({ account: accountDto(member.account), status: member.status, roles: member.roles,
+    })).map(member => ({ account: accountDto(member.account, names.get(member.account.id)), status: member.status, roles: member.roles,
       grants: member.serverGrants.map(grant => ({ serverId: grant.serverId, roles: grant.roles })),
       protected: member.account.isSuperAdmin || member.roles.some(role => reservedRoles.includes(role)) || member.serverGrants.some(grant => grant.roles.some(role => reservedRoles.includes(role))) })) : [];
     const clientCount = organization.clients.filter(client => {
@@ -57,7 +61,7 @@ export async function getState(db: Db, actor: Actor) {
     organizationDtos.push({ id: organization.id, displayName: organization.displayName, description: organization.description, clientCount,
       avatarObjectKey: organization.avatarObjectKey, archivedAt: organization.archivedAt, permissions: [...new Set(permissions)], servers, members });
   }
-  const accounts = actor.isSuperAdmin ? (await db.account.findMany({ select: accountSelect, orderBy: { createdAt: "asc" } })).map(accountDto) : [];
+  const accounts = actor.isSuperAdmin ? directory.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(account => accountDto(account, account.username ?? "")) : [];
   const events = actor.isSuperAdmin ? await db.auditEvent.findMany({ take: 50, orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { id: true, action: true, targetType: true, targetId: true, organizationId: true, serverId: true, details: true, createdAt: true, actor: { select: { displayName: true } } } }) : [];
   // Aggregate the entire window, rather than treating the last 50 events as complete statistics.
@@ -168,8 +172,7 @@ export async function archiveResource(db: Db, actor: Actor, kind: "organizations
     organizationId = client.organizationId; serverId = client.binding?.serverId;
     await db.client.update({ where: { id }, data: { archivedAt, ...(archived ? { requestedServerId: null, requestedRevision: null, expectedClientId: null } : {}) } });
     if (archived && serverId) {
-      await db.serverPublication.update({ where: { serverId }, data: { clientId: null, releaseId: null, revision: { increment: 1 }, changedById: actor.id } });
-      await db.server.update({ where: { serverId }, data: { isListed: false } });
+      await db.$executeRaw`SELECT ${securityFunction("archive_binding")}(${id},${serverId},${actor.id}::uuid)`;
     }
   } else {
     const { server } = await requireServer(db, actor, id, "SERVER_READ", false);
@@ -228,19 +231,17 @@ export async function setGrant(db: Db, actor: Actor, organizationId: string, acc
 export async function searchAccounts(db: Db, actor: Actor, organizationId: string, query: string) {
   await requireOrganization(db, actor, organizationId, "ORG_MEMBERS_READ");
   invariant(query.trim().length >= 3 && query.length <= 64, 400, "请至少输入 3 个字符搜索白名单账号");
-  const accounts = await db.account.findMany({ where: { status: "ACTIVE", OR: [
-    { displayName: { contains: query.trim(), mode: "insensitive" } }, { credential: { username: { contains: query.trim().toLowerCase() } } },
-  ] }, take: 10, select: accountSelect, orderBy: { displayName: "asc" } });
-  return accounts.map(accountDto);
+  const search = query.trim().toLowerCase();
+  return (await accountDirectory(db)).filter(account => account.status === "ACTIVE" && (account.displayName.toLowerCase().includes(search) || account.username?.toLowerCase().includes(search)))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName)).slice(0, 10).map(account => accountDto(account, account.username ?? ""));
 }
 
 export async function createAccount(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
   const data = input.fields(raw, ["displayName", "username", "password", "isSuperAdmin"]);
   const passwordHash = await hashPassword(input.password(data.password));
-  const account = await db.account.create({ data: { displayName: input.text(data, "displayName"),
-    isSuperAdmin: data.isSuperAdmin === undefined ? false : input.bool(data, "isSuperAdmin"),
-    credential: { create: { username: input.username(input.text(data, "username", 64)), passwordHash } } } });
+  const account = await db.account.create({ data: { displayName: input.text(data, "displayName"), isSuperAdmin: data.isSuperAdmin === undefined ? false : input.bool(data, "isSuperAdmin") } });
+  await credentialCreate(db, account.id, input.username(input.text(data, "username", 64)), passwordHash);
   await audit(db, actor, "ACCOUNT_CREATE", "Account", account.id, undefined, undefined, { isSuperAdmin: account.isSuperAdmin });
   return { id: account.id };
 }
@@ -257,8 +258,8 @@ export async function updateAccount(db: Db, actor: Actor, id: string, raw: unkno
     invariant(await db.account.count({ where: { isSuperAdmin: true, status: "ACTIVE", id: { not: id } } }) > 0, 409, "至少保留一个启用的 MUA 超管");
   }
   await db.account.update({ where: { id }, data: { status, isSuperAdmin, ...(data.displayName !== undefined ? { displayName: input.text(data, "displayName") } : {}) } });
-  if (data.password !== undefined) await db.localCredential.update({ where: { accountId: id }, data: { passwordHash: await hashPassword(input.password(data.password)) } });
-  if (status === "DISABLED" || existing.isSuperAdmin !== isSuperAdmin || data.password !== undefined) await db.session.deleteMany({ where: { accountId: id } });
+  if (data.password !== undefined) await credentialUpdate(db, id, await hashPassword(input.password(data.password)));
+  if (status === "DISABLED" || existing.isSuperAdmin !== isSuperAdmin || data.password !== undefined) await revokeAccountSessions(db, id);
   await audit(db, actor, "ACCOUNT_EDIT", "Account", id, undefined, undefined, { fields: Object.keys(data), status, isSuperAdmin });
   return { ok: true };
 }
@@ -271,8 +272,8 @@ export async function getClients(db: Db, actor: Actor, id: string) {
   const drafts = scope.permissions.includes("DRAFT_READ") ? await db.clientDraft.findMany({ where: { clientId }, orderBy: { createdAt: "desc" },
     select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true, reviewNote: true, status: true, contentRevision: true, archivedAt: true, createdAt: true, upload: { select: { id: true, statistics: true } } } }) : [];
   const releases = scope.permissions.includes("RELEASE_READ") ? await db.clientRelease.findMany({ where: { clientId }, orderBy: { publishedAt: "desc" },
-    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true, sourceDraft: { select: { upload: { select: { statistics: true } } } } } }) : [];
-  return { drafts, releases };
+    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true } }) : [];
+  return { drafts, releases: await Promise.all(releases.map(async release => ({ ...release, sourceDraft: await releaseDetails(db, release.id) }))) };
 }
 
 // Metadata drafts are useful before the upload Worker. Submission is not exposed until a verified artifact exists.

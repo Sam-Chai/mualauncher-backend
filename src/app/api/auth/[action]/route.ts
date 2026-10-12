@@ -5,7 +5,8 @@ import { appOrigin, failure, json, readJson, sameOrigin } from "@/lib/http";
 import * as input from "@/lib/input";
 import { audit } from "@/lib/management";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { prisma } from "@/lib/prisma";
+import { authPrisma, validateDatabase } from "@/lib/prisma";
+import { credentialUpdate, revokeAccountSessions } from "@/lib/database-security";
 
 type Context = { params: Promise<{ action: string }> };
 const cookieOptions = () => ({ httpOnly: true, secure: appOrigin().startsWith("https://"), sameSite: "strict" as const, path: "/" });
@@ -28,7 +29,7 @@ export async function POST(request: Request, context: Context) {
     }
     if (action === "logout") {
       input.fields(raw, []);
-      if (token) await prisma.session.deleteMany({ where: { tokenHash: tokenDigest(token) } });
+      if (token) { await validateDatabase("auth"); await authPrisma.session.deleteMany({ where: { tokenHash: tokenDigest(token) } }); }
       const response = json({ ok: true });
       response.cookies.set(COOKIE_NAME, "", { ...cookieOptions(), maxAge: 0 });
       return response;
@@ -38,10 +39,11 @@ export async function POST(request: Request, context: Context) {
       invariant(typeof data.currentPassword === "string" && data.currentPassword.length <= 128, 400, "请输入当前密码");
       const nextPassword = input.password(data.newPassword);
       await authorized(token, true, async (db, actor) => {
-        const credential = await db.localCredential.findUnique({ where: { accountId: actor.id } });
+        await validateDatabase("auth");
+        const credential = await authPrisma.localCredential.findUnique({ where: { accountId: actor.id } });
         invariant(credential && await verifyPassword(data.currentPassword as string, credential.passwordHash), 403, "当前密码错误");
-        await db.localCredential.update({ where: { accountId: actor.id }, data: { passwordHash: await hashPassword(nextPassword) } });
-        await db.session.deleteMany({ where: { accountId: actor.id } });
+        await credentialUpdate(db, actor.id, await hashPassword(nextPassword), credential.passwordHash);
+        await revokeAccountSessions(db, actor.id);
         await audit(db, actor, "AUTH_PASSWORD_CHANGE", "Account", actor.id);
       });
       const response = json({ ok: true });

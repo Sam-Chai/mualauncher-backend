@@ -24,6 +24,7 @@ import { putImmutableBytes } from "./package-storage";
 import { packagesBucket } from "./storage";
 import { MUA_PLATFORMS } from "./muapack-contract";
 import { enabledPackageFormats } from "./package-format-settings";
+import { clientSummary, securityFunction, uploadOptions, releaseDetails } from "./database-security";
 import { maxUploadSizeMb } from "./upload-size-settings";
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "./upload-size-policy";
 
@@ -170,7 +171,7 @@ export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknow
   const draftId = randomUUID(); let manifest: ReleaseManifest | RecipeContent;
   if (upload.packageFormatVersion === 2) {
     const inventory = await readRecipeInventory(upload.filesObjectKey, upload.filesSha256);
-    const settings = await db.platformSettings.findUnique({ where: { id: "platform" }, select: { javaImageType: true } });
+    const settings = await uploadOptions(db);
     manifest = recipeContentSchema.parse({ format: "mua-recipe-content", formatVersion: 2,
       release: { organizationId: scope.client.organizationId, clientId: upload.clientId, releaseId: draftId, version: metadata.versionLabel,
         name: metadata.name, summary: metadata.summary, description: metadata.description, sourceSha256: upload.sourceSha256, contentRevision: 1 },
@@ -285,18 +286,19 @@ export async function clientList(db: Db, actor: Actor) {
     const drafts = scope.permissions.includes("DRAFT_READ") ? await db.clientDraft.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "desc" },
       select: { id: true, packageFormatVersion: true, supportedPlatforms: true, versionLabel: true, versionSequence: true, replacesDraftId: true, archiveReason: true, supersededByDraftId: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true, reviewNote: true, status: true, contentRevision: true, packageRevision: true, archivedAt: true, createdAt: true, upload: { select: { id: true, statistics: true, comparisonStatistics: true } }, packageBuilds: { where: { required: true }, orderBy: { platform: "asc" }, select: { platform: true, status: true, phase: true, progress: true, error: true, artifacts: true } } } }) : [];
     const releases = scope.permissions.includes("RELEASE_READ") ? await db.clientRelease.findMany({ where: { clientId: client.id }, orderBy: { publishedAt: "desc" },
-      select: { id: true, packageFormatVersion: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true, sourceDraft: { select: { supportedPlatforms: true, upload: { select: { statistics: true, comparisonStatistics: true } }, packageBuilds: { where: { required: true }, orderBy: { platform: "asc" }, select: { platform: true, status: true, artifacts: true } } } } } }) : [];
+      select: { id: true, packageFormatVersion: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true } }) : [];
+    const releaseRows = await Promise.all(releases.map(async release => ({ ...release, sourceDraft: await releaseDetails(db, release.id) })));
     const uploads = scope.permissions.includes("DRAFT_READ") ? await db.clientUpload.findMany({ where: { clientId: client.id, status: { notIn: ["SUBMITTED", "CANCELLED"] } }, orderBy: { createdAt: "desc" }, take: 20 }) : [];
-    const processingPackages = await db.packageBuild.count({ where: { draft: { clientId: client.id }, status: "PROCESSING" } });
-    const firstRelease = await db.clientRelease.findFirst({ where: { clientId: client.id }, orderBy: [{ publishedAt: "asc" }, { id: "asc" }], select: { packageFormatVersion: true } });
+    const summary = await clientSummary(db, client.id);
+    const processingPackages = summary.processingPackages;
     rows.push({ clientId: client.id, name: client.name, organizationId: client.organizationId, organizationName: scope.client.organization.displayName,
       serverId: scope.client.binding?.serverId ?? null, serverName: scope.client.binding?.server.displayName ?? "未绑定",
       requestedServerId: client.requestedServerId, scopeServerId: client.scopeServerId, archived: !!client.archivedAt, blocked: !!scope.client.organization.archivedAt,
       lifecycleStatus: client.archivedAt ? "ARCHIVED" as const : client.currentReleaseId ? "PUBLISHED" as const : "UNPUBLISHED" as const,
       permissions: [...new Set(scope.permissions)], publicationRevision: client.revision, currentReleaseId: client.currentReleaseId,
-      initialPackageFormatVersion: firstRelease?.packageFormatVersion ?? null,
+      initialPackageFormatVersion: summary.initialPackageFormatVersion,
       bindingRevision: scope.client.binding?.revision ?? null, drafts: orderClientVersions(drafts).map(draft => ({ ...draft, packageBuilds: draft.packageBuilds.map(build => ({ ...build, artifacts: packageArtifactsSchema.safeParse(build.artifacts).success ? packageArtifactsSchema.parse(build.artifacts) : null })) })),
-      releases: releases.map(release => ({ ...release, packageBuilds: (release.sourceDraft?.packageBuilds ?? []).map(build => ({ ...build, artifacts: packageArtifactsSchema.safeParse(build.artifacts).success ? packageArtifactsSchema.parse(build.artifacts) : null })) })),
+      releases: releaseRows.map(release => ({ ...release, packageBuilds: (release.sourceDraft?.packageBuilds ?? []).map(build => ({ ...build, artifacts: packageArtifactsSchema.safeParse(build.artifacts).success ? packageArtifactsSchema.parse(build.artifacts) : null })) })),
       canDelete: scope.permissions.includes("CLIENT_DELETE") && !!client.archivedAt && !scope.client.binding && !client.requestedServerId && client._count.uploads === 0 && processingPackages === 0,
       uploads: uploads.map(upload => ({ ...uploadView(upload), canEdit: actor.isSuperAdmin || upload.createdById === actor.id })) });
   }
@@ -316,7 +318,7 @@ export async function deleteClient(db: Db, actor: Actor, clientId: string) {
   invariant(await db.clientUpload.count({ where: { clientId, status: "PROCESSING" } }) === 0, 409, "Worker 正在处理此客户端，请稍后再试");
   invariant(await db.packageBuild.count({ where: { draft: { clientId }, status: "PROCESSING" } }) === 0, 409, "Worker 正在组包，请稍后再试");
   await db.clientUpload.updateMany({ where: { clientId, status: { in: ["UPLOADING", "WAITING_PROCESSOR", "QUEUED", "READY", "FAILED"] } }, data: { status: "CANCELLED" } });
-  await db.client.update({ where: { id: clientId }, data: { deletedAt: new Date() } });
+  await db.$executeRaw`SELECT ${securityFunction("delete_client")}(${clientId})`;
   await audit(db, actor, "CLIENT_DELETE", "Client", clientId, scope.client.organizationId, undefined, { name: scope.client.name });
   return { ok: true };
 }

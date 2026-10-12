@@ -1,7 +1,8 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { prisma } from "./prisma";
+import { prisma, authPrisma, validateDatabase } from "./prisma";
+import { securityFunction, setDatabaseActor } from "./database-security";
 import type { Prisma } from "@/generated/prisma/client";
 import { AppError, invariant } from "./errors";
 import { dummyHash, verifyPassword } from "./password";
@@ -11,19 +12,17 @@ export const COOKIE_NAME = "mua_session";
 export const SESSION_SECONDS = 60 * 60 * 12;
 export const tokenDigest = (token: string) => createHash("sha256").update(token).digest("hex");
 export type Db = Prisma.TransactionClient;
-export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string; apiScope?: { permissions: Permission[]; serverIds: string[] } };
+export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string; apiScope?: { tokenId?: string; permissions: Permission[]; serverIds: string[] } };
 
 export async function actorFromToken(db: Db, token: string | undefined): Promise<Actor> {
   invariant(token && /^[0-9a-f]{64}$/.test(token), 401, "请先登录");
-  const session = await db.session.findUnique({ where: { tokenHash: tokenDigest(token) },
-    include: { account: { include: { credential: { select: { username: true } } } } } });
-  invariant(session && session.expiresAt > new Date() && session.account.status === "ACTIVE", 401, "会话已失效，请重新登录");
-  return { id: session.account.id, displayName: session.account.displayName,
-    isSuperAdmin: session.account.isSuperAdmin, username: session.account.credential?.username ?? "" };
+  const rows = await db.$queryRaw<{ actor: Actor | null }[]>`SELECT ${securityFunction("session_actor")}(${tokenDigest(token)}) AS actor`;
+  invariant(rows[0]?.actor, 401, "会话已失效，请重新登录");
+  return rows[0].actor;
 }
 export async function currentActor() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
-  try { return await actorFromToken(prisma, token); }
+  try { await validateDatabase("web"); return await actorFromToken(prisma, token); }
   catch (error) { if (error instanceof AppError && error.status === 401) return null; throw error; }
 }
 
@@ -36,11 +35,13 @@ export async function locked<T>(work: (db: Db) => Promise<T>, client = prisma): 
   }, { maxWait: 10000, timeout: 15000 });
 }
 export async function authorized<T>(token: string | undefined, write: boolean, work: (db: Db, actor: Actor) => Promise<T>) {
-  const run = async (db: Db) => work(db, await actorFromToken(db, token));
+  await validateDatabase("web");
+  const run = async (db: Db) => { const actor = await actorFromToken(db, token); await setDatabaseActor(db, actor); return work(db, actor); };
   return write ? locked(run) : prisma.$transaction(run);
 }
 
-export async function login(name: string, password: string, oldToken?: string, client = prisma) {
+export async function login(name: string, password: string, oldToken?: string, client = authPrisma) {
+  if (client === authPrisma) await validateDatabase("auth");
   const now = new Date();
   await locked(async db => {
     for (const [key, limit, seconds] of [["global", 60, 300], [`user:${name}`, 10, 900]] as const) {
@@ -63,7 +64,7 @@ export async function login(name: string, password: string, oldToken?: string, c
     if (oldToken) await db.session.deleteMany({ where: { tokenHash: tokenDigest(oldToken) } });
     await db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
     await db.session.create({ data: { tokenHash: tokenDigest(token), accountId: credential.accountId, expiresAt } });
-    await db.auditEvent.create({ data: { actorId: credential.accountId, action: "AUTH_LOGIN", targetType: "Account", targetId: credential.accountId, details: {} } });
+    await db.auditEvent.createMany({ data: [{ actorId: credential.accountId, action: "AUTH_LOGIN", targetType: "Account", targetId: credential.accountId, details: {} }] });
   }, client);
   return { token, expiresAt };
 }
