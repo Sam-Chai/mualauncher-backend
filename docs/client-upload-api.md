@@ -1,5 +1,7 @@
 # 客户端上传、更新与发布
 
+上传大小默认 1024 MB（1 GB），仅 MUA 超管可在 Settings 调整。网页和 `POST /api/v1/clients/uploads`（含 Actions）共同限制新建上传，超出配置返回 413；已创建任务继续有效。单位与权限详见[上传大小设置](upload-size-settings.md)。
+
 本阶段支持完整 .minecraft ZIP、标准 Modrinth `.mrpack` 和包含唯一 mrpack 的 PCL 导出封装，包含 ZIP64、常规压缩 ZIP 与 UTF-8 路径。CurseForge、MultiMC 尚未接入。Modrinth 远程下载、optional 和超管设置见 [导入说明](modrinth-import.md)。
 
 2026-10-10 已接入上传前 v1／v2 选择、专用导入与完整组包。两种格式共用审核与发布；v1 下载并集成环境，v2 保存本地 overrides 和远程／环境声明，由 Launcher 下载远程字节。v2 完整／自动增量包已经接入，端侧安装留待后续。协议见 [muapack v2](muapack-v2.md)。

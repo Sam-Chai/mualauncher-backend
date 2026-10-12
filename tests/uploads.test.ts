@@ -41,6 +41,8 @@ import { readMuaPlatformManifest } from "../src/lib/muapack-protocol";
 import { validateRecipePackArchive } from "../src/lib/muapack-v2-archive";
 import { readRecipeManifest, createRecipePackMetadata } from "../src/lib/muapack-v2-protocol";
 import { packageFormatSettings, updatePackageFormatSettings } from "../src/lib/package-format-settings";
+import { maxUploadSizeMb, uploadSizeSettings, updateUploadSizeSettings } from "../src/lib/upload-size-settings";
+import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "../src/lib/upload-size-policy";
 
 const suffix = randomBytes(8).toString("hex"); const schema = "mua_upload_test_" + suffix;
 process.env.S3_PACKAGES_BUCKET = "mua-upload-test-" + suffix + "-packages"; process.env.S3_CAS_BUCKET = "mua-upload-test-" + suffix + "-cas";
@@ -110,7 +112,7 @@ async function approved(draftId: string) {
 }
 before(async () => {
   await pool.query('CREATE SCHEMA "' + schema + '"'); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
   temp = await mkdtemp(join(tmpdir(), "mua-upload-test-")); process.env.SIGNING_PRIVATE_KEY_PATH = join(temp, "key.pem");
   await writeFile(process.env.SIGNING_PRIVATE_KEY_PATH, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }));
   await initializeStorage();
@@ -140,6 +142,71 @@ after(async () => {
   await client.$disconnect(); await pool.end(); await prisma.$disconnect();
   if (created) { assert.match(schema, /^mua_upload_test_[0-9a-f]{16}$/); const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_URL }); await cleanup.query('DROP SCHEMA "' + schema + '" CASCADE'); await cleanup.end(); }
   if (temp) { assert(resolve(temp).startsWith(resolve(tmpdir()) + (process.platform === "win32" ? "\\" : "/"))); await rm(temp, { recursive: true, force: true }); }
+});
+
+test("upload size settings default to 1024 MB, restrict writes to panel superadmin and audit validated changes", async () => {
+  assert.equal(await maxUploadSizeMb(client), 1024);
+  assert.deepEqual(await uploadSizeSettings(client, root), { maxUploadSizeMb: 1024 });
+  for (const actor of [admin, reviewer, reader, { ...root, apiScope: { permissions: ["DRAFT_CREATE" as const], serverIds: ["NPA"] } }]) {
+    await assert.rejects(work(db => updateUploadSizeSettings(db, actor, { maxUploadSizeMb: 2048 })), denied(403));
+    await assert.rejects(uploadSizeSettings(client, actor), denied(403));
+  }
+  const count = await client.auditEvent.count({ where: { action: "UPLOAD_SIZE_SETTINGS_UPDATE" } });
+  for (const raw of [{}, { maxUploadSizeMb: 0 }, { maxUploadSizeMb: -1 }, { maxUploadSizeMb: 1.5 }, { maxUploadSizeMb: "1024" }, { maxUploadSizeMb: MAX_UPLOAD_SIZE_MB + 1 }, { maxUploadSizeMb: 1, extra: true }]) {
+    await assert.rejects(work(db => updateUploadSizeSettings(db, root, raw)), denied(400));
+  }
+  assert.equal(await client.auditEvent.count({ where: { action: "UPLOAD_SIZE_SETTINGS_UPDATE" } }), count);
+  await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 2048 }));
+  assert.equal((await m.getState(client, admin)).maxUploadSizeMb, 2048);
+  const event = await client.auditEvent.findFirstOrThrow({ where: { action: "UPLOAD_SIZE_SETTINGS_UPDATE" }, orderBy: { createdAt: "desc" } });
+  assert.equal(event.actorId, root.id); assert.deepEqual(event.details, { previousMaxUploadSizeMb: 1024, maxUploadSizeMb: 2048 });
+  for (const value of [0, MAX_UPLOAD_SIZE_MB + 1]) await assert.rejects(client.platformSettings.update({ where: { id: "platform" }, data: { maxUploadSizeMb: value } }));
+  await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1024 }));
+});
+
+test("upload size limit covers both formats and API actors, accepts exact limits and rejects before multipart creation", async () => {
+  const org = await work(db => m.createOrganization(db, root, { displayName: "Upload size fixtures" }));
+  await work(db => m.createServer(db, root, { organizationId: org.id, serverId: "SIZ", displayName: "Size boundaries" }));
+  const identity = await work(db => c.createClient(db, root, { organizationId: org.id, name: "Upload size boundaries", serverId: "SIZ", publicationRevision: 0, expectedClientId: null }));
+  const input = { clientId: identity.clientId, fileName: "client.zip", baseReleaseId: null, basePublicationRevision: 0 };
+  const tokenActor = { ...root, apiScope: { permissions: ["SERVER_READ" as const, "DRAFT_CREATE" as const, "DRAFT_READ" as const], serverIds: ["SIZ"] } };
+  try {
+    for (const cap of [1024, 2048, MAX_UPLOAD_SIZE_MB]) {
+      await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: cap }));
+      for (const packageFormatVersion of [1, 2] as const) {
+        const actor = packageFormatVersion === 1 ? root : tokenActor;
+        const exact = await work(db => c.createUpload(db, actor, { ...input, packageFormatVersion, size: cap * UPLOAD_MB }));
+        assert.equal(exact.size, cap * UPLOAD_MB);
+        await work(db => c.cancelUpload(db, actor, exact.id));
+        const count = await client.clientUpload.count();
+        const before = await storageClient().send(new ListMultipartUploadsCommand({ Bucket: packagesBucket() }));
+        await assert.rejects(work(db => c.createUpload(db, actor, { ...input, packageFormatVersion, size: cap * UPLOAD_MB + 1 })), denied(cap === MAX_UPLOAD_SIZE_MB ? 400 : 413));
+        assert.equal(await client.clientUpload.count(), count);
+        const after = await storageClient().send(new ListMultipartUploadsCommand({ Bucket: packagesBucket() }));
+        assert.deepEqual(after.Uploads ?? [], before.Uploads ?? []);
+      }
+    }
+  } finally { await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1024 })); }
+});
+
+test("lowering upload size keeps existing multipart completion and Worker processing available", async () => {
+  const org = await work(db => m.createOrganization(db, root, { displayName: "Existing upload fixtures" }));
+  const identity = await work(db => c.createClient(db, root, { organizationId: org.id, name: "Existing upload size" }));
+  const bytes = rawZip([{ name: ".minecraft/config/large.dat", data: randomBytes(2 * UPLOAD_MB) }]);
+  const input = { clientId: identity.clientId, fileName: "client.zip", size: bytes.length, baseReleaseId: null, basePublicationRevision: 0 };
+  const upload = await work(db => c.createUpload(db, root, input));
+  try {
+    await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1 }));
+    await assert.rejects(work(db => c.createUpload(db, root, input)), denied(413));
+    const signed = await work(db => c.uploadPartUrl(db, root, upload.id, { partNumber: 1 }));
+    const response = await fetch(signed.url, { method: "PUT", body: new Uint8Array(bytes) }); assert.equal(response.status, 200);
+    const parts = [{ partNumber: 1, etag: response.headers.get("etag")! }];
+    const completion = await work(db => c.prepareCompletion(db, root, upload.id, { parts }));
+    await c.transferCompletion(completion); await work(db => c.queueCompletedUpload(db, root, upload.id));
+    assert.equal(await runUploadWorker(client), true);
+    const ready = await c.findUpload(client, root, upload.id); assert.equal(ready.status, "READY", ready.error ?? "existing upload should finish");
+    await work(db => c.cancelUpload(db, root, upload.id));
+  } finally { await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1024 })); }
 });
 
 test("upload authorization and API Tokens keep real RBAC, account revocation and server scopes", async () => {

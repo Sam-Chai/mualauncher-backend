@@ -1,46 +1,150 @@
 "use client";
 import Link from "next/link";
 import { z } from "zod";
-import { Pencil } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { api, useAdmin, type Server } from "./provider";
 import { DataTable } from "./data-table";
-import { Heading, Status } from "./common";
+import { Heading } from "./common";
 import { ArchiveButton, EditorDialog, SchemaForm, nameSchema, textSchema, type Field } from "./form";
-function ServerEditor({ server, listing = false }: { server?: Server; listing?: boolean }) {
-  const { state, organizations, busy, run } = useAdmin();
+import { MottoPreview, ServerMottoField, uploadMotto, type MottoDraft } from "./server-motto";
+import { ServerStatusLight } from "./server-status";
+
+function directoryStatus(server: Server, organizationArchived: boolean) {
+  if (organizationArchived) return "组织已归档";
+  if (server.archivedAt) return "服务器已归档";
+  if (server.clientArchivedAt) return "客户端已归档";
+  if (!server.isListed) return "未上架";
+  return server.currentReleaseActive ? "公开分发" : "等待有效发布";
+}
+
+function releaseStatus(server: Server) {
+  if (server.clientArchivedAt) return "客户端已归档";
+  if (server.currentReleaseActive) return "已绑定当前发布";
+  if (server.currentReleaseId) return "当前发布已归档";
+  return server.boundClientId ? "已绑定，尚未发布" : "未绑定客户端";
+}
+
+// The same content serves editors and readers; only permitted controls are rendered.
+export function ServerEditorContent({ server: initialServer, onSaved }: { server?: Server; onSaved: () => void }) {
+  const { state, organizations, busy, run, refresh } = useAdmin();
+  const [createdServerId, setCreatedServerId] = useState<string | null>(null);
+  const [pendingMotto, setPendingMotto] = useState<MottoDraft | null>(null);
+  const server = initialServer ?? state.organizations.flatMap(org => org.servers).find(server => server.serverId === createdServerId);
+  useEffect(() => () => { if (pendingMotto) URL.revokeObjectURL(pendingMotto.previewUrl); }, [pendingMotto]);
   const superAdmin = state.actor.isSuperAdmin;
-  const base = { displayName: nameSchema, description: textSchema(), gameAddress: textSchema(255), iconObjectKey: textSchema(500) };
-  const listingFields = { sortOrder: z.string().refine(value => value.trim() !== "" && Number.isSafeInteger(Number(value)) && Math.abs(Number(value)) <= 2147483647, "请输入有效排序整数"), themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "请输入 #RRGGBB 或留空"), isListed: z.boolean() };
-  const schema = server ? superAdmin && listing ? z.object(base).extend(listingFields) : z.object(base)
+  const organization = state.organizations.find(org => org.id === server?.organizationId);
+  const archived = !!server?.archivedAt || !!organization?.archivedAt;
+  const canEdit = !archived && (superAdmin || !!server?.permissions.includes("SERVER_EDIT"));
+  const listing = !!server && superAdmin;
+  const base = { displayName: nameSchema, description: textSchema(), gameAddress: textSchema(255) };
+  const listingFields = {
+    sortOrder: z.string().refine(value => value.trim() !== "" && Number.isSafeInteger(Number(value)) && Math.abs(Number(value)) <= 2147483647, "请输入有效排序整数"),
+    themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "请输入 #RRGGBB 或留空"), isListed: z.boolean(),
+  };
+  const schema = server ? listing ? z.object(base).extend(listingFields) : z.object(base)
     : z.object(base).extend({ organizationId: z.string().uuid("请选择组织"), serverId: z.string().regex(/^[A-Za-z]{3,5}$/, "ID 须为已有的 3–5 位英文字母") });
   const fields: Field[] = [
     ...(!server ? [{ name: "organizationId", label: "所属组织", type: "select" as const, options: organizations.filter(org => !org.archivedAt).map(org => ({ value: org.id, label: org.displayName })) }, { name: "serverId", label: "MUA server ID", hint: "使用已有 MUA ID，创建后不可更改。", placeholder: "NPUR" }] : []),
-    { name: "displayName", label: "显示别名", placeholder: "NPU RELEASE" }, { name: "description", label: "简介", type: "textarea" }, { name: "gameAddress", label: "连接地址", placeholder: "play.example.edu:25565" }, { name: "iconObjectKey", label: "图标对象键" },
-    ...(server && superAdmin && listing ? [{ name: "sortOrder", label: "排序", type: "number" as const, hint: "数字越小，在 Launcher 中越靠前。" }, { name: "themeColor", label: "展示颜色", placeholder: "#3b82f6" }, { name: "isListed", label: "标记上架", type: "checkbox" as const, hint: "只有存在有效当前发布且组织、服务器、客户端均启用时，才会出现在公开列表。" }] : []),
+    { name: "displayName", label: "显示别名", placeholder: "NPU RELEASE" },
+    { name: "description", label: "简介", type: "textarea" },
+    { name: "gameAddress", label: "连接地址", placeholder: "play.example.edu:25565" },
+    ...(listing ? [
+      { name: "sortOrder", label: "排序", type: "number" as const, hint: "数字越小，在 Launcher 中越靠前。" },
+      { name: "themeColor", label: "展示颜色", placeholder: "#3b82f6" },
+      { name: "isListed", label: "标记上架", type: "checkbox" as const, hint: "只有存在有效当前发布且组织、服务器、客户端均启用时，才会出现在公开列表。" },
+    ] : []),
   ];
-  return <EditorDialog title={server ? listing ? "编辑 Listing" : "编辑服务器" : "登记服务器"} disabled={busy || !organizations.some(org => !org.archivedAt)} trigger={server ? <Button variant="outline" size="sm" disabled={busy || !!server.archivedAt || !!state.organizations.find(org => org.id === server.organizationId)?.archivedAt}><Pencil className="size-3.5" />编辑</Button> : undefined}>
-    {close => <SchemaForm schema={schema} fields={fields} disabled={busy} defaults={{ displayName: server?.displayName ?? "", description: server?.description ?? "", gameAddress: server?.gameAddress ?? "", iconObjectKey: server?.iconObjectKey ?? "", ...(server ? { ...(superAdmin && listing ? { sortOrder: String(server.sortOrder), themeColor: server.themeColor ?? "", isListed: server.isListed } : {}) } : { serverId: "", organizationId: organizations.find(org => !org.archivedAt)?.id ?? "" }) }}
-      onSubmit={async values => { const payload = { ...values, ...(server && superAdmin && listing ? { sortOrder: Number(values.sortOrder) } : {}) }; const ok = await run(() => api(`/api/admin/servers${server ? "/" + server.serverId : ""}`, server ? "PATCH" : "POST", payload)); if (ok) close(); return ok; }} />}
+  if (!server && !superAdmin) return null;
+  return <div className="space-y-6">
+    {server && <section className="space-y-3" aria-label="服务器状态">
+      <h3 className="font-medium">服务器状态</h3>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+        <dt className="text-muted-foreground">MUA server ID</dt><dd><code>{server.serverId}</code></dd>
+        <dt className="text-muted-foreground">所属组织</dt><dd>{organization?.displayName}</dd>
+        <dt className="text-muted-foreground">资源状态</dt><dd>{organization?.archivedAt ? "组织已归档" : server.archivedAt ? "服务器已归档" : "启用中"}</dd>
+        <dt className="text-muted-foreground">上架标记</dt><dd>{server.isListed ? "已标记上架" : "未上架"}</dd>
+        <dt className="text-muted-foreground">目录状态</dt><dd>{directoryStatus(server, !!organization?.archivedAt)}</dd>
+        <dt className="text-muted-foreground">连接探测</dt><dd><ServerStatusLight serverId={server.serverId} address={server.gameAddress} archived={archived} showLabel /></dd>
+        <dt className="text-muted-foreground">当前客户端</dt><dd className="break-words">{server.boundClientName || "未绑定"} · {releaseStatus(server)}</dd>
+      </dl>
+      {archived && <p className="text-sm text-muted-foreground">归档期间不能修改服务器资料与展示设置。{organization?.archivedAt ? "请先恢复所属组织。" : "恢复服务器后可继续编辑。"}</p>}
+    </section>}
+    <ServerMottoField server={server} editable={canEdit} pending={pendingMotto} onPrepare={setPendingMotto} />
+    {canEdit ? <SchemaForm key={server?.serverId ?? "new"} schema={schema} fields={fields} disabled={busy} defaults={{
+      displayName: server?.displayName ?? "", description: server?.description ?? "", gameAddress: server?.gameAddress ?? "",
+      ...(server ? listing ? { sortOrder: String(server.sortOrder), themeColor: server.themeColor ?? "", isListed: server.isListed } : {}
+        : { serverId: "", organizationId: organizations.find(org => !org.archivedAt)?.id ?? "" }),
+    }} onSubmit={async values => {
+      const payload = { ...values, ...(listing ? { sortOrder: Number(values.sortOrder) } : {}) };
+      const ok = await run(async () => {
+        let serverId = server?.serverId ?? createdServerId;
+        if (!serverId) {
+          const created = await api<{ serverId: string }>("/api/admin/servers", "POST", payload);
+          serverId = created.serverId; setCreatedServerId(serverId);
+          // If image storage fails after registration, keep the created record and allow a retry without registering twice.
+          await refresh();
+        } else await api(`/api/admin/servers/${serverId}`, "PATCH", server ? payload : {
+          displayName: values.displayName, description: values.description, gameAddress: values.gameAddress,
+        });
+        if (pendingMotto) await uploadMotto(serverId, server?.iconObjectKey ?? null, pendingMotto.file, pendingMotto.crop);
+      });
+      if (ok) { setPendingMotto(null); onSaved(); }
+      return ok;
+    }} /> : server && <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+      <dt className="text-muted-foreground">显示别名</dt><dd className="break-words">{server.displayName}</dd>
+      <dt className="text-muted-foreground">简介</dt><dd className="whitespace-pre-wrap break-words">{server.description || "未设置"}</dd>
+      <dt className="text-muted-foreground">连接地址</dt><dd className="break-all">{server.gameAddress || "未设置"}</dd>
+      <dt className="text-muted-foreground">排序</dt><dd>{server.sortOrder}</dd>
+      <dt className="text-muted-foreground">展示颜色</dt><dd>{server.themeColor || "默认"}</dd>
+    </dl>}
+    {server && superAdmin && <section className="flex items-center justify-between gap-4 border-t pt-4" aria-label="归档管理">
+      <div><h3 className="text-sm font-medium">{server.archivedAt ? "恢复服务器" : "归档服务器"}</h3><p className="text-xs text-muted-foreground">{server.archivedAt ? "恢复后需重新绑定客户端并确认上架。" : "停止分发，保留服务器记录与历史。"}</p></div>
+      <ArchiveButton kind="servers" id={server.serverId} archived={!!server.archivedAt} />
+    </section>}
+  </div>;
+}
+
+function ServerEditor({ server }: { server?: Server }) {
+  const { state, organizations, busy } = useAdmin();
+  const canManage = state.actor.isSuperAdmin || !!server?.permissions.includes("SERVER_EDIT");
+  const title = server ? canManage ? "编辑服务器" : "服务器详情" : "登记服务器";
+  return <EditorDialog title={title} description={server ? "集中查看服务器资料、上架与绑定状态；按当前权限提供控制选项。" : "使用已有 MUA server ID 登记服务器，保存后可设置展示信息。"}
+    disabled={busy || !organizations.some(org => !org.archivedAt)}
+    trigger={server ? <Button variant="outline" size="sm" disabled={busy}>{canManage ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />}{canManage ? "编辑" : "查看"}</Button> : undefined}>
+    {close => <ServerEditorContent server={server} onSaved={close} />}
   </EditorDialog>;
 }
-export function ServersPage({ mode = "servers" }: { mode?: "servers" | "listings" | "status" }) {
+
+export function ServersPage() {
   const { state, servers } = useAdmin();
-  const listing = mode === "listings";
-  const organizationName = (server: Server) => state.organizations.find(org => org.id === server.organizationId)?.displayName ?? "";
-  const eligible = (server: Server) => !server.archivedAt && !server.clientArchivedAt && !state.organizations.find(org => org.id === server.organizationId)?.archivedAt && server.isListed && server.currentReleaseActive;
+  const organization = (server: Server) => state.organizations.find(org => org.id === server.organizationId);
   const columns: ColumnDef<Server>[] = [
-    { accessorKey: "displayName", header: "服务器", cell: ({ row }) => <div className="flex items-center gap-3">{listing && <span aria-label={row.original.themeColor || "默认颜色"} className="size-3 rounded-full border" style={{ backgroundColor: row.original.themeColor || "#737373" }} />}<div>{row.original.permissions.includes("DRAFT_READ") || row.original.permissions.includes("RELEASE_READ") ? <Link className="font-medium hover:underline" href={row.original.boundClientId ? `/admin/clients/${row.original.boundClientId}` : "/admin/clients"}>{row.original.displayName}</Link> : <p className="font-medium">{row.original.displayName}</p>}<p className="text-xs text-muted-foreground">{row.original.serverId}</p></div></div> },
-    { id: "organization", header: "组织", accessorFn: organizationName },
-    ...(listing ? [{ accessorKey: "sortOrder", header: "排序" }, { accessorKey: "themeColor", header: "颜色", cell: ({ row }: { row: { original: Server } }) => <code>{row.original.themeColor || "默认"}</code> }] as ColumnDef<Server>[] : [{ accessorKey: "gameAddress", header: "连接地址", cell: ({ row }: { row: { original: Server } }) => <code className="text-xs">{row.original.gameAddress || "未设置"}</code> }] as ColumnDef<Server>[]),
-    { id: "status", header: listing ? "目录状态" : "状态", accessorFn: server => server.archivedAt ? "已归档" : eligible(server) ? "公开分发" : server.isListed ? "等待有效发布" : "未上架", cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge> },
-    { id: "release", header: "当前客户端", accessorFn: server => server.clientArchivedAt ? "已归档" : server.currentReleaseId ? "已绑定" : "未发布", cell: ({ row }) => <Status archived={row.original.clientArchivedAt} active={row.original.currentReleaseId ? "已绑定当前发布" : "未发布"} /> },
-    { id: "actions", header: "操作", enableHiding: false, cell: ({ row }) => <div className="flex gap-2">{(listing ? state.actor.isSuperAdmin : row.original.permissions.includes("SERVER_EDIT")) && <ServerEditor server={row.original} listing={listing} />}{!listing && state.actor.isSuperAdmin && <ArchiveButton kind="servers" id={row.original.serverId} archived={!!row.original.archivedAt} />}</div> },
+    { id: "motto", header: "服务器箴言", enableSorting: false, enableHiding: false, cell: ({ row }) => <MottoPreview src={row.original.mottoImageUrl} alt={`${row.original.displayName}箴言`} /> },
+    { accessorKey: "displayName", header: "服务器", cell: ({ row }) => <div className="flex items-center gap-3">
+      <ServerStatusLight serverId={row.original.serverId} address={row.original.gameAddress} archived={!!row.original.archivedAt || !!organization(row.original)?.archivedAt} />
+      <div><p className="font-medium">{row.original.displayName}</p><p className="text-xs text-muted-foreground">{row.original.serverId}</p></div>
+    </div> },
+    { id: "organization", header: "组织", accessorFn: server => organization(server)?.displayName ?? "" },
+    { accessorKey: "gameAddress", header: "连接地址", cell: ({ row }) => <code className="text-xs">{row.original.gameAddress || "未设置"}</code> },
+    { accessorKey: "sortOrder", header: "排序" },
+    { accessorKey: "themeColor", header: "展示颜色", cell: ({ row }) => <code>{row.original.themeColor || "默认"}</code> },
+    { id: "status", header: "目录状态", accessorFn: server => directoryStatus(server, !!organization(server)?.archivedAt), cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge> },
+    { id: "release", header: "当前客户端", accessorFn: server => `${server.boundClientName || ""} ${releaseStatus(server)}`, cell: ({ row }) => <div className="space-y-1">
+      {row.original.boundClientId && (row.original.permissions.includes("DRAFT_READ") || row.original.permissions.includes("RELEASE_READ"))
+        ? <Link className="font-medium hover:underline" href={`/admin/clients/${row.original.boundClientId}`}>{row.original.boundClientName}</Link>
+        : row.original.boundClientName && <p className="font-medium">{row.original.boundClientName}</p>}
+      <p className="text-xs text-muted-foreground">{releaseStatus(row.original)}</p>
+    </div> },
+    { id: "actions", header: "操作", enableHiding: false, cell: ({ row }) => <ServerEditor server={row.original} /> },
   ];
-  return <><Heading title={listing ? "Listing" : mode === "status" ? "服务器状态" : "Server"} description={listing ? "管理 Launcher 上架标记、顺序与颜色。排序和展示设置仅限 MUA 超级管理员。" : mode === "status" ? "展示数据库中的归档、上架与客户端绑定状态。" : "每个服务器对应一个专用客户端，创建时自动建立客户端与发布绑定记录。"} action={mode === "servers" && state.actor.isSuperAdmin && <ServerEditor />} />
-    {mode === "status" && <Alert><AlertDescription>游戏服务器在线检测尚未接入。此处状态表示管理配置，不代表游戏服务在线。</AlertDescription></Alert>}
-    <DataTable data={servers} columns={columns} empty="暂无可访问服务器。请先创建组织并登记 MUA server ID。" /></>;
+  return <>
+    <Heading title="服务器管理" description="统一管理服务器资料、Launcher 展示与分发状态。" action={state.actor.isSuperAdmin && <ServerEditor />} />
+    <Alert><AlertDescription>状态灯每分钟探测一次 Minecraft Java 服务器，悬停查看延迟与原因，点击可刷新。延迟从后端测得；目录状态仍表示上架与客户端发布配置。</AlertDescription></Alert>
+    <DataTable data={servers} columns={columns} getRowId={server => server.serverId} empty="暂无可访问服务器。请先创建组织并登记 MUA server ID。" />
+  </>;
 }

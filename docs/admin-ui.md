@@ -1,6 +1,6 @@
 # MUA Management Platform 管理界面
 
-更新时间：2026-10-08。入口 /admin，本机地址 http://localhost:3001/admin。根路径与旧 /dashboard 跳转至 /admin。
+更新时间：2026-10-12。入口 /admin，本机地址 http://localhost:3001/admin。根路径与旧 /dashboard 跳转至 /admin。
 
 ## 技术栈与来源
 
@@ -21,9 +21,7 @@ Tremor 来自官方 [AreaChart v1.0.0](https://github.com/tremorlabs/tremor/tree
 | 组织 | /admin/organizations | 资料、归档／恢复，超管新建 |
 | 成员 | /admin/members | 组织／单服授权；超管管理白名单账号 |
 | 权限 | /admin/permissions | 与后端共用的角色矩阵 |
-| Server | /admin/servers | 登记既有 MUA ID、编辑、归档／恢复 |
-| Listing | /admin/listings | 超管管理排序、颜色、上架资格 |
-| 状态 | /admin/servers/status | 资料状态，暂无游戏在线检测 |
+| 服务器管理 | /admin/servers | 统一资料、排序／颜色、上架与绑定状态；按权限编辑或查看，超管登记／归档／恢复 |
 | 客户端管理 | /admin/clients | 表格、完整 ZIP 添加／更新、解析统计、归档、历史切换 |
 | 客户端详情 | /admin/clients/[id] | 同一管理表格限制到指定 server ID |
 | 待审核 | /admin/releases/review | 版本资料、Markdown、文件列表和差异；审核／驳回／签名发布 |
@@ -33,9 +31,17 @@ Tremor 来自官方 [AreaChart v1.0.0](https://github.com/tremorlabs/tremor/tree
 | Storage | /admin/system/storage | 实际 MinIO bucket 可用状态 |
 | Signing Keys | /admin/system/signing-keys | 当前签名公钥信息，私钥不返回前端 |
 | Audit Log | /admin/system/audit | 超管最近 50 条审计 |
-| Settings | /admin/system/settings | 自助改密与 API Token |
+| Settings | /admin/system/settings | 自助改密与 API Token；超管管理上传大小、开放格式、下载与回收设置 |
 
-Client Profiles、Releases、Artifacts、Runtime 四个客户端菜单合并为“客户端管理”。旧 /admin/clients/artifacts、runtime、releases 与 [id]/releases 路径跳转到统一管理界面。资讯、活动与 Launcher UI 仍是待接入页面；排序和颜色目前在 Listing 管理。
+Client Profiles、Releases、Artifacts、Runtime 四个客户端菜单合并为“客户端管理”。旧 /admin/clients/artifacts、runtime、releases 与 [id]/releases 路径跳转到统一管理界面。Server、Listing、状态合并为“服务器管理”；旧 /admin/listings 与 /admin/servers/status 跳转至 /admin/servers。七个菜单分组保留。资讯、活动与 Launcher UI 仍是待接入页面。
+
+## 服务器管理
+
+单一表格显示服务器别名／MUA ID、组织、连接地址、排序、展示颜色、目录状态及当前客户端。统一编辑窗口同时显示归档、上架标记、有效公开分发与客户端绑定状态。名称旁与详情中的状态灯真实探测 MC Java：在线且低延迟绿色、默认 ≥300ms 黄色、连接失败或没有有效 MC 状态红色；未配置、探测中、归档及探测服务错误灰色。悬停显示时延／原因，点击可刷新，可见页面每分钟自动刷新。时延从后端测得，配置／上架状态独立，见[服务器探测](server-probe.md)。
+
+所有 SERVER_READ 账号可查看详情。有 SERVER_EDIT 的组织管理员或获授权单服编辑人员可以修改别名、简介、连接地址和“服务器箴言”图片；排序、颜色、上架标记与归档／恢复只向超管提供控制项。只读、审核及客户端编辑账号仅查看详情。归档的组织或服务器不显示资料保存表单，超管可在同一窗口恢复服务器，所属组织归档时提示先恢复组织。新建服务器仍只有超管可登记，保存后通过统一窗口设置展示信息。资料保存沿用原服务器 PATCH API，图片使用独立受权限保护的上传接口，服务端继续逐请求检查作用域、归档及字段权限。
+
+服务器箴言推荐宽高比 61:23（约 2.65:1），点击上传打开三分网格裁剪窗口，默认该比例，可移动、缩放、重置及从保留原图重新裁剪。新建时可预选图片随登记保存。表格最左侧显示箴言图片，从横向黄金分割点 61.8034% 开始向右淡出到白色。实现及权限／存储边界见[服务器箴言图片](server-motto-images.md)。
 
 ## 客户端上传与更新
 
@@ -51,11 +57,11 @@ Client Profiles、Releases、Artifacts、Runtime 四个客户端菜单合并为�
 
 ## 数据与权限
 
-侧栏入口与空分组按当前 RBAC 隐藏。组织入口依组织权限，服务器／客户端／发布入口取可访问服务器权限并集；Listing、内容和系统运行管理仅超管可见，Settings 始终可见。组织筛选只过滤后端已授权的数据，不改变账号本身权限。API 不依赖菜单隐藏，在服务端再次校验账号、作用域与资源归属。
+侧栏入口与空分组按当前 RBAC 隐藏。组织入口依组织权限，服务器／客户端／发布入口取可访问服务器权限并集；服务器管理依 SERVER_READ 可见，展示设置在统一窗口内仅超管可改。内容和系统运行管理仅超管可见，Settings 始终可见。组织筛选只过滤后端已授权的数据，不改变账号本身权限。API 不依赖菜单隐藏，在服务端再次校验账号、作用域与资源归属。
 
 登录、退出、改密后重新加载页面与同源其他标签，清除旧账号管理状态。侧栏显示当前账号身份和组织管理员范围，用户菜单显示登录用户名。
 
-超管图表使用完整近 14 天 AuditEvent，按 Asia/Shanghai 补齐日期；普通成员只见有权限组织的服务器分布。CDN 流量和游戏在线指标未接入，不显示模拟数字。
+超管图表使用完整近 14 天 AuditEvent，按 Asia/Shanghai 补齐日期；普通成员只见有权限组织的服务器分布。MC Java 连接探测与状态灯已接入，历史在线监控及 CDN 流量指标尚未接入，不显示模拟数字。
 
 ## 验证
 

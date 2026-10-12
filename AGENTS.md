@@ -10,10 +10,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- muapack 最大源包上传大小由 Settings 管理，默认 1024 MB（1 GB），1 MB=1024² 字节，整数范围 1–20480 MB；仅 MUA 超管面板会话可修改并审计，普通后台账号可读取当前上限。网页、标准 API 和 Actions 新建 v1／v2 上传共用实时上限，超出配置返回 413；调整不取消已有上传／组包／审核／发布，不限制生成产物、不改历史和签名。见 [docs/upload-size-settings.md](docs/upload-size-settings.md)。
+
 - 更新上传默认采用首次发布的 muapack 格式（没有发布历史沿用最近草稿），上传前可手动改选。Settings 的 enabledPackageFormats 默认 [1,2]，至少保留一种，只允许超管面板会话修改并审计；所有后台账号可读取开放选项。关闭格式隐藏新上传选项并在标准上传创建 API 返回 409，不取消已有上传／组包／审核／发布，不下架历史、不改签名；Actions 沿用同一门槛。恢复已有上传保留锁定格式。详见 [docs/package-format-settings.md](docs/package-format-settings.md)。
 
 - 管理界面采用 shadcn/ui dashboard-01 基础，保留用户指定的七个分组菜单与 `/admin` 路由；参见 [docs/admin-ui.md](docs/admin-ui.md)。Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod 为统一组件体系，Tremor Raw 仅用于图表。
 - 页面不得使用模板模拟业务指标。Storage、Worker、签名显示真实运行状态，未接入的内容与 CDN 显示明确待接入状态；审计曲线仅超管可读，按完整时间窗口聚合。共享角色定义在 `src/lib/roles.ts`，服务端仍在每次请求中检查 RBAC。
+- 服务器的 Server、Listing、状态已合并为 `/admin/servers`“服务器管理”，统一编辑／详情窗口；旧 `/admin/listings` 与 `/admin/servers/status` 跳转到该入口。SERVER_READ 可查看，SERVER_EDIT 可修改资料；排序／颜色／上架和服务器归档／恢复仍仅超管可控制，服务端范围及字段校验保留。
+- 服务器“图标对象键”界面改为“服务器箴言”真实图片上传／编辑，推荐比例 61:23，默认固定比例三分网格裁剪；保留原图可重裁剪。列表最左侧显示图片，在横向 61.8034% 起向右淡出到白色。沿用 iconObjectKey，图片／原图／选区存私有 OSS，SERVER_EDIT 写、SERVER_READ 读，写入时重新校验范围和修订；不改发布签名。旧图片保留，自动回收及玩家公开图片尚未接入，见 [docs/server-motto-images.md](docs/server-motto-images.md)。
+- 服务器连接状态灯已接入：后端按已保存 gameAddress 直接探测 MC Java 状态协议和 Ping，确认 MC 且低延迟绿灯，默认 ≥300ms 黄灯，连接失败／无有效 MC 状态红灯；未配置、探测中、归档及探测服务错误灰灯，悬停显示时延或原因。SERVER_READ 逐请求及返回前校验范围，只连接 DNS 固定后的公网 IP，SRV／超时／缓存／并发保护保留；每分钟前端刷新，不改变目录上架、发布或签名，详见 [docs/server-probe.md](docs/server-probe.md)。
 
 - 产品需求和启动器代码观察记录见 [docs/mua-backend-requirements.md](docs/mua-backend-requirements.md)。后续设计或实现前先阅读该文档，区分确定需求、设计建议和待确定事项。
 - muapack v2 第 1–5 步已完成：[协议基线](docs/muapack-v2.md)、[离线样例](docs/examples/muapack-v2/README.md)、上传选择／模型／API、共享导入及完整组包／审核／签名／发布，见 [docs/muapack-v2-design.md](docs/muapack-v2-design.md)。packageFormatVersion 创建后锁定，历史和旧 API 默认 1，不改写签名；新 UI 上传前明确选择，Actions 两种格式均提交原审核 API。v2 只校验本地 overrides／CAS，远程全哈希／大小／URL／optional 与环境要求只保存声明（DECLARED）。PCL 私有配置先按共享规则过滤，再校验保留路径；真实环境覆盖仍拒绝。内部 mua-import-recipe 与 mua-recipe-content 不混用旧 Manifest；草稿平台声明独立保存，生成最终 mua-recipe-manifest。2026-10-11 起新 v2 不选择架构，统一六个规范目标与单一 universal 任务，平台配置 API 拒绝 v2；历史修订／受限平台／READY 字节及签名保留。审核后组包，v2 独立签名域及 ZIP／索引／SHA-256 校验、OSS 保存完成才为 PackageBuild READY，发布指向该目标。Upload READY 仅导入完成。管理完整下载与公开 acceptedFormatVersions=2或1,2 已接入，旧端默认仅 1、当前 v2 返回 415。v2 自动更新包已接入，以上传时固定的已发布 v2 为基准，携带完整基准／目标与所有差异，仅放变化所需本地载荷；full／update 都验签保存后任务 READY。产物记录绑定 baseReleaseId 与 baseManifestSha256；公开 packages 核对基准及平台，摘要参数可选但建议传入，不匹配回退 full。没有已发布基准、跨格式或无共享平台只生成 full；损坏基准明确失败。removalPolicy=retain，不自动删除 preserve／玩家文件。旧 READY 与签名不补写，Launcher 安装尚未接入。v1 保留；v2 分发本地模组 JAR 与覆盖文件，远程模组及环境交给 Launcher，Worker 不下载其二进制，沿用同一套客户端／发布系统。

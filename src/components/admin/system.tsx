@@ -12,6 +12,7 @@ import { ApiTokens } from "./api-tokens";
 import type { DownloadSettings } from "@/lib/download-settings";
 import { MINECRAFT_SOURCES, JAVA_SOURCES } from "@/lib/download-sources";
 import { PackageFormatSettingsCard } from "./package-format-settings";
+import { UploadSizeSettingsCard } from "./upload-size-settings";
 export function AuditPage() {
   const { state } = useAdmin();
   if (!state.actor.isSuperAdmin) return <NoPermission />;
@@ -35,6 +36,7 @@ export function SettingsPage() {
     {state.actor.isSuperAdmin && <RecycleSettings />}
     {state.actor.isSuperAdmin && <DownloadSettingsCard />}
     {state.actor.isSuperAdmin && <PackageFormatSettingsCard />}
+    {state.actor.isSuperAdmin && <UploadSizeSettingsCard />}
   </div></>;
 }
 function DownloadSettingsCard() {

@@ -51,7 +51,7 @@ test("pipelined Prisma transactions preserve dependency order, abort and rollbac
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings"]) {
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings"]) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -131,7 +131,9 @@ test("sidebar reflects organization, server and platform permissions after grant
   const f = await fixture(db);
   const links = async (actor: Actor) => [...visiblePaths(await m.getState(db, actor))];
   const root = await links(f.root);
-  assert.equal(root.length, 19);
+  assert.equal(root.length, 17);
+  assert(!root.includes("/admin/listings"));
+  assert(!root.includes("/admin/servers/status"));
   const admin = await links(f.admin);
   assert(admin.includes("/admin/organizations"));
   assert(admin.includes("/admin/members"));
@@ -185,6 +187,14 @@ test("review, publishing and activation are independent; field and grant escalat
   assert(!expandRoles(["ORG_ADMIN"]).includes("RELEASE_ACTIVATE"));
   await assert.rejects(requireServer(db, f.reviewer, "NPB", "DRAFT_EDIT"), denied(403));
   await assert.rejects(m.updateServer(db, f.admin, "NPB", { displayName: "okay", sortOrder: 0 }), denied(403));
+  await assert.rejects(m.updateServer(db, f.beta, "NPB", { displayName: "okay", themeColor: "#123456" }), denied(403));
+  await assert.rejects(m.updateServer(db, f.admin, "NPB", { displayName: "okay", isListed: true }), denied(403));
+  await assert.rejects(m.updateServer(db, f.reviewer, "NPB", { displayName: "okay" }), denied(403));
+  await assert.rejects(m.updateServer(db, f.beta, "NPR", { displayName: "okay" }), denied(404));
+  await m.updateServer(db, f.root, "NPB", { displayName: "Updated beta", gameAddress: "beta.example.edu:25565", sortOrder: -5, themeColor: "#123456", isListed: true });
+  const updated = await db.server.findUniqueOrThrow({ where: { serverId: "NPB" } });
+  assert.equal(updated.displayName, "Updated beta"); assert.equal(updated.gameAddress, "beta.example.edu:25565");
+  assert.equal(updated.sortOrder, -5); assert.equal(updated.themeColor, "#123456"); assert.equal(updated.isListed, true);
   await assert.rejects(m.updateOrganization(db, f.admin, f.org.id, { isSuperAdmin: true }), denied(400));
   await assert.rejects(m.setMember(db, f.admin, f.org.id, f.ordinary.id, { roles: ["PUBLISHER"], status: "ACTIVE" }), denied(403));
   await assert.rejects(m.setMember(db, f.admin, f.org.id, f.reviewer.id, { roles: [], status: "DISABLED" }), denied(403));

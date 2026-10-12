@@ -24,10 +24,12 @@ import { putImmutableBytes } from "./package-storage";
 import { packagesBucket } from "./storage";
 import { MUA_PLATFORMS } from "./muapack-contract";
 import { enabledPackageFormats } from "./package-format-settings";
+import { maxUploadSizeMb } from "./upload-size-settings";
+import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "./upload-size-policy";
 
 export const PART_SIZE = 64 * 1024 * 1024;
 const uploadInput = z.object({ clientId: z.string().min(1).max(100), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
-  size: z.number().int().positive().max(20 * 1024 ** 3), baseReleaseId: z.string().uuid().nullable(), basePublicationRevision: z.number().int().nonnegative(),
+  size: z.number().int().positive().max(MAX_UPLOAD_SIZE_MB * UPLOAD_MB), baseReleaseId: z.string().uuid().nullable(), basePublicationRevision: z.number().int().nonnegative(),
   comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema.default(1) }).strict();
 function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
   const result = schema.safeParse(raw); invariant(result.success, 400, result.success ? "" : result.error.issues[0]?.message ?? "参数无效"); return result.data;
@@ -60,6 +62,8 @@ export async function createUpload(db: Db, actor: Actor, raw: unknown) {
   const scope = await requireClient(db, actor, data.clientId, "DRAFT_CREATE", true);
   const format = data.packageFormatVersion ?? 1;
   invariant((await enabledPackageFormats(db)).includes(format), 409, `muapack v${format} 当前未开放新上传，请选择开放的格式`);
+  const limit = await maxUploadSizeMb(db);
+  invariant(data.size <= limit * UPLOAD_MB, 413, `上传文件超过允许的最大大小（${limit} MB）`);
   assertBaseline(data, ({ releaseId: scope.client.currentReleaseId, revision: scope.client.revision }));
   if (data.baseReleaseId) await requireClient(db, actor, data.clientId, "DRAFT_EDIT", true);
   if (data.comparisonDraftId) {

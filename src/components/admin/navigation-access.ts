@@ -15,8 +15,6 @@ export function visiblePaths(state: NavigationState) {
     "/admin/members": organizationPermission("ORG_MEMBERS_READ"),
     "/admin/permissions": organizationPermission("ORG_MEMBERS_READ"),
     "/admin/servers": serverPermission("SERVER_READ"),
-    "/admin/listings": superAdmin,
-    "/admin/servers/status": serverPermission("SERVER_READ"),
     "/admin/clients": serverPermission("DRAFT_READ") || serverPermission("RELEASE_READ"),
     "/admin/news": superAdmin,
     "/admin/events": superAdmin,

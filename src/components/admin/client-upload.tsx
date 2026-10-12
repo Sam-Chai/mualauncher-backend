@@ -19,6 +19,7 @@ import { PackageBuildOptions } from "./package-platforms";
 import { PackageFormatChoice } from "./package-format-choice";
 import { defaultMuaPlatforms } from "@/lib/muapack-contract";
 import { defaultUploadPackageFormat } from "@/lib/package-format-policy";
+import { uploadFileError } from "@/lib/upload-size-policy";
 
 function putPart(url: string, bytes: Blob, onProgress: (value: number) => void, signal: AbortSignal) {
   return new Promise<string>((resolve, reject) => {
@@ -40,7 +41,7 @@ export function ClientUploadDialog(props: Props) {
   const { refresh } = useAdmin();
   const [open, setOpen] = useState(false);
   const [editorProps, setEditorProps] = useState<Props | null>(null);
-  function changeOpen(next: boolean) { if (next) { setEditorProps(props); void refresh().catch(() => toast.error("无法刷新开放格式，请刷新页面后重试")); } setOpen(next); }
+  function changeOpen(next: boolean) { if (next) { setEditorProps(props); void refresh().catch(() => toast.error("无法刷新上传设置，请刷新页面后重试")); } setOpen(next); }
   return <Dialog open={open} onOpenChange={changeOpen}><DialogTrigger asChild><Button variant={props.clientId ? "outline" : "default"} size={props.clientId ? "sm" : "default"} disabled={props.disabled}>
     {!props.clientId && <Plus className="size-4" />}{props.resume ? "继续填写" : props.clientId ? "更新" : "添加客户端"}
   </Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl" onInteractOutside={event => event.preventDefault()}><DialogHeader>
@@ -97,7 +98,8 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
   }, [uploadId, uploadStatus, form]);
   async function startUpload(selected: File) {
     if (!packageFormatVersion) { setError("请先选择制作 muapack v1 还是 v2"); return; }
-    if (!/\.(zip|mrpack)$/i.test(selected.name) || selected.size <= 0 || selected.size > 20 * 1024 ** 3) { setError("请选择 20 GiB 以内的完整 ZIP 或 mrpack"); return; }
+    const fileError = uploadFileError(selected.name, selected.size, state.maxUploadSizeMb);
+    if (fileError) { setError(fileError); return; }
     if (!organizationId) { setError("请先选择所属组织"); return; }
     if (!form.getValues("name").trim()) { setError("请先填写客户端名称，再点击“开始上传”"); return; }
     const target = serverId === "none" ? undefined : targets.find(target => target.serverId === serverId && target.organizationId === organizationId);
@@ -140,6 +142,9 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
   }
   function chooseFile(next: File | undefined) {
     if (!next || !packageFormatVersion || uploading || upload?.status === "PROCESSING") return;
+    const fileError = uploadFileError(next.name, next.size, state.maxUploadSizeMb);
+    if (fileError) { setError(fileError); return; }
+    setError("");
     setFile(next);
     if (!fixedClient && !form.getValues("name").trim()) form.setValue("name", next.name.replace(/\.(zip|mrpack)$/i, "").slice(0, 200), { shouldDirty: true });
     if (organizationId && form.getValues("name").trim()) void startUpload(next);
@@ -167,7 +172,7 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
       onClick={() => input.current?.click()} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files[0]); }}>
       {uploading || processing ? <LoaderCircle className="size-10 animate-spin text-primary" /> : upload || file ? <FileArchive className="size-10 text-primary" /> : <UploadCloud className="size-10 text-muted-foreground" />}
       <span className="font-medium" role="status" aria-live="polite">{!packageFormatVersion ? "请先选择 v1 或 v2" : uploading ? `上传中 ${percent}%` : processing || upload?.status === "WAITING_PROCESSOR" ? uploadProcessingLabel(upload!) : upload?.status === "READY" ? "处理完成 · 点击更换完整整合包" : file?.name ?? "拖拽 ZIP／mrpack 到这里，或点击选择文件"}</span>
-      <span className="text-sm text-muted-foreground">{upload ? `${upload.fileName} · ${formatBytes(upload.size)}` : ".minecraft ZIP／Modrinth mrpack／PCL 导出 ZIP · 最大 20 GiB"}</span>
+      <span className="text-sm text-muted-foreground">{upload ? `${upload.fileName} · ${formatBytes(upload.size)}` : `.minecraft ZIP／Modrinth mrpack／PCL 导出 ZIP · 最大 ${state.maxUploadSizeMb} MB`}</span>
       {uploading && <span className="h-2 w-64 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${percent}%` }} /></span>}
     </button>
     {upload?.status === "WAITING_PROCESSOR" && <Alert><AlertDescription>v2 源包已上传保存，等待 v2 处理器接入。当前不会下载远程模组或运行环境，也不能提交审核；已发布版本继续可用。</AlertDescription></Alert>}

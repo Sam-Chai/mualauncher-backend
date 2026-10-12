@@ -5,6 +5,8 @@ import { invariant } from "./errors";
 import * as input from "./input";
 import { hashPassword } from "./password";
 import { enabledPackageFormats } from "./package-format-settings";
+import { maxUploadSizeMb } from "./upload-size-settings";
+import { serverMottoUrl } from "./server-motto-contract";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
 const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true, credential: { select: { username: true } } } as const;
@@ -18,6 +20,7 @@ export async function audit(db: Db, actor: Actor, action: string, targetType: st
 
 export async function getState(db: Db, actor: Actor) {
   const packageFormats = await enabledPackageFormats(db);
+  const uploadSizeLimit = await maxUploadSizeMb(db);
   const organizations = await db.organization.findMany({
     where: actor.isSuperAdmin ? {} : { members: { some: { accountId: actor.id, status: "ACTIVE" } } },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { displayName: "asc" }],
@@ -35,6 +38,7 @@ export async function getState(db: Db, actor: Actor) {
       if (!rights.includes("SERVER_READ")) return [];
       return [{ serverId: server.serverId, organizationId: organization.id, displayName: server.displayName, description: server.description,
         gameAddress: server.gameAddress, iconObjectKey: server.iconObjectKey, sortOrder: server.sortOrder, themeColor: server.themeColor,
+        mottoImageUrl: serverMottoUrl(server.iconObjectKey, organization.id, server.serverId),
         isListed: server.isListed, archivedAt: server.archivedAt, clientArchivedAt: server.publication?.client?.archivedAt ?? null,
         currentReleaseId: server.publication?.releaseId ?? null, currentReleaseActive: !!server.publication?.release && !server.publication.release.archivedAt,
         publicationRevision: server.publication?.revision ?? 0, boundClientId: server.publication?.clientId ?? null, boundClientName: server.publication?.client?.name ?? null, permissions: [...new Set(rights)] }];
@@ -73,7 +77,7 @@ export async function getState(db: Db, actor: Actor) {
     SELECT to_char(days.day, 'YYYY-MM-DD') AS date, coalesce(counts.count, 0)::int AS count
     FROM days LEFT JOIN counts USING (day) ORDER BY days.day
   ` : [];
-  return { actor, organizations: organizationDtos, accounts, events, auditActivity, enabledPackageFormats: packageFormats };
+  return { actor, organizations: organizationDtos, accounts, events, auditActivity, enabledPackageFormats: packageFormats, maxUploadSizeMb: uploadSizeLimit };
 }
 
 export async function createOrganization(db: Db, actor: Actor, raw: unknown) {
@@ -104,6 +108,7 @@ export async function createServer(db: Db, actor: Actor, raw: unknown) {
   const organizationId = input.uuid(input.text(data, "organizationId"));
   await requireOrganization(db, actor, organizationId, "ORG_EDIT");
   const id = input.serverId(input.text(data, "serverId"));
+  invariant(typeof data.iconObjectKey !== "string" || !data.iconObjectKey.startsWith("server-mottos/"), 400, "服务器箴言请通过图片上传接口设置");
   await db.server.create({ data: { serverId: id, organizationId, displayName: input.text(data, "displayName"),
     description: data.description === undefined ? "" : input.text(data, "description", 5000, false),
     gameAddress: data.gameAddress === undefined ? null : input.optionalText(data, "gameAddress", 255),
@@ -121,7 +126,11 @@ export async function updateServer(db: Db, actor: Actor, id: string, raw: unknow
   if ("displayName" in data) update.displayName = input.text(data, "displayName");
   if ("description" in data) update.description = input.text(data, "description", 5000, false);
   if ("gameAddress" in data) update.gameAddress = input.optionalText(data, "gameAddress", 255);
-  if ("iconObjectKey" in data) update.iconObjectKey = input.optionalText(data, "iconObjectKey");
+  if ("iconObjectKey" in data) {
+    const key = input.optionalText(data, "iconObjectKey");
+    invariant(!(key?.startsWith("server-mottos/") || server.iconObjectKey?.startsWith("server-mottos/")) || key === server.iconObjectKey, 400, "服务器箴言请通过图片上传接口修改");
+    update.iconObjectKey = key;
+  }
   if ("sortOrder" in data) {
     invariant(Number.isSafeInteger(data.sortOrder) && Math.abs(data.sortOrder as number) <= 2147483647, 400, "排序须为有效整数");
     update.sortOrder = data.sortOrder as number;

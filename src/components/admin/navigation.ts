@@ -1,4 +1,4 @@
-import { LayoutDashboard, Building2, Users, ShieldCheck, Server, ListOrdered, Activity, Boxes, Newspaper, CalendarDays, PanelsTopLeft, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ShieldCheck, Server, Boxes, Newspaper, CalendarDays, PanelsTopLeft, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings } from "lucide-react";
 export const navigation = [
   { title: "", items: [{ title: "总览", href: "/admin", icon: LayoutDashboard }] },
   { title: "联盟管理", items: [
@@ -6,9 +6,7 @@ export const navigation = [
     { title: "成员", href: "/admin/members", icon: Users },
     { title: "权限", href: "/admin/permissions", icon: ShieldCheck }] },
   { title: "服务器", items: [
-    { title: "Server", href: "/admin/servers", icon: Server },
-    { title: "Listing", href: "/admin/listings", icon: ListOrdered },
-    { title: "状态", href: "/admin/servers/status", icon: Activity }] },
+    { title: "服务器管理", href: "/admin/servers", icon: Server }] },
   { title: "客户端", items: [
     { title: "客户端管理", href: "/admin/clients", icon: Boxes }] },
   { title: "内容", items: [

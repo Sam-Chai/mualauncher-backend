@@ -52,23 +52,25 @@ async function main() {
     assert(!/:E\{[^\n]*digest/.test(panelHtml), "Panel rendered a React server error");
     assert(!panelHtml.includes('href="/admin/clients/runtime"')); assert(!panelHtml.includes('href="/admin/clients/artifacts"'));
     assert(!panelHtml.includes('href="/admin/clients/releases"')); assert(panelHtml.includes("客户端管理"));
-    for (const path of ["/admin/organizations", "/admin/members", "/admin/permissions", "/admin/servers", "/admin/listings",
-      "/admin/servers/status", "/admin/clients",
+    assert(panelHtml.includes("服务器管理")); assert(!panelHtml.includes('href="/admin/listings"')); assert(!panelHtml.includes('href="/admin/servers/status"'));
+    for (const path of ["/admin/organizations", "/admin/members", "/admin/permissions", "/admin/servers", "/admin/clients",
       "/admin/news", "/admin/events", "/admin/launcher-ui", "/admin/releases/review", "/admin/releases/published",
       "/admin/releases/revoked", "/admin/system/workers", "/admin/system/storage", "/admin/system/signing-keys",
       "/admin/system/audit", "/admin/system/settings"]) {
       const response = await fetch(base + path, { headers: { Cookie: cookie } });
       const html = await response.text();
       assert.equal(response.status, 200, path); assert(html.includes("MUA Platform"), path);
+      if (path === "/admin/servers") { assert(html.includes("服务器箴言")); assert(!html.includes("图标对象键")); assert(html.includes("悬停查看延迟与原因")); assert(html.includes("data-probe-state")); }
       assert(!/:E\{[^\n]*digest/.test(html), `React server error at ${path}`);
     }
-    for (const path of ["/admin/clients/releases", "/admin/clients/artifacts", "/admin/clients/runtime"]) {
+    for (const [path, target] of [["/admin/clients/releases", "/admin/clients"], ["/admin/clients/artifacts", "/admin/clients"], ["/admin/clients/runtime", "/admin/clients"],
+      ["/admin/listings", "/admin/servers"], ["/admin/servers/status", "/admin/servers"]]) {
       const response = await fetch(base + path, { headers: { Cookie: cookie }, redirect: "manual" });
-      if (response.status === 307) assert.equal(response.headers.get("location"), "/admin/clients");
+      if (response.status === 307) assert.equal(response.headers.get("location"), target);
       else {
         assert.equal(response.status, 200);
         const html = await response.text();
-        assert(html.includes('url=/admin/clients') || html.includes('NEXT_REDIRECT;replace;/admin/clients;307;'), `Missing legacy redirect at ${path}`);
+        assert(html.includes(`url=${target}`) || html.includes(`NEXT_REDIRECT;replace;${target};307;`), `Missing legacy redirect at ${path}`);
         const digests = [...html.matchAll(/:E\{[^\n]*?"digest":"([^"]+)"/g)].map(match => match[1]);
         assert(digests.every(digest => digest.startsWith('NEXT_REDIRECT;')), `Unexpected React error at ${path}`);
       }
@@ -81,7 +83,7 @@ async function main() {
     const deniedHtml = await denied.text();
     assert(denied.url.endsWith("/login") || deniedHtml.includes('url=/login') || deniedHtml.includes('NEXT_REDIRECT'), "Admin pages must redirect after session revocation");
     cookie = "";
-    console.log("HTTP checks passed: dashboard, unified client management, 19 module entries and legacy redirects, authentication, input/origin guards, client API, live storage, public directory and session revocation.");
+    console.log("HTTP checks passed: dashboard, unified server/client management, 17 module entries and legacy redirects, authentication, input/origin guards, client API, live storage, public directory and session revocation.");
   } finally { if (cookie) await post("/api/auth/logout", {}); }
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "HTTP check failed"); process.exitCode = 1; });

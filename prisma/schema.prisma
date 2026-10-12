@@ -217,6 +217,7 @@ model PlatformSettings {
   mirrorProxyEnabled Boolean @default(false)
   javaImageType String @default("jre")
   enabledPackageFormats Int[] @default([1, 2])
+  maxUploadSizeMb Int @default(1024)
   updatedAt            DateTime @updatedAt @db.Timestamptz(6)
 }
 
