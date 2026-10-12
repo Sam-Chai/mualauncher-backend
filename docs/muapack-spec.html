@@ -65,7 +65,7 @@
 <hr>
 <header id="top">
   <h1><span lang="en">MUA Package Specification 1 &amp; 2</span><span>MUA 整合包规范 1 与 2</span></h1>
-  <p class="subtitle">协议快照：2026-10-11 · 中文 / English · 文件扩展名：<code>.muapack</code><br><span lang="en">Protocol snapshot: 11 October 2026 · Chinese / English · File extension: <code>.muapack</code></span></p>
+  <p class="subtitle">协议快照：2026-10-12 · 中文 / English · 文件扩展名：<code>.muapack</code><br><span lang="en">Protocol snapshot: 12 October 2026 · Chinese / English · File extension: <code>.muapack</code></span></p>
   <div class="pair"><p>本文件将现有 v1、v2 协议文档与当前实现契约整理为统一规范。两种格式并存；v2 不废弃 v1。本快照不是新的协议修订，不改变既有已签名内容。</p><p class="en" lang="en">This document consolidates the existing v1 and v2 documents and current implementation contracts into one specification. Both formats coexist; v2 does not retire v1. This snapshot is not a new protocol revision and does not alter previously signed content.</p></div>
 </header>
 
@@ -143,8 +143,8 @@ linux-amd64
 linux-aarch64
 macos-amd64
 macos-aarch64</code></pre>
-<div class="pair"><p>上述顺序为规范平台顺序。选择列表必须非空、无重复，最多六项；v2 的 <code>supportedPlatforms</code> 必须采用此顺序。输入入口可归一化 win32→windows、darwin→macos、x64／x86_64→amd64、arm64→aarch64，但包内只能使用规范值。v1 每个平台单独生成包；v2 同一配方包声明支持的平台集合，环境在端侧选择。</p><p class="en" lang="en">The list above defines canonical platform order. A selection MUST be nonempty, unique and contain at most six entries; v2 <code>supportedPlatforms</code> MUST use this order. Input gateways may normalize win32→windows, darwin→macos, x64/x86_64→amd64 and arm64→aarch64, but package values MUST be canonical. v1 produces a separate package per platform; a v2 recipe declares a set of supported platforms and selects its runtime on the Launcher.</p></div>
-<div class="note"><p>v1 发布 UI／API 默认选择除 <code>linux-aarch64</code> 外的五项；Linux ARM 选项灰色，并提示“Minecraft 目前暂未支持 ARM 版 Linux 系统”。新 v2 不出现架构选择器，统一声明六个规范目标，只生成一个通用配方包；相同目标和基准的包对所有系统字节相同。历史已签名平台声明不改写。v2 公开下载可省略平台，返回 <code>platform:universal</code>；它是分发标识，不是新增的操作系统平台。支持声明不等于真实游戏启动验收。</p><p class="en" lang="en">v1 publication defaults to five platforms, excluding <code>linux-aarch64</code>, disabled with the Linux ARM notice. New v2 uploads have no architecture selector, declare all six canonical targets and produce one universal recipe package, with identical bytes across systems for the same target and baseline. Historical signed platform declarations remain unchanged. Public v2 downloads may omit platform and return <code>platform:universal</code>, a distribution marker, not another OS platform. A support declaration is not game-launch acceptance.</p></div>
+<div class="pair"><p>上述六项枚举用于 v1 与历史 v2 平台声明。新 v2 的 <code>protocolRevision:2</code> 不声明发布平台集合，环境由 Launcher 按本机系统／架构解析。v1 与历史列表仍必须非空、唯一并采用规范顺序。</p><p class="en" lang="en">The six-platform enum applies to v1 and legacy v2 declarations. New v2 <code>protocolRevision:2</code> has no publication platform list; the Launcher resolves runtimes for its actual OS and architecture. v1 and legacy lists remain nonempty, unique and canonically ordered.</p></div>
+<div class="note"><p>v1 默认除 linux-aarch64 外五项，Linux ARM 控件及保护保留。新 v2 没有架构选择器、supportedPlatforms 或 platformsChanged；后台 universal 仅标识单一配方任务。公开新 v2 不返回平台字段，旧请求传入 platform 也不影响分发。历史包、审核目标与签名不改写，旧目标继续校验平台。不限定发布平台不保证任意系统可运行。</p><p class="en" lang="en">v1 defaults to five platforms excluding linux-aarch64, retaining Linux ARM controls. New v2 has no architecture selector, supportedPlatforms or platformsChanged; universal identifies an internal recipe task only. New public responses omit platform fields and ignore supplied platform parameters. Legacy packages, reviewed targets and signatures remain unchanged, with legacy target platform checks. Platform-independent publication does not guarantee runtime compatibility.</p></div>
 <h3>2.4 相互独立的版本字段 / <span lang="en">Independent version fields</span></h3>
 <div class="table-wrap"><table><thead><tr><th>文档 / Document</th><th>标识 / Identifier</th><th>版本字段 / Version field</th></tr></thead><tbody>
 <tr><td>包元数据 / Package metadata</td><td><code>format: muapack</code></td><td><code>formatVersion: 1 | 2</code></td></tr>
@@ -242,6 +242,7 @@ macos-aarch64</code></pre>
 <section id="v2">
 <h2>5. muapack v2</h2>
 <div class="pair"><p>v2 是基于 mrpack 的签名下载配方容器：MUA 保留本地 overrides 字节及完整发布／更新信息，Launcher 负责远程文件和运行环境。v2 不是 v1 的预安装包，也不是只含 URL 的空包；本地模组、配置和资源仍被保留。</p><p class="en" lang="en">v2 is a signed mrpack-based download-recipe container: MUA retains local override bytes and complete release/update information, while the Launcher obtains remote files and runtimes. v2 is neither a v1 prepared installation nor an empty URL-only package; local mods, configuration and resources remain included.</p></div>
+<div class="note"><p>2026-10-12 修订：mua-pack.json 与 target-manifest 必须为 protocolRevision:2，严格拒绝旧平台字段、未知修订及混用。签名域和算法不变；包修订直接绑定签名字节，目标修订由清单摘要绑定。没有修订号的原 v2 作为历史结构严格读取，旧 bytes／签名不改写。</p><p class="en" lang="en">Revision dated 12 October 2026: mua-pack.json and target manifests require protocolRevision:2 and strictly reject legacy platform fields, unknown revisions and mixed shapes. Signing domain and algorithm are unchanged: metadata revision is directly signed and target revision is bound by the manifest digest. Original v2 without a revision remains strictly readable as a legacy structure without rewriting signed bytes.</p></div>
 <h3 id="v2-layout">5.1 容器布局 / <span lang="en">Container layout</span></h3>
 <pre><code>client-1.4.3.muapack
 ├── mua-pack.json
@@ -254,10 +255,11 @@ macos-aarch64</code></pre>
 <h3 id="v2-metadata">5.2 <code>mua-pack.json</code></h3>
 <div class="table-wrap"><table><thead><tr><th>必需字段 / Required field</th><th>类型及规则 / Type and rule</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"muapack" / 2</code></td></tr>
+<tr><td><code>protocolRevision</code></td><td>固定 2，与目标一致；修订号参与签名字节 / Fixed 2, matching the target; included in signed bytes</td></tr>
 <tr><td><code>packageType</code></td><td><code>"full" | "update"</code></td></tr>
 <tr><td><code>target / base</code></td><td><code>ReleaseRef / ReleaseRef | null</code>；full 的 base 必须 null / full MUST have base=null</td></tr>
 <tr><td><code>indexSha256</code></td><td><code>modrinth.index.json</code> 精确字节 SHA-256 / SHA-256 of exact index bytes</td></tr>
-<tr><td><code>changes</code></td><td><code>{added, modified, removed, policyChanged, sourceChanged, runtimeChanged, launchChanged, platformsChanged}</code>；详见第 7 节 / See Section 7</td></tr>
+<tr><td><code>changes</code></td><td><code>{added, modified, removed, policyChanged, sourceChanged, runtimeChanged, launchChanged}</code>；详见第 7 节 / See Section 7</td></tr>
 <tr><td><code>payload</code></td><td><code>[{entry, sha256, size}]</code>；只含实际本地载荷，entry 唯一并排序 / Only actual local payload; entries unique and sorted</td></tr>
 <tr><td><code>removalPolicy</code></td><td><code>"retain" | "backup-managed"</code>；必须明确指定 / MUST be explicit</td></tr>
 <tr><td><code>minimumLauncherProtocol</code></td><td><code>2</code>；能力等级，不是 Launcher 软件版本 / A capability level, not a Launcher software version</td></tr>
@@ -266,7 +268,7 @@ macos-aarch64</code></pre>
 <div class="table-wrap"><table><caption><code>metadata/target-manifest.json</code></caption><thead><tr><th>必需字段 / Required field</th><th>类型及规则 / Type and rule</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"mua-recipe-manifest" / 2</code></td></tr>
 <tr><td><code>release</code></td><td>第 2.2 节完整身份 / Complete identity from Section 2.2</td></tr>
-<tr><td><code>supportedPlatforms</code></td><td>非空、唯一、规范顺序的平台数组 / Nonempty, unique platform array in canonical order</td></tr>
+<tr><td><code>protocolRevision</code></td><td>固定 2；无发布平台名单 / Fixed 2; no publication platform list</td></tr>
 <tr><td><code>runtime</code></td><td><code>{minecraft, loader, java, resolverVersion}</code>；详见第 5.5 节 / See Section 5.5</td></tr>
 <tr><td><code>launch</code></td><td><code>{jvmArgs, gameArgs, memory, preLaunch}</code>；没有固定 mainClass／classpath / No fixed mainClass/classpath</td></tr>
 <tr><td><code>files</code></td><td>1–100000 个 <code>RecipeFile</code>，按 path 的 UTF-16 顺序严格升序；全部属于实例 / 1–100000 RecipeFiles strictly ascending by UTF-16 path order, all within the instance</td></tr>
@@ -328,15 +330,15 @@ macos-aarch64</code></pre>
 <section id="updates">
 <h2>7. 整包、增量与安装语义 / <span lang="en">Full packages, deltas and installation</span></h2>
 <h3>7.1 基准关系 / <span lang="en">Base relationship</span></h3>
-<div class="pair"><p>full 必须 base=null，所有文件变化数组为空；v2 的 runtimeChanged、launchChanged、platformsChanged 为 null。update 必须携带完整基准与完整目标，两者同组织、同客户端、不同 releaseId 且不同版本标签；不能跨 v1／v2 应用。v1 平台必须相同；v2 应用更新的平台必须同时属于基准和目标 supportedPlatforms。</p><p class="en" lang="en">A full package MUST have base=null and empty file-change arrays; v2 runtimeChanged, launchChanged and platformsChanged are null. An update MUST carry complete base and target manifests for the same organization and client, with different releaseIds and version labels. Updates MUST NOT cross v1/v2. v1 platforms MUST match; a platform applying a v2 update MUST belong to both base and target supportedPlatforms.</p></div>
-<div class="pair"><p>差异必须从完整清单重新计算，不能凭版本标签或手填计数判断。后台当前只生成相对于上传时固定已发布基准的一个更新，不自动组合历史更新链；未发布草稿对比不代替玩家已发布基准。无合适基准、跨格式或无共同平台时生成／返回目标 full。版本标签相同内容不同也不能绕过新发布要求。</p><p class="en" lang="en">Differences MUST be recomputed from complete inventories, not inferred from version labels or supplied counts. The backend currently builds one update against the published base fixed at upload time, without composing historical update chains. Unpublished draft comparison does not replace the player's published base. No suitable base, a format transition or no common platform results in target full. Version labels cannot bypass the requirement for a new release when content changes.</p></div>
+<div class="pair"><p>full 必须 base=null，文件变化数组为空，runtimeChanged／launchChanged 为 null。update 必须携带完整原始基准与目标，同组织／客户端、不同 releaseId 和版本标签，不跨 v1／v2。v1 平台相同；新 v2 不检查平台集合，允许精确绑定历史 v2 基准。历史目标只接受历史基准并保留旧平台门槛。</p><p class="en" lang="en">Full packages require base=null, empty file-change arrays and null runtimeChanged/launchChanged. Updates carry complete original base and target bytes for the same organization/client and different release IDs and labels, without crossing v1/v2. v1 platforms match. New v2 has no platform gate and accepts an exact legacy v2 baseline; legacy targets retain legacy-only baselines and platform checks.</p></div>
+<div class="pair"><p>差异必须从完整清单重新计算，不能凭版本标签或手填计数判断。后台当前只生成相对于上传时固定已发布基准的一个更新，不自动组合历史更新链；未发布草稿对比不代替玩家已发布基准。无合适基准或跨格式时生成／返回目标 full；无共同平台仅影响 v1 与历史 v2 目标。版本标签相同内容不同也不能绕过新发布要求。</p><p class="en" lang="en">Differences MUST be recomputed from complete inventories, not inferred from version labels or supplied counts. The backend currently builds one update against the published base fixed at upload time, without composing historical update chains. Unpublished draft comparison does not replace the player's published base. No suitable base or a format transition results in target full; no common platform affects only v1 and legacy v2 targets. Version labels cannot bypass the requirement for a new release when content changes.</p></div>
 <h3>7.2 变化清单 / <span lang="en">Change lists</span></h3>
 <div class="table-wrap"><table><thead><tr><th>字段 / Field</th><th>v1</th><th>v2</th></tr></thead><tbody>
 <tr><td><code>added / removed</code></td><td colspan="2">新增／移除的完整文件描述 / Complete descriptors of added/removed files</td></tr>
 <tr><td><code>modified</code></td><td><code>{before,after}</code>；SHA-256、大小或 executable 改变 / SHA-256, size or executable changed</td><td><code>{before,after}</code>；source 类型、完整 hashes、大小或 executable 改变 / Source type, complete hashes, size or executable changed</td></tr>
 <tr><td><code>policyChanged</code></td><td colspan="2"><code>{before,after}</code>；policy 或 optional 改变，可与 modified 重叠 / Policy or optional changed; may overlap modified</td></tr>
 <tr><td><code>sourceChanged</code></td><td>无此字段 / Not present</td><td><code>{before,after}</code>；两者均 remote，内容未修改但 downloads 数组改变 / Both remote, content unchanged but downloads array changed</td></tr>
-<tr><td><code>runtimeChanged / launchChanged / platformsChanged</code></td><td>无此字段；完整目标仍绑定环境与启动信息 / Not present; full target still binds runtime and launch information</td><td><code>null | {before,after}</code>；对应对象／数组改变 / Corresponding object/array changed</td></tr>
+<tr><td><code>runtimeChanged / launchChanged</code></td><td>无此字段；目标仍绑定环境与启动信息 / Not present; target binds runtime and launch information</td><td><code>null | {before,after}</code>；新修订没有 platformsChanged / No platformsChanged in the new revision</td></tr>
 </tbody></table></div>
 <div class="pair"><p>v1 文件键为 root/path，变化列表按此键排序；v2 文件键为 path，变化列表按 path 排序。每一类内不得重复；before／after 的键必须相同。重命名表达为 removed+added，不猜测名称相近的文件是同一个文件。来源 URL 变化仍改变签名发布内容，但本身不代表需要重下载已校验的相同字节。</p><p class="en" lang="en">v1 file keys and change ordering use root/path; v2 uses path. Each category MUST be duplicate-free, and before/after keys MUST match. A rename is removed+added, not an inferred identity based on similar names. A source URL change still changes signed release content but does not itself require re-downloading already verified identical bytes.</p></div>
 <h3>7.3 载荷选择 / <span lang="en">Payload selection</span></h3>
@@ -353,7 +355,7 @@ macos-aarch64</code></pre>
 </dl>
 <h3>7.5 安装、修复与删除 / <span lang="en">Installation, repair and removal</span></h3>
 <ol>
-<li>先验证受信签名、清单关系与全部载荷；核对平台、真实本地基准 releaseId 与清单摘要，不能只信版本标签。<p class="en" lang="en">First verify the trusted signature, manifest relationships and all payload. Check platform, actual installed base releaseId and manifest digest, not merely a version label.</p></li>
+<li>先验证受信签名、清单关系与全部载荷；核对 v1／历史 v2 平台要求、真实本地基准 releaseId 与清单摘要；新 v2 环境按本机平台解析，不能只信版本标签。<p class="en" lang="en">First verify the trusted signature, manifest relationships and all payload. Check v1/legacy v2 platform requirements, actual installed base releaseId and manifest digest; new v2 runtimes resolve for the local platform, not merely a version label.</p></li>
 <li>准备目标文件与环境；未变化文件也必须校验存在与内容。缺失 v2 remote 文件按目标声明下载；缺失未携带的 v2 local 文件从同目标摘要的 full 修复；v1 复用已校验对象或从目标完整包修复。<p class="en" lang="en">Prepare target files and runtimes; unchanged files also require presence and content checks. Fetch missing v2 remote files from target declarations; repair missing, omitted v2 local files from full with the same target digest. v1 reuses verified objects or repairs from target full.</p></li>
 <li>新 Java 环境应形成完整的新摘要目录，可复用旧环境相同字节，不得原地修改其他客户端共享的旧环境。<p class="en" lang="en">A new Java environment SHOULD form a complete new digest-addressed directory, reusing identical verified old bytes without modifying an old environment shared by other clients.</p></li>
 <li>成功后原子提交 releaseId、目标清单摘要、平台、文件记录及 v2 环境锁定；失败保留上一安装状态。事务与崩溃恢复须由 Launcher 实现。<p class="en" lang="en">After success, atomically commit releaseId, target digest, platform, file records and the v2 runtime lock. Failure preserves the prior installation state. Transactions and crash recovery require Launcher implementation.</p></li>
@@ -398,23 +400,23 @@ keyId             = hex(SHA256(SPKI_DER(publicKey)))[0:24]</code></pre>
     &amp;baseReleaseId={installed-release-uuid}
     &amp;baseManifestSha256={installed-manifest-sha256}</code></pre>
 <div class="table-wrap"><table><thead><tr><th>查询参数 / Query</th><th>规则 / Rule</th></tr></thead><tbody>
-<tr><td><code>platform</code></td><td>v1 必需规范平台；v2 可省略或使用 universal，旧请求的规范平台仍检查历史声明 / Canonical platform required for v1; optional or universal for v2; legacy canonical requests still check declared support</td></tr>
+<tr><td><code>platform</code></td><td>v1 必需规范平台；新 v2 不需要且忽略旧参数，历史 v2 保留原检查 / Required canonical value for v1; unnecessary and ignored for new v2; legacy v2 retains original checks</td></tr>
 <tr><td><code>acceptedFormatVersions</code></td><td>可选 <code>1</code>、<code>2</code>、<code>1,2</code> 或 <code>2,1</code>；缺省只接受 1；不允许重复或其他值 / Optional listed values; defaults to 1 only; duplicates and other values invalid</td></tr>
 <tr><td><code>baseReleaseId</code></td><td>可选已安装发布 UUID；只有匹配预构建基准才选择 update / Optional installed release UUID; update requires the prebuilt base</td></tr>
 <tr><td><code>baseManifestSha256</code></td><td>可选小写 SHA-256，提供时必须有 baseReleaseId；建议端侧提供。v1／v2 摘要不符回退 full / Optional lowercase SHA-256, requires baseReleaseId; recommended; v1/v2 mismatch falls back to full</td></tr>
 </tbody></table></div>
-<div class="pair"><p>发现接口的能力协商只检查当前发布格式，不因请求顺序选择旧发布。未匹配基准、基准平台不兼容或 v1／v2 基准摘要不符时返回目标 full；update 只能用于明确基准，同时提供 full 修复入口。v1 基准摘要为包内平台清单，不能使用旧 /manifest 的发布清单摘要代替；v2 为配方清单摘要。旧 v1 READY 缺少基准摘要字段时验证并推导封存平台清单，不改写旧记录／签名。无平台的 v2 请求要求基准覆盖目标的平台声明才返回 update；兼容历史受限包。</p><p class="en" lang="en">Discovery negotiates only the current release format; capability ordering never selects historical releases. An unmatched base, incompatible platform or v1/v2 base-digest mismatch returns target full, with a full repair entry for updates. A v1 base digest identifies the packaged platform manifest, not the legacy /manifest release document; v2 uses the recipe manifest. Legacy v1 READY artifacts lacking that field derive it from verified sealed platform bytes without rewriting records or signatures. A platform-free v2 update request requires the base to cover the target's declared platforms, preserving restricted legacy packages.</p></div>
+<div class="pair"><p>能力协商只检查目标发布格式，不因顺序选择旧版本。基准 ID／摘要不符回退 full；平台门槛仅用于 v1 与历史 v2 目标。新 v2 可使用精确绑定的历史 v2 基准，不检查平台覆盖。v1 摘要为包内平台清单，v2 为配方清单；旧 v1 READY 缺少基准摘要时验证并推导，不改写签名。</p><p class="en" lang="en">Negotiation checks the target release format without selecting older versions by capability order. Base ID/digest mismatch falls back to full. Platform gates apply only to v1 and legacy v2 targets; new v2 accepts exact legacy v2 baselines without coverage checks. v1 base digests identify packaged platform manifests and v2 digests identify recipe manifests. Missing legacy v1 READY base digests are verified and derived without rewriting signatures.</p></div>
 <h3>9.2 成功响应 / <span lang="en">Successful response</span></h3>
 <div class="table-wrap"><table><thead><tr><th>字段 / Field</th><th>规则 / Rule</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"muapack" / 1|2</code></td></tr>
-<tr><td><code>releaseId / version / platform</code></td><td>目标身份、版本和请求平台；无平台的 v2 返回 universal / Target identity, version and requested platform; platform-free v2 returns universal</td></tr>
+<tr><td><code>releaseId / version</code></td><td>目标身份／版本；platform 仅用于 v1 和历史 v2 响应 / Target identity/version; platform appears only in v1 and legacy v2 responses</td></tr>
 <tr><td><code>packageType / baseReleaseId</code></td><td><code>full|update</code>；full 基准 ID 为 null / full has a null base ID</td></tr>
 <tr><td><code>sha256 / size / url / expiresIn / expiresAt</code></td><td>所选 ZIP 摘要、字节大小、S3 GET 预签名 URL、有效秒数（300）及 UTC 到期时间 / Selected ZIP digest, byte size, S3 presigned GET URL, lifetime (300 seconds) and UTC expiry</td></tr>
 <tr><td><code>etag / refreshUrl / baseManifestSha256</code></td><td>S3 原始 ETag（可为 null）、固定 releaseId／包摘要的相对刷新地址、update 的精确基准清单摘要（full 为 null） / Opaque S3 ETag (nullable), relative renewal URL pinned to releaseId/package digest, and exact update base-manifest digest (null for full)</td></tr>
 <tr><td><code>targetManifestSha256 / signingKeyId</code></td><td>目标清单摘要及包签名密钥标识 / Target manifest digest and package signing key identifier</td></tr>
 <tr><td><code>full</code></td><td><code>{sha256,size,etag,url,expiresIn,expiresAt,refreshUrl}</code>；始终指向同目标完整包，刷新不带更新基准 / Always the same target's full package, renewed without an update base</td></tr>
 <tr><td><code>mods</code></td><td>含路径、名称／版本及显式 optional；v2 另含 source=local|remote 和 hashes / Includes path, name/version and explicit optional; v2 also includes source=local|remote and hashes</td></tr>
-<tr><td>v2 额外字段 / Additional v2 fields</td><td><code>minimumLauncherProtocol:2</code>、<code>supportedPlatforms</code>、<code>runtime</code></td></tr>
+<tr><td>v2 额外字段 / Additional v2 fields</td><td><code>minimumLauncherProtocol:2</code>、<code>protocolRevision:2</code>、<code>runtime</code>；supportedPlatforms 仅用于历史结构 / supportedPlatforms only in legacy structures</td></tr>
 </tbody></table></div>
 <h3 id="download-renewal">9.3 固定发布刷新与 S3 续传 / <span lang="en">Pinned release renewal and S3 resumption</span></h3>
 <pre><code>GET /api/v1/servers/{serverId}/releases/{releaseId}/packages
@@ -488,7 +490,7 @@ node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mj
 
 <section id="status">
 <h2>12. 实现范围 / <span lang="en">Implementation status</span></h2>
-<p>截至 2026-10-11 的后台快照；不是平台启动兼容认证。<br><span class="en" lang="en">Backend snapshot as of 11 October 2026; not a platform launch-compatibility certification.</span></p>
+<p>截至 2026-10-12 的后台快照；不是平台启动兼容认证。<br><span class="en" lang="en">Backend snapshot as of 12 October 2026; not a platform launch-compatibility certification.</span></p>
 <div class="table-wrap"><table><thead><tr><th>能力 / Capability</th><th>状态 / Status</th></tr></thead><tbody>
 <tr><td>v1 多平台环境准备、缓存、完整／更新组包 / v1 platform runtimes, cache, full/update builds</td><td>已接入；按当前环境适配器支持边界 / Integrated within current environment-adapter boundaries</td></tr>
 <tr><td>v2 本地 CAS、完整／自动增量组包 / v2 local CAS and full/automatic delta builds</td><td>已接入；后台不下载 remote 或环境 / Integrated; backend does not fetch remote files or runtimes</td></tr>
@@ -515,6 +517,6 @@ node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mj
 </ul>
 </section>
 <hr>
-<footer><p>MUA Platform · muapack 1 &amp; 2 · 2026-10-11 · UTF-8<br>单文件 HTML，可离线阅读与打印。示例／源码链接需保留仓库目录结构。<br><span lang="en">Single-file HTML for offline reading and printing. Example/source links require the repository directory structure.</span></p><a href="#top">返回顶部 / Back to top ↑</a></footer>
+<footer><p>MUA Platform · muapack 1 &amp; 2 · 2026-10-12 · UTF-8<br>单文件 HTML，可离线阅读与打印。示例／源码链接需保留仓库目录结构。<br><span lang="en">Single-file HTML for offline reading and printing. Example/source links require the repository directory structure.</span></p><a href="#top">返回顶部 / Back to top ↑</a></footer>
 </body>
 </html>

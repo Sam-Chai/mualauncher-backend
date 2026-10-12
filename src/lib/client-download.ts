@@ -47,14 +47,17 @@ export async function publicFile(db: Db, serverId: string, sha256: string) {
 /** Same resolver for latest discovery and fixed-release URL renewal. Never accept an OSS key from the caller. */
 export async function publicPackage(db: Db, serverId: string, platformInput: string | null, baseReleaseId: string | null, acceptedFormats: string | null = null, baseManifestSha256: string | null = null, releaseId: string | null = null, packageSha256: string | null = null) {
   const platform = muaPlatformSchema.safeParse(platformInput);
-  invariant(platformInput === null || platformInput === "universal" || platform.success, 400, "platform 无效");
   if (baseReleaseId !== null) uuid(baseReleaseId);
   invariant(baseManifestSha256 === null || !!baseReleaseId && /^[a-f0-9]{64}$/.test(baseManifestSha256), 400, "基准清单摘要无效或缺少基准发布 ID");
   invariant(packageSha256 === null || /^[a-f0-9]{64}$/.test(packageSha256), 400, "下载包摘要无效");
   const { release, bytes } = await publicManifest(db, serverId, acceptedFormats, releaseId);
   if (release.packageFormatVersion === 2) {
     const target = publishedDocument(() => readRecipeManifest(bytes));
-    invariant(!platform.success || target.supportedPlatforms.includes(platform.data), 404, "当前 v2 发布不支持此平台");
+    const legacy = "supportedPlatforms" in target;
+    if (legacy) {
+      invariant(platformInput === null || platformInput === "universal" || platform.success, 400, "platform 无效");
+      invariant(!platform.success || target.supportedPlatforms.includes(platform.data), 404, "当前 v2 发布不支持此平台");
+    }
     const draft = await db.clientDraft.findUniqueOrThrow({ where: { id: release.sourceDraftId } });
     const build = await db.packageBuild.findUnique({ where: { draftId_platform_revision: { draftId: draft.id, platform: "universal", revision: draft.packageRevision } } });
     invariant(build?.required && build.status === "READY" && build.targetSha256 === release.manifestSha256 && build.targetObjectKey === release.manifestObjectKey, 404, "v2 完整包尚未提供");
@@ -67,13 +70,14 @@ export async function publicPackage(db: Db, serverId: string, platformInput: str
       if (!base) update = null;
       else {
         invariant(update.baseManifestSha256 === base.release.manifestSha256, 503, "v2 更新包基准摘要不一致");
-        const covered = platform.success ? base.target.supportedPlatforms.includes(platform.data) : target.supportedPlatforms.every(value => base.target.supportedPlatforms.includes(value));
+        const basePlatforms = "supportedPlatforms" in base.target ? base.target.supportedPlatforms : null;
+        const covered = !legacy || basePlatforms !== null && (platform.success ? basePlatforms.includes(platform.data) : target.supportedPlatforms.every(value => basePlatforms.includes(value)));
         if (!covered || baseManifestSha256 !== null && baseManifestSha256 !== base.release.manifestSha256) update = null;
       }
     }
-    const download = await packageLinks(serverId, release.id, 2, platform.success ? platform.data : null, full, update, update?.baseManifestSha256 ?? null, packageSha256);
+    const download = await packageLinks(serverId, release.id, 2, legacy && platform.success ? platform.data : null, full, update, update?.baseManifestSha256 ?? null, packageSha256);
     return { format: "muapack", formatVersion: 2, minimumLauncherProtocol: 2, releaseId: release.id, version: release.versionLabel,
-      platform: platform.success ? platform.data : "universal", supportedPlatforms: target.supportedPlatforms, runtime: target.runtime,
+      ...(legacy ? { platform: platform.success ? platform.data : "universal", supportedPlatforms: target.supportedPlatforms } : { protocolRevision: target.protocolRevision }), runtime: target.runtime,
       ...download, targetManifestSha256: release.manifestSha256, signingKeyId: artifacts.signingKeyId,
       mods: target.files.filter(file => /^mods\/.+\.jar$/i.test(file.path)).map(file => ({ path: file.path, name: null, version: null, optional: file.optional, source: file.source.type, hashes: file.hashes })),
     };

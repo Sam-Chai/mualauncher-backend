@@ -13,6 +13,7 @@ import { hashPassword, verifyPassword } from "../src/lib/password";
 import { requireServer, expandRoles } from "../src/lib/rbac";
 import { sameOrigin } from "../src/lib/http";
 import { publishedServers } from "../src/lib/catalog";
+import { securityFunction } from "../src/lib/database-security";
 import * as m from "../src/lib/management";
 import * as c from "../src/lib/client-service";
 import { requireClient } from "../src/lib/rbac";
@@ -54,7 +55,7 @@ test("pipelined Prisma transactions preserve dependency order, abort and rollbac
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions"]) {
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions", "202610120004_v2_platform_independent", "202610120005_server_display_schedule"]) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -276,6 +277,62 @@ async function releaseFixture(db: Db, actor: Actor) {
   await db.client.update({ where: { id: "NPR" }, data: { currentReleaseId: release.id } });
   return { draft, release };
 }
+
+test("display windows filter discovery at inclusive start/exclusive end without unpublishing or blocking download snapshots", () => isolated(async db => {
+  const f = await fixture(db); const { release } = await releaseFixture(db, f.root);
+  await db.serverPublication.update({ where: { serverId: "NPR" }, data: { releaseId: release.id } });
+  await m.updateServer(db, f.root, "NPR", { isListed: true });
+  const [{ now }] = await db.$queryRaw<{ now: Date }[]>`SELECT CURRENT_TIMESTAMP AS now`;
+  const start = new Date(now.getTime() - 60_000), end = new Date(now.getTime() + 60_000);
+  await m.updateServer(db, f.root, "NPR", { displayMode: "RANGE", displayStartsAt: start.toISOString(), displayEndsAt: end.toISOString() });
+  for (const [at, visible] of [[start.getTime()-1, false], [start.getTime(), true], [end.getTime()-1, true], [end.getTime(), false]] as const)
+    assert.equal((await publishedServers(db, new Date(at))).length, visible ? 1 : 0);
+  const directory = async () => (await db.$queryRaw<{ rows: { serverId: string; displayMode: string; displayStartsAt: string; displayEndsAt: string }[] }[]>`SELECT ${securityFunction("public_servers")}() AS rows`)[0].rows;
+  assert.equal((await directory())[0].displayMode, "RANGE");
+  assert.equal(Date.parse((await directory())[0].displayStartsAt), start.getTime());
+  const binding = await db.serverPublication.findUniqueOrThrow({ where: { serverId: "NPR" } });
+  // Use the database transaction clock for exact SQL boundary checks, including microseconds.
+  await db.$executeRaw`UPDATE "Server" SET "displayStartsAt"=CURRENT_TIMESTAMP,"displayEndsAt"=CURRENT_TIMESTAMP+interval '1 minute' WHERE "serverId"='NPR'`;
+  assert.equal((await directory()).length, 1);
+  await db.$executeRaw`UPDATE "Server" SET "displayStartsAt"=CURRENT_TIMESTAMP-interval '1 minute',"displayEndsAt"=CURRENT_TIMESTAMP WHERE "serverId"='NPR'`;
+  assert.equal((await directory()).length, 0);
+  for (const releaseId of [null, release.id]) {
+    const [{ snapshot }] = await db.$queryRaw<{ snapshot: unknown }[]>`SELECT ${securityFunction("public_snapshot")}('NPR',${releaseId}::uuid) AS snapshot`;
+    assert(snapshot, "current and pinned download snapshots survive display expiry");
+  }
+  assert.equal((await db.server.findUniqueOrThrow({ where: { serverId: "NPR" } })).isListed, true);
+  assert.deepEqual(await db.serverPublication.findUniqueOrThrow({ where: { serverId: "NPR" } }), binding);
+  assert.deepEqual(await db.clientRelease.findUniqueOrThrow({ where: { id: release.id } }), release);
+  const row = (await c.clientList(db, f.root)).find(row => row.clientId === "NPR")!;
+  assert.equal(row.lifecycleStatus, "PUBLISHED"); assert.equal(row.displaySchedule?.displayMode, "RANGE");
+  await db.$executeRaw`UPDATE "Server" SET "displayStartsAt"=CURRENT_TIMESTAMP+interval '1 minute',"displayEndsAt"=CURRENT_TIMESTAMP+interval '2 minutes' WHERE "serverId"='NPR'`;
+  assert.equal((await directory()).length, 0);
+  await m.updateServer(db, f.root, "NPR", { displayMode: "PERMANENT" });
+  assert.equal((await directory()).length, 1);
+  assert.equal((await db.server.findUniqueOrThrow({ where: { serverId: "NPR" } })).displayEndsAt, null);
+  await m.updateServer(db, f.root, "NPR", { isListed: false });
+  assert.equal((await directory()).length, 0);
+  const [{ snapshot }] = await db.$queryRaw<{ snapshot: unknown }[]>`SELECT ${securityFunction("public_snapshot")}('NPR',NULL::uuid) AS snapshot`;
+  assert.equal(snapshot, null, "manual unlisting still blocks public downloads");
+}));
+
+test("display settings reject invalid windows and unauthorized edits", () => isolated(async db => {
+  const f = await fixture(db);
+  for (const patch of [
+    { displayMode: "RANGE" }, { displayMode: null }, { displayMode: "OTHER" },
+    { displayMode: "RANGE", displayStartsAt: "2026-01-01T00:00:00Z", displayEndsAt: "2026-01-01T00:00:00Z" },
+    { displayMode: "RANGE", displayStartsAt: "2026-01-01T00:00:00", displayEndsAt: "2026-01-02T00:00:00Z" },
+    { displayMode: "RANGE", displayStartsAt: "2026-01-01T00:00:00+99:99", displayEndsAt: "2026-01-02T00:00:00Z" },
+    { displayMode: "PERMANENT", displayStartsAt: "2026-01-01T00:00:00Z" },
+  ]) await assert.rejects(m.updateServer(db, f.root, "NPR", patch), denied(400));
+  await assert.rejects(m.updateServer(db, f.admin, "NPR", { displayMode: "PERMANENT" }), denied(403));
+  await sqlDenied(db, () => db.server.update({ where: { serverId: "NPR" }, data: { displayMode: "RANGE" } }));
+  await m.updateServer(db, f.root, "NPR", { displayMode: "RANGE", displayStartsAt: "2026-01-01T08:00:00+08:00", displayEndsAt: "2026-01-02T00:00:00Z" });
+  await m.updateServer(db, f.root, "NPR", { displayEndsAt: "2026-01-03T00:00:00Z" });
+  const server = await db.server.findUniqueOrThrow({ where: { serverId: "NPR" } });
+  assert.equal(server.displayStartsAt?.toISOString(), "2026-01-01T00:00:00.000Z");
+  assert.equal(server.displayEndsAt?.toISOString(), "2026-01-03T00:00:00.000Z");
+}));
 
 test("published snapshots are immutable; same-organization servers cannot share a release", () => isolated(async db => {
   const f = await fixture(db); const { draft, release } = await releaseFixture(db, f.root);

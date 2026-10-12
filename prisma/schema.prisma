@@ -131,6 +131,9 @@ model Server {
   iconObjectKey  String?
   sortOrder      Int                @default(0)
   themeColor     String?            @db.VarChar(7)
+  displayMode    String            @default("PERMANENT") @db.VarChar(16)
+  displayStartsAt DateTime?         @db.Timestamptz(6)
+  displayEndsAt   DateTime?         @db.Timestamptz(6)
   isListed       Boolean            @default(false)
   archivedAt     DateTime?          @db.Timestamptz(6)
   createdAt      DateTime           @default(now()) @db.Timestamptz(6)

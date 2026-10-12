@@ -1,12 +1,12 @@
 import "server-only";
 import type { Db } from "./auth";
 
-export async function publishedServers(db: Db) {
+export async function publishedServers(db: Db, now = new Date()) {
   const servers = await db.server.findMany({
-    where: { isListed: true, archivedAt: null, organization: { archivedAt: null },
-      publication: { client: { archivedAt: null }, release: { archivedAt: null } } },
+    where: { OR: [{ displayMode: "PERMANENT" }, { displayMode: "RANGE", displayStartsAt: { lte: now }, displayEndsAt: { gt: now } }], isListed: true, archivedAt: null, organization: { archivedAt: null },
+      publication: { client: { archivedAt: null, deletedAt: null }, release: { archivedAt: null } } },
     orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }],
-    select: { serverId: true, displayName: true, description: true, gameAddress: true, themeColor: true, sortOrder: true,
+    select: { displayMode: true, displayStartsAt: true, displayEndsAt: true, serverId: true, displayName: true, description: true, gameAddress: true, themeColor: true, sortOrder: true,
       organization: { select: { id: true, displayName: true } }, publication: { select: { revision: true, release: {
         select: { id: true, clientId: true, versionLabel: true, name: true, manifestSha256: true, packageFormatVersion: true } } } } },
   });

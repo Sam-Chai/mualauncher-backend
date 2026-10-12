@@ -43,20 +43,31 @@ function validateContent(value: { runtime: z.infer<typeof contentShape.runtime>;
   } catch (error) { ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : "v2 配方无效" }); }
 }
 export const recipeContentSchema = z.object({ format: z.literal("mua-recipe-content"), formatVersion: z.literal(2), ...contentShape }).strict().superRefine(validateContent);
-export const recipeManifestSchema = z.object({ format: z.literal("mua-recipe-manifest"), formatVersion: z.literal(2), ...contentShape,
-  supportedPlatforms: selectedPlatformsSchema.refine(values => values.every((value, i) => i === 0 || MUA_PLATFORMS.indexOf(values[i - 1]) < MUA_PLATFORMS.indexOf(value)), "v2 平台必须按规范顺序排列") }).strict().superRefine(validateContent);
+export const RECIPE_PROTOCOL_REVISION = 2;
+const manifestShape = { format: z.literal("mua-recipe-manifest"), formatVersion: z.literal(2), ...contentShape };
+const legacyRecipeManifestSchema = z.object({ ...manifestShape,
+  supportedPlatforms: selectedPlatformsSchema.refine(values => values.every((value, i) => i === 0 || MUA_PLATFORMS.indexOf(values[i - 1]) < MUA_PLATFORMS.indexOf(value)), "v2 平台必须按规范顺序排列") }).strict();
+// Keep the original signed shape readable; never strip fields or normalize signed bytes.
+export const recipeManifestSchema = z.union([
+  z.object({ ...manifestShape, protocolRevision: z.literal(RECIPE_PROTOCOL_REVISION) }).strict(),
+  legacyRecipeManifestSchema,
+]).superRefine(validateContent);
 export type RecipeContent = z.infer<typeof recipeContentSchema>;
 export type RecipeManifest = z.infer<typeof recipeManifestSchema>;
 export const recipeReleaseRefSchema = z.object({ organizationId: z.string().uuid(), clientId: text, releaseId: z.string().uuid(), version: text, manifestSha256: sha256Schema }).strict();
 const pair = z.object({ before: recipeFileSchema, after: recipeFileSchema }).strict();
-export const recipePackMetadataSchema = z.object({ format: z.literal("muapack"), formatVersion: z.literal(2), packageType: z.enum(["full", "update"]),
-  target: recipeReleaseRefSchema, base: recipeReleaseRefSchema.nullable(), indexSha256: sha256Schema,
-  changes: z.object({ added: z.array(recipeFileSchema), modified: z.array(pair), removed: z.array(recipeFileSchema), policyChanged: z.array(pair), sourceChanged: z.array(pair),
+const changesShape = { added: z.array(recipeFileSchema), modified: z.array(pair), removed: z.array(recipeFileSchema), policyChanged: z.array(pair), sourceChanged: z.array(pair),
     runtimeChanged: z.object({ before: contentShape.runtime, after: contentShape.runtime }).strict().nullable(),
-    launchChanged: z.object({ before: launch, after: launch }).strict().nullable(),
-    platformsChanged: z.object({ before: selectedPlatformsSchema, after: selectedPlatformsSchema }).strict().nullable() }).strict(),
+    launchChanged: z.object({ before: launch, after: launch }).strict().nullable() };
+const metadataShape = { format: z.literal("muapack"), formatVersion: z.literal(2), packageType: z.enum(["full", "update"]),
+  target: recipeReleaseRefSchema, base: recipeReleaseRefSchema.nullable(), indexSha256: sha256Schema,
   payload: z.array(z.object({ entry: muaPathSchema, sha256: sha256Schema, size: z.number().int().min(0).max(2 * 1024 ** 3) }).strict()).max(100000),
-  removalPolicy: z.enum(["retain", "backup-managed"]), minimumLauncherProtocol: z.literal(2) }).strict();
+  removalPolicy: z.enum(["retain", "backup-managed"]), minimumLauncherProtocol: z.literal(2) };
+export const recipePackMetadataSchema = z.union([
+  z.object({ ...metadataShape, protocolRevision: z.literal(RECIPE_PROTOCOL_REVISION), changes: z.object(changesShape).strict() }).strict(),
+  z.object({ ...metadataShape, changes: z.object({ ...changesShape,
+    platformsChanged: z.object({ before: selectedPlatformsSchema, after: selectedPlatformsSchema }).strict().nullable() }).strict() }).strict(),
+]);
 export type RecipePackMetadata = z.infer<typeof recipePackMetadataSchema>;
 export const recipeSignatureSchema = z.object({ format: z.literal("mua-pack-signature"), formatVersion: z.literal(2), algorithm: z.literal("Ed25519"),
   keyId: z.string().regex(/^[a-f0-9]{24}$/), metadataSha256: sha256Schema, signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/) }).strict();

@@ -78,6 +78,17 @@ test("all runtime roles are restricted and every business table forces RLS", asy
   assert.deepEqual(mapping.map(row => `${row.role}:${row.permission}`), Object.entries(rolePermissions).flatMap(([role, permissions]) => permissions.map(p => `${role}:${p}`)).sort());
   for (const db of [web, auth, worker, pub]) await assert.rejects(db.$executeRawUnsafe("SET ROLE mua_owner"));
 });
+
+test("display schedules require a superadmin panel in both application and database writes", async () => {
+  const schedule = { displayMode: "RANGE", displayStartsAt: "2026-01-01T00:00:00Z", displayEndsAt: "2026-01-02T00:00:00Z" };
+  await as(f.admin, async db => {
+    await assert.rejects(m.updateServer(db, f.admin, "AAA", schedule));
+    await rejected(db, () => db.server.update({ where: { serverId: "AAA" }, data: schedule }));
+  });
+  await as(f.root, db => m.updateServer(db, f.root, "AAA", schedule));
+  assert.equal((await as(f.reader, db => m.getState(db, f.reader))).organizations[0].servers.find(server => server.serverId === "AAA")?.displayMode, "RANGE");
+  await as(f.root, db => m.updateServer(db, f.root, "AAA", { displayMode: "PERMANENT" }));
+});
 test("missing context denies reads and writes; restricted pools reset identity on commit and rollback", async () => {
   assert.equal(await web.server.count(), 0); assert.equal(await web.client.count(), 0);
   await assert.rejects(web.server.create({ data: { serverId: "CCC", organizationId: f.org.id, displayName: "deny" } }));

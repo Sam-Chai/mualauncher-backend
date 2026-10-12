@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Actor, Db } from "./auth";
 import { invariant } from "./errors";
+import { displayScheduleSchema } from "./server-display";
 import * as input from "./input";
 import { hashPassword } from "./password";
 import { enabledPackageFormats } from "./package-format-settings";
@@ -43,6 +44,7 @@ export async function getState(db: Db, actor: Actor) {
       return [{ serverId: server.serverId, organizationId: organization.id, displayName: server.displayName, description: server.description,
         gameAddress: server.gameAddress, iconObjectKey: server.iconObjectKey, sortOrder: server.sortOrder, themeColor: server.themeColor,
         mottoImageUrl: serverMottoUrl(server.iconObjectKey, organization.id, server.serverId),
+        displayMode: server.displayMode, displayStartsAt: server.displayStartsAt, displayEndsAt: server.displayEndsAt,
         isListed: server.isListed, archivedAt: server.archivedAt, clientArchivedAt: server.publication?.client?.archivedAt ?? null,
         currentReleaseId: server.publication?.releaseId ?? null, currentReleaseActive: releaseStates.get(server.serverId) ?? false,
         publicationRevision: server.publication?.revision ?? 0, boundClientId: server.publication?.clientId ?? null, boundClientName: server.publication?.client?.name ?? null, permissions: [...new Set(rights)] }];
@@ -124,8 +126,8 @@ export async function createServer(db: Db, actor: Actor, raw: unknown) {
 
 export async function updateServer(db: Db, actor: Actor, id: string, raw: unknown) {
   const { server } = await requireServer(db, actor, id, "SERVER_EDIT");
-  const data = input.fields(raw, ["displayName", "description", "gameAddress", "iconObjectKey", "sortOrder", "themeColor", "isListed"]);
-  if (["sortOrder", "themeColor", "isListed"].some(key => key in data)) superOnly(actor);
+  const data = input.fields(raw, ["displayName", "description", "gameAddress", "iconObjectKey", "sortOrder", "themeColor", "isListed", "displayMode", "displayStartsAt", "displayEndsAt"]);
+  if (["sortOrder", "themeColor", "isListed", "displayMode", "displayStartsAt", "displayEndsAt"].some(key => key in data)) superOnly(actor);
   const update: Prisma.ServerUpdateInput = {};
   if ("displayName" in data) update.displayName = input.text(data, "displayName");
   if ("description" in data) update.description = input.text(data, "description", 5000, false);
@@ -147,6 +149,15 @@ export async function updateServer(db: Db, actor: Actor, id: string, raw: unknow
   if ("isListed" in data) {
     update.isListed = input.bool(data, "isListed");
     invariant(!update.isListed || !server.client?.archivedAt, 409, "客户端已归档，不能上架");
+  }
+  if (["displayMode", "displayStartsAt", "displayEndsAt"].some(key => key in data)) {
+    const schedule = displayScheduleSchema.safeParse({
+      displayMode: "displayMode" in data ? data.displayMode : server.displayMode,
+      displayStartsAt: "displayStartsAt" in data ? data.displayStartsAt : data.displayMode === "PERMANENT" ? null : server.displayStartsAt?.toISOString() ?? null,
+      displayEndsAt: "displayEndsAt" in data ? data.displayEndsAt : data.displayMode === "PERMANENT" ? null : server.displayEndsAt?.toISOString() ?? null,
+    });
+    invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? "展示配置无效");
+    Object.assign(update, schedule.data);
   }
   await db.server.update({ where: { serverId: id }, data: update });
   await audit(db, actor, "SERVER_EDIT", "Server", id, server.organizationId, id, { fields: Object.keys(data) });

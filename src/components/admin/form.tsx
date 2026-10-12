@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from "@/components/preferences";
 import { useState, type ReactNode } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { LoaderCircle, Plus } from "lucide-react";
@@ -15,22 +15,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { api, useAdmin } from "./provider";
 export type Values = Record<string, string | boolean | string[]>;
-export type Field = { name: string; label: string; type?: "text" | "password" | "textarea" | "number" | "checkbox" | "select" | "roles"; hint?: string; placeholder?: string; options?: { value: string; label: string; disabled?: boolean; translate?: boolean }[]; autoComplete?: string };
+export type Field = { visibleWhen?: { name: string; value: string }; name: string; label: string; type?: "datetime-local" | "text" | "password" | "textarea" | "number" | "checkbox" | "select" | "roles"; hint?: string; placeholder?: string; options?: { value: string; label: string; disabled?: boolean; translate?: boolean }[]; autoComplete?: string };
 export const nameSchema = z.string().trim().min(1, "请填写名称").max(200, "最多 200 个字符");
 export const textSchema = (max = 5000) => z.string().trim().max(max, `最多 ${max} 个字符`);
 export const passwordSchema = z.string().min(12, "密码至少 12 个字符").max(128, "密码最多 128 个字符");
 export function SchemaForm({ schema, fields, defaults, onSubmit, disabled = false, label = "保存" }: { schema: z.ZodType<Values>; fields: Field[]; defaults: Values; onSubmit: (values: Values) => Promise<boolean>; disabled?: boolean; label?: string }) {
   const { t } = useI18n();
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: defaults });
+  const values = useWatch({ control: form.control });
   return <Form {...form}><form onSubmit={form.handleSubmit(async values => { await onSubmit(values); })} className="space-y-5">
     <fieldset disabled={disabled || form.formState.isSubmitting} className="space-y-5">
-      {fields.map(spec => <FormField key={spec.name} control={form.control} name={spec.name} render={({ field }) => <FormItem>
+      {fields.filter(spec => !spec.visibleWhen || values[spec.visibleWhen.name] === spec.visibleWhen.value).map(spec => <FormField key={spec.name} control={form.control} name={spec.name} render={({ field }) => <FormItem>
         {spec.type !== "checkbox" && <FormLabel>{t(spec.label)}</FormLabel>}
         {spec.type === "checkbox" ? <div className="flex items-center gap-2"><FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={disabled || form.formState.isSubmitting} /></FormControl><FormLabel>{t(spec.label)}</FormLabel></div>
           : spec.type === "roles" ? <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">{spec.options?.map(option => <label key={option.value} className="flex items-center gap-2 text-sm"><Checkbox checked={Array.isArray(field.value) && field.value.includes(option.value)} disabled={disabled || form.formState.isSubmitting || option.disabled} onCheckedChange={checked => field.onChange(checked ? [...(Array.isArray(field.value) ? field.value : []), option.value] : (Array.isArray(field.value) ? field.value : []).filter(value => value !== option.value))} />{option.translate === false ? option.label : t(option.label)}</label>)}</div>
           : spec.type === "select" ? <Select value={String(field.value ?? "")} onValueChange={field.onChange} disabled={disabled || form.formState.isSubmitting}><FormControl><SelectTrigger className="w-full"><SelectValue placeholder={t("请选择")} /></SelectTrigger></FormControl><SelectContent>{spec.options?.map(option => <SelectItem key={option.value} value={option.value} disabled={option.disabled}>{option.translate === false ? option.label : t(option.label)}</SelectItem>)}</SelectContent></Select>
           : spec.type === "textarea" ? <FormControl><Textarea {...field} value={String(field.value ?? "")} rows={4} placeholder={spec.placeholder ? t(spec.placeholder) : undefined} /></FormControl>
-          : <FormControl><Input {...field} value={String(field.value ?? "")} type={spec.type || "text"} autoComplete={spec.autoComplete} placeholder={spec.placeholder ? t(spec.placeholder) : undefined} /></FormControl>}
+          : <FormControl><Input {...field} value={String(field.value ?? "")} type={spec.type || "text"} step={spec.type === "datetime-local" ? 1 : undefined} autoComplete={spec.autoComplete} placeholder={spec.placeholder ? t(spec.placeholder) : undefined} /></FormControl>}
         {spec.hint && <FormDescription>{t(spec.hint)}</FormDescription>}<FormMessage />
       </FormItem>} />)}
       <Button type="submit" disabled={disabled || form.formState.isSubmitting}>{form.formState.isSubmitting && <LoaderCircle className="size-4 animate-spin" />}{t(label)}</Button>

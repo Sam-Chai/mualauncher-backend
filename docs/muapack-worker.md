@@ -1,5 +1,7 @@
 # muapack 后台生成与分发
 
+2026-10-12 平台无关修订：新 muapack v2 的 target-manifest 与 mua-pack.json 均使用 protocolRevision:2，不含 supportedPlatforms／platformsChanged，不按平台限制完整包或更新包；环境兼容性由 Launcher 判断。universal 仅是后台任务标识。旧数据库平台列保留历史兼容，新草稿为空；历史非空草稿、清单、READY 字节和签名不改写，旧目标仍按原规则读取。数据库迁移为 202610120004_v2_platform_independent，v1 平台机制保留。此说明优先于下文历史六平台／平台修改描述。
+
 2026-10-09：已接入上传、审核、Worker、发布 API 与管理页面。输入支持完整 `.minecraft ZIP`、Modrinth `.mrpack` 与本次 PCL 封装；没有另建 Release 系统，见 [导入说明](modrinth-import.md)。
 
 2026-10-10：上传前选择 v1／v2。下文环境准备、多平台物理组包与生产更新包规则用于 v1；v2 已接入单一跨平台完整配方、原审核／签名／发布及下载，不下载远程模组或运行环境。v2 任务使用 universal 和 packageRevision，改选平台生成新任务并重新审核，不改写旧 READY 包。公开完整包显式协商 acceptedFormatVersions，详见[v2 协议](muapack-v2.md)与[标准 API](client-upload-api.md)。v2 自动增量组包已接入，基准固定为上传时的已发布同格式版本；full／update 均验签保存才 READY。基准／平台不匹配使用 full，preserve 不自动删除；Launcher 安装留待后续。

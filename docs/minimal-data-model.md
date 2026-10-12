@@ -1,5 +1,9 @@
 # 最小数据库模型
 
+2026-10-12：Server 新增 displayMode（默认 PERMANENT）、displayStartsAt、displayEndsAt，独立控制目录展示区间，保留 isListed 原有公开分发开关语义。数据库检查 RANGE 起止有效且有序，展示设置仅超管面板会话可写。见 [服务器展示时间](server-display-schedule.md)。
+
+2026-10-12 平台无关修订：新 muapack v2 的 target-manifest 与 mua-pack.json 均使用 protocolRevision:2，不含 supportedPlatforms／platformsChanged，不按平台限制完整包或更新包；环境兼容性由 Launcher 判断。universal 仅是后台任务标识。旧数据库平台列保留历史兼容，新草稿为空；历史非空草稿、清单、READY 字节和签名不改写，旧目标仍按原规则读取。数据库迁移为 202610120004_v2_platform_independent，v1 平台机制保留。此说明优先于下文历史六平台／平台修改描述。
+
 更新：2026-10-10。核心模型及环境下载设置已实现；范围见[实施进度](implementation-status.md)，接口见[客户端上传 API](client-upload-api.md)，权限见[权限矩阵](permission-matrix.md)。
 
 ## 关系与约束

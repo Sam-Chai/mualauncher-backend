@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-12 平台无关修订：新 muapack v2 的 target-manifest 与 mua-pack.json 均使用 protocolRevision:2，不含 supportedPlatforms／platformsChanged，不按平台限制完整包或更新包；环境兼容性由 Launcher 判断。universal 仅是后台任务标识。旧数据库平台列保留历史兼容，新草稿为空；历史非空草稿、清单、READY 字节和签名不改写，旧目标仍按原规则读取。数据库迁移为 202610120004_v2_platform_independent，v1 平台机制保留。此说明优先于下文历史六平台／平台修改描述。
+
 - 管理界面与登录页支持 zh-CN／en-US 及白色／黑色主题，顶部切换、浏览器持久化，默认中文／白色。语言通过请求 Cookie 和 React Context，主题采用 next-themes／html.dark；保留 /admin 路由和原认证重定向。仅翻译界面文案及已知系统提示，不改业务名称、说明、地址、版本／权限标识。新文案加入 src/lib/locales，详见 [docs/interface-preferences.md](docs/interface-preferences.md)。
 
 - muapack 最大源包上传大小由 Settings 管理，默认 1024 MB（1 GB），1 MB=1024² 字节，整数范围 1–20480 MB；仅 MUA 超管面板会话可修改并审计，普通后台账号可读取当前上限。网页、标准 API 和 Actions 新建 v1／v2 上传共用实时上限，超出配置返回 413；调整不取消已有上传／组包／审核／发布，不限制生成产物、不改历史和签名。见 [docs/upload-size-settings.md](docs/upload-size-settings.md)。
@@ -50,3 +52,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 环境与 Java 下载源见 [docs/environment-download-sources.md](docs/environment-download-sources.md)。默认 BMCLAPI／中科大／南大及清华 Adoptium 优先，失败回退官方；中科大／南大仅映射静态 Maven，Java 元数据仍使用官方 API。默认集成 JRE，缺少 JRE 明确失败，不静默改用 JDK；仅超管可选择 JDK。缓存身份包含 imageType，镜像偏好不改变内容身份，旧发布与签名保持不变。镜像／代理／JRE 验证不代表六平台游戏启动已验收。
 
 - 2026-10-11 已接入固定 releaseId 的公开下载刷新（/api/v1/servers/:serverId/releases/:releaseId/packages），只允许当前在线绑定客户端的未归档发布；响应含 refreshUrl、expiresAt、S3 原始 etag，packageSha256 防止续传替换文件，GET SigV4 支持 Range／If-Match。v1 分发与 v2 对齐，核对基准身份／平台／摘要与 full／所选 update 的 OSS 大小／摘要，新 v1 保存 baseManifestSha256，旧 READY 推导兼容但不改写。v1 基准摘要为包内平台清单，不能使用旧 Manifest 摘要代替。见 [下载契约](docs/launcher-download-api.md)。
+
+- 服务器永久／区间展示已接入，配置归属 Server；超管面板在服务器管理填写北京时间，目录查询采用开始包含、结束排除。displayMode／displayStartsAt／displayEndsAt 仅影响目录可见性，到期不修改 isListed，不下架客户端、不改绑定和下载。后台客户端状态下显示区间小字；Launcher 布局未改。见 [docs/server-display-schedule.md](docs/server-display-schedule.md)。

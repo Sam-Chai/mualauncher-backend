@@ -1,6 +1,6 @@
 # muapack v2 协议基线
 
-冻结日期：2026-10-10。已完成实施顺序第 1–5 步，支持 v2 完整组包、审核、签名和发布，以及显式能力协商的完整包下载。上传 READY 表示导入完成；PackageBuild READY 表示审核后完整产物已验签。生产增量包已接入，Launcher 安装尚未接入，不能把文档样例或后台验签当成游戏启动验收。
+初始冻结日期：2026-10-10；平台无关修订日期：2026-10-12。已完成实施顺序第 1–5 步及完整／更新分发。Upload READY 表示导入完成；PackageBuild READY 表示审核后产物已验签，不能替代 Launcher 安装或游戏启动验收。
 
 需求来源：[v2 需求与实施顺序](muapack-v2-design.md)。[v1 协议](muapack-v1.md) 及既有字节／签名继续保留。muapack formatVersion 2、mrpack formatVersion 1、旧 Release Manifest schemaVersion 2 是三个不同版本体系。
 
@@ -14,7 +14,7 @@ v2 保留 mrpack 的本地 overrides，包含本地模组 JAR、配置、资源�
 
 ## 2. 容器、平台与目录
 
-2026-10-11 更新：新 v2 不提供系统架构选择，统一生成单一 universal 配方包，同一发布与同一基准的产物对各系统字节相同。新草稿的 supportedPlatforms 固定为六个规范平台；它表示由端侧解析环境，不代表全部平台游戏启动已验收。旧已签名清单及离线样例的平台声明保留，不补写产物。v2 平台配置 API 返回 409；上传、审核与进度面板均不出现架构选择器。公开下载可以省略 platform，详见[下载与固定版本刷新](launcher-download-api.md)。
+2026-10-12 更新：新 v2 使用 `protocolRevision: 2`，统一生成单一配方包，不限定发布系统／架构。target-manifest 与 mua-pack.json 均携带该修订号，目标清单不再含 supportedPlatforms，changes 不再含 platformsChanged。同一发布与同一基准的产物字节相同；universal 仅为后台任务标识。v2 平台配置 API 返回 409；公开下载不需要 platform，旧调用传入的 platform 对新修订不影响分发。实际环境可用性由 Launcher 判断，不等于保证任意平台可运行，见[下载与刷新](launcher-download-api.md)。
 
 扩展名 .muapack，ZIP／ZIP64，Store／Deflate；不允许加密、符号链接、显式目录、重复／未知条目、大小写冲突及路径逃逸。路径沿用 v1 的 NFC、安全相对路径和 Windows 兼容规则。JSON 16 MiB，嵌套 32 层，最多 100000 个目标文件，单文件 2 GiB，声明目标文件总量 40 GiB；环境不属于这份目标文件大小统计。
 
@@ -33,16 +33,18 @@ NPUcraft-1.1.0.muapack
 
 只接受以上必需元数据与 payload 指定的 overrides 条目。产物不携带 client-overrides／server-overrides；输入先按远程声明 → overrides → client-overrides 归一化，忽略 server-overrides。最终由本地覆盖的同一路径不再出现在远程索引里。客户端 unsupported 的远程文件不纳入目标；optional 声明保留，本地覆盖同一路径时继承有效远程声明的 optional。
 
-发布为一个跨平台配方包，`supportedPlatforms` 是有序、无重复、非空的规范平台集合。平台枚举沿用 v1 的六项；默认仍排除 linux-aarch64，其余五项，已有保护不取消。首版每个目标路径只有一种内容，不支持按操作系统选择不同模组／配置；依赖平台专属文件时需另建客户端或用 v1，不宣称平台依赖已适配。环境和原生库由 Launcher 按自身平台解析，不放入 overrides。
+发布为一个平台无关的配方包，每个目标路径只有一种内容，不支持按操作系统选择不同模组／配置。取消平台名单不改变文件自身兼容性；专属内容可另建客户端或用 v1。环境和原生库由 Launcher 按本机平台解析，不放入 overrides。
+
+历史 v2 没有 protocolRevision，仍按旧结构严格读取 supportedPlatforms 与 platformsChanged；清单、修订、READY 包和签名保持不变，旧下载保留平台检查。新修订严格拒绝这两个旧字段、未知修订号和字段混用，不通过删除字段或默认补值把旧签名投影成新版。数据库旧 supportedPlatforms 列仅用于历史兼容，新草稿为空；非空历史草稿继续生成原结构，避免改变已有审核目标。
 
 ## 3. 目标完整清单
 
-target-manifest.json 使用 `format: mua-recipe-manifest`、`formatVersion: 2`，所有字段必需，除文中注明的可选字段外拒绝未知字段。
+target-manifest.json 使用 `format: mua-recipe-manifest`、`formatVersion: 2`、`protocolRevision: 2`，所有字段必需，除文中注明的可选字段外拒绝未知字段。
 
 | 字段 | 契约 |
 | --- | --- |
 | release | organizationId、clientId、releaseId、version、name、summary、Markdown description、sourceSha256、contentRevision；身份与长度沿用 v1 |
-| supportedPlatforms | 上述平台集合；仅表示发布允许端侧尝试安装，不能代替真实启动验收 |
+| protocolRevision | 固定 2；发布不限定系统／架构，实际运行条件由 Launcher 校验 |
 | runtime | minecraft 精确版本、loader=null 或精确 type／version、java 要求、resolverVersion |
 | launch | jvmArgs、gameArgs、memory、preLaunch；不固化最终 mainClass／classpath |
 | files | 最终实例根目录的完整目标列表，按 path 的 UTF-16 字符串顺序升序排列 |
@@ -82,15 +84,16 @@ mkdir／copy 使用实例安全路径，不覆盖 managed 文件或内部状态�
 | 字段 | 契约 |
 | --- | --- |
 | format／formatVersion | muapack／2 |
+| protocolRevision | 固定 2，必须与目标清单一致；基准可为历史 v2 |
 | packageType | full／update |
 | target／base | release 引用 `{organizationId,clientId,releaseId,version,manifestSha256}`；full 的 base=null |
 | indexSha256 | modrinth.index.json 精确字节摘要 |
-| changes | added、modified、removed、policyChanged、sourceChanged、runtimeChanged、launchChanged、platformsChanged |
+| changes | added、modified、removed、policyChanged、sourceChanged、runtimeChanged、launchChanged |
 | payload | `{entry,sha256,size}` 数组，按 entry 排序，仅实际携带的本地 overrides；路径不重复 |
 | removalPolicy | retain 或 backup-managed，构建显式选择 |
 | minimumLauncherProtocol | 数字 2，为协议能力等级，不是 Launcher 软件版本号 |
 
-目标／基准清单的精确字节绑定到引用摘要；目标引用字段必须与目标 release 一致。更新要求基准与目标都是 v2、同组织／客户端、不同发布和版本；base-manifest 必须完整携带。没有合适基准则生成 full。平台更新要求运行平台同时在 base／target 支持集合中，否则回退 full。
+目标／基准清单精确字节绑定到引用摘要；目标引用必须与 target.release 一致。更新要求同为 v2、同组织／客户端、不同发布和版本，base-manifest 必须完整携带。没有合适基准则生成 full。新修订不检查平台集合，可使用精确绑定的历史 v2 基准，其原始字节和摘要保留。历史结构目标只接受历史结构基准并沿用旧平台门槛。
 
 文件变化以 path 为键重新计算，不凭标签大小或 JSON 手填计数：
 
@@ -98,10 +101,10 @@ mkdir／copy 使用实例安全路径，不覆盖 managed 文件或内部状态�
 - modified 保存 before／after：来源类型、内容哈希、大小或 executable 改变；一个文件可同时改变策略。
 - policyChanged 保存 before／after：policy 或 optional 改变。
 - sourceChanged 保存 before／after：同为 remote、内容身份不变但 downloads 有变化；不计为内容下载需求。
-- runtimeChanged／launchChanged／platformsChanged 为 null 或 `{before,after}`；平台集合改变不默认算所有文件修改。
+- runtimeChanged／launchChanged 为 null 或 `{before,after}`；新版没有 platformsChanged。
 - 重命名按 removed＋added，不通过名称猜内容关系。每类文件变化按目标／旧 path 排序，不允许重复项。
 
-full 的变化数组必须为空，环境／启动／平台变化必须为 null。full payload 包含全部本地目标文件，包括 optional；update payload 包含 added／modified／policyChanged 涉及的本地 after 文件，去除重复路径，远程文件永远不作为载荷。相同本地字节可在后台 CAS 复用，ZIP overrides 布局按目标路径保存，不要求包内内容去重。
+full 的变化数组必须为空，环境／启动变化必须为 null。full payload 包含全部本地目标文件，包括 optional；update payload 包含 added／modified／policyChanged 涉及的本地 after 文件，去除重复路径。远程文件永远不作为载荷；相同本地字节可在后台 CAS 复用，ZIP overrides 按目标路径保存。
 
 ## 7. 安装、修复、optional 与删除
 
@@ -109,7 +112,7 @@ Launcher 先验签和全部本地载荷，再准备下载／安装，成功后�
 
 managed 缺失或哈希不符则安装目标；preserve 已存在不覆盖／不删除，缺失才使用目标初始内容。optional 按 clientId＋path 保存选择，同路径更新沿用，重命名重新确认；disabled 的本地 JAR 留在 Launcher 缓存或实例外，不留在游戏扫描的 mods 目录。关闭 optional 不等于后台改变发布清单。
 
-缺失未变化的本地文件时，首版从当前目标 full 包补取，校验它与更新包的 target 摘要一致；不要求新增单文件下载 API。远程缺失直接按目标地址补下载。base 不符、跨 v1／v2 或无平台基准时使用目标 full，但端侧仍可逐文件校验并复用缓存。
+缺失未变化的本地文件时，首版从当前目标 full 包补取，核对 target 摘要一致；不新增单文件下载 API。远程缺失按目标地址补下载。base 不符或跨 v1／v2 时使用目标 full，端侧仍可逐文件校验并复用缓存。
 
 retain 只记录 removed；backup-managed 仅对基准明确管理的实例文件先备份，再移出启用目录。preserve、玩家自建文件和共享环境目录不得自动清理。缺少未携带的旧字节或文件被玩家修改时，不承诺删除／恢复旧字节，保留备份与冲突记录供确认。
 
@@ -121,7 +124,9 @@ Launcher 网络预计量与包 ZIP 大小、本地载荷大小、远程声明大
 
 signature.json 为 `{format:mua-pack-signature,formatVersion:2,algorithm:Ed25519,keyId,metadataSha256,signature}`。签名消息为 ASCII `MUA-MUAPACK-V2`＋NUL＋mua-pack.json 精确字节。keyId 沿用公钥 SPKI DER 的 SHA-256 前 24 个十六进制字符，可信公钥由包外提供；不能以包内或同包附带的公钥建立生产信任。
 
-metadata 绑定目标／基准清单、索引、变化及本地载荷；目标绑定全部下载地址、哈希、optional、环境和启动要求。仅替换下载源也改变签名，需要新的发布内容，不在旧发布上编辑。镜像是端侧传输策略，必须下载相同哈希内容。ZIP 摘要放在 OSS／数据库产物记录，不能放回 ZIP 形成循环引用。
+签名域 `MUA-MUAPACK-V2` 与 Ed25519 算法保持不变。protocolRevision 属于 mua-pack.json 签名字节，目标修订通过 target.manifestSha256 绑定；校验器重算 metadata 并核对目标修订，禁止签名后增删或改写修订。minimumLauncherProtocol=2 仍为 v2 能力等级，protocolRevision 是结构修订；旧校验器需升级后才能读取新结构。
+
+metadata 绑定目标／基准清单、索引、变化及本地载荷；目标绑定下载地址、哈希、optional、环境和启动要求。仅改下载源也需新发布和签名。镜像是端侧传输策略，必须取得相同哈希内容。ZIP 摘要保存在 OSS／数据库，不放回 ZIP 形成循环引用。
 
 审核、修订锁、发布门槛、服务器绑定和归档删除沿用原系统。v2 READY 表示本地载荷及下载配方／签名已校验，不表示远程字节、环境或游戏已验收；只有审核与发布事务成功才公开。归档后不再出现在服务器目录，公开请求拒绝；已签发短期 OSS 地址的既有有效期不被协议撤回。本地 overrides 按现有引用／回收规则处理，远程描述不形成后台 CAS 引用。
 
@@ -131,6 +136,6 @@ API 能力协商必须在返回包前完成：旧请求默认只接受 v1；当�
 
 样例与独立校验见 [examples/muapack-v2](examples/muapack-v2/README.md)。包括原始混合 mrpack、基准 full、目标 full、对应 update、外部测试公钥及远程合成字节。fixtures 使用 .invalid 地址，不进行网络访问，不是可启动游戏。
 
-最低验收：验签链与 ZIP CRC／摘要、本地／远程严格分离、同路径本地覆盖、基准与目标关系、完整索引、增量重算、optional／来源／环境／启动／平台变化、本地载荷完备、更新修复与保留行为；拒绝篡改、未知版本、旧签名域、错误基准、非法路径、大小写／文件目录冲突、缺失／额外载荷、索引冲突、源声明缺少强哈希和未知字段。
+最低验收：验签链与 ZIP CRC／摘要、本地／远程严格分离、同路径本地覆盖、基准与目标关系、完整索引、增量重算、optional／来源／环境／启动变化及历史平台兼容、本地载荷完备、更新修复与保留行为；拒绝篡改、未知版本、旧签名域、错误基准、非法路径、大小写／文件目录冲突、缺失／额外载荷、索引冲突、源声明缺少强哈希和未知字段。
 
 完整／增量组包、API 能力协商和发布门槛已接入；端侧环境解析器与安装记录仍是后续实现契约，本次离线工具只验证样例容器与声明，不安装、下载、执行命令、连接数据库／OSS或调用生产密钥。

@@ -1,6 +1,6 @@
 # muapack v2 离线验收样例
 
-对应 [v2 协议基线](../../muapack-v2.md)，用于后续后端和 Launcher 实现对照。这里的 JAR 是带 .jar 扩展名的合成文本，下载地址使用 .invalid；这些包不能作为真实 Minecraft 客户端安装，也不要提交给当前 v1 上传流程。
+对应 [v2 协议基线](../../muapack-v2.md)。`revision-2/` 包含当前平台无关修订 2 的完整／更新包、展开清单、独立测试公钥与报告；本目录原三个包保留为历史平台结构兼容样例，字节／签名不改写。JAR 均为合成文本，地址使用 .invalid，不是可运行游戏。
 
 ## 文件
 
@@ -43,7 +43,7 @@ mods/override.jar 的本地 overrides 覆盖同路径远程声明，继承 optio
 node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mjs --check
 ```
 
-只读校验当前磁盘上的 ZIP。预期 checksPassed=52，networkRequests=0，installedGames=0。包括验签、CRC／SHA-256、本地载荷完备、目标与基准绑定、索引一致性和差异重算；另有零内容更新、本地 optional 切换、preserve 移除声明，以及 29 个非法输入拒绝检查。
+只读校验磁盘上的历史和 revision-2 六个 ZIP，预期 checksPassed=62，networkRequests=0，installedGames=0。新增修订／摘要／签名绑定、混合历史基准更新、未知修订／字段混用拒绝检查；根目录原 verification-report.json 为历史 52 项报告，新组合报告见 revision-2/verification-report.json。
 
 ```powershell
 node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mjs --generate
@@ -69,3 +69,11 @@ node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mj
 | v1 与旧签名 | 原路径与已签名字节继续有效；不把旧 Manifest schemaVersion 2 当成 muapack v2 |
 
 这些运行行为仍需在后续 Worker／API／Launcher 阶段实现和实测，不由本次样例报告宣称完成。
+
+新修订样例可单独重新生成，不覆盖历史包：
+
+```powershell
+node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mjs --generate-revision-2
+```
+
+该操作仅覆盖 revision-2/，生成临时测试私钥并只保存公钥。安装端应严格核对 protocolRevision:2，不认识修订时拒绝；不把取消发布名单解释为所有系统均可运行。

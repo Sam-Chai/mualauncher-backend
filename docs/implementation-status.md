@@ -1,5 +1,7 @@
 # 实施进度
 
+2026-10-12：服务器永久／区间展示已接入：超管网页配置北京时间、数据库约束及权限、公开目录按当前时间过滤、客户端状态区间小字。过期保留上架开关、绑定和下载；Launcher UI 布局未改。迁移 202610120005_server_display_schedule，见 [服务器展示时间](server-display-schedule.md)。
+
 更新时间：2026-10-12。当前阶段已完成 .minecraft ZIP、Modrinth mrpack 和 PCL 封装的上传／更新，及审核发布、muapack 组包、环境镜像下载与 PostgreSQL RLS。本文区分实际运行功能与后续工作；详细协议见[客户端上传文档](client-upload-api.md)、[Modrinth 导入](modrinth-import.md)、[环境下载源](environment-download-sources.md)、[Launcher 下载与刷新](launcher-download-api.md)。
 
 ## 已实现
@@ -18,7 +20,7 @@
 
 - 更新默认选首次发布格式，仍可手动跨格式；超管 Settings 管理开放格式（默认 v1／v2、至少一种），上传界面隐藏关闭的格式，REST／Actions 创建上传同步校验。已有任务／历史发布不受关闭影响，首次发布格式由真实发布历史提供。设置审计、数据库约束及 RBAC／HTTP／继续组包回归已验证，见[开放格式设置](package-format-settings.md)。
 - 开发日志修复：跳转首页与后台认证入口显式关闭该段 instant 校验，保留每次请求的认证／RBAC；Tremor 图表使用不同组件 key 和独立系列渐变 ID，支持中文系列名称；Prisma 的 pg 连接显式开启 pipeline，并验证查询失败后事务仍中止／回滚。独立 PowerShell 启动脚本使用 UTF-8，并只在该窗口移除不受当前 npm 支持的继承配置。`/api/session` 不是现有后台接口或源码调用；排查重复 404 时应检查浏览器 Network 的 Initiator，不新增伪造会话接口。
-- 新 v2 移除上传／审核／组包的架构选择，统一六个规范声明目标与单一 universal 产物；合法旧 API 平台列表不限制新 v2，平台修改 API 拒绝 v2，历史签名不改写。v1 仍按平台构建。
+- 新 v2 使用 protocolRevision:2，清单移除 supportedPlatforms，差异移除 platformsChanged，发布与更新不检查平台；单一 universal 后台任务。旧 API 平台输入不限制新修订，配置 API 仍拒绝 v2，历史审核目标／清单／签名保持，v1 继续按平台组包。
 - 固定 releaseId 的 S3 预签名 GET 链接刷新、etag／expiresAt／refreshUrl、packageSha256 续传身份保护；同一当前绑定客户端的历史发布可刷新，归档／删除／解绑／下架仍拒绝。v1/v2 分发校验对齐：已发布清单、基准身份／平台／摘要、完整包及所选更新包的 OSS 大小／摘要。新 v1 记录基准摘要，旧 READY 推导兼容。实际 SHA-256 与签名仍须下载端验收。
 
 - Next.js App Router、shadcn/ui dashboard-01、TanStack Table、React Hook Form／Zod 与 Tremor Raw 图表；导航按真实权限隐藏入口和空分组。
@@ -43,7 +45,7 @@
 
 ## 数据库与安全边界
 
-muapack v2 第 1–5 步已接入：上传选择、共享识别、本地 CAS、跨平台完整配方、原审核／签名／发布与下载。不可变 content 与草稿 supportedPlatforms 分离；任务唯一键包含 revision。历史可调整平台的任务保留，新 v2 统一目标，不再改选架构。格式、组织、角色与生命周期仍由应用及数据库检查。自动增量包与固定下载刷新已接入，Launcher 安装待实施。
+muapack v2 第 1–5 步已接入：上传选择、共享识别、本地 CAS、平台无关配方、原审核／签名／发布／下载。新目标和包 metadata 均绑定 protocolRevision:2；数据库 supportedPlatforms 仅供历史兼容，新草稿为空。历史非空草稿按原结构生成，READY 字节和签名不补写。迁移 202610120004_v2_platform_independent 开放空集合，不改现有行或 RLS／审核锁。自动更新和固定下载刷新已接入，Launcher 安装待实施。
 
 服务器稳定 ID 为 3–5 位 ASCII 字母，大小写无关唯一，归档不释放。未删除客户端名称组织内唯一、同组织绑定、每服与每客户端至多一个绑定、当前版本同客户端外键及绑定同步、版本唯一性、审批修订匹配和发布内容不可变由数据库约束保护。业务记录禁止硬删除；客户端条件删除采用不可恢复标记，审计仅追加。
 

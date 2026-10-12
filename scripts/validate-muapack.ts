@@ -9,7 +9,8 @@ async function main() {
   const trustedKey = createPublicKey(await readFile(publicKeyPath));
   if (await muaArchiveFormat(pack) === 2) {
     const result = await validateRecipePackArchive(pack, trustedKey);
-    console.log(JSON.stringify({ valid: true, formatVersion: 2, packageType: result.metadata.packageType, supportedPlatforms: result.target.supportedPlatforms,
+    console.log(JSON.stringify({ valid: true, formatVersion: 2, packageType: result.metadata.packageType,
+      ...("supportedPlatforms" in result.target ? { supportedPlatforms: result.target.supportedPlatforms } : { protocolRevision: result.target.protocolRevision }),
       base: result.metadata.base?.version ?? null, target: result.metadata.target.version, releaseId: result.metadata.target.releaseId,
       objectCount: result.objectCount, payloadSize: result.payloadSize, keyId: result.signature.keyId }, null, 2)); return;
   }

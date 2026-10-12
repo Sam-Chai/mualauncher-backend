@@ -1,5 +1,7 @@
 "use client";
 import { useI18n } from "@/components/preferences";
+import { displayTimeInput, displayTimeIso, displayWindowOpen } from "@/lib/server-display";
+import { DisplayScheduleNote } from "./display-schedule";
 import Link from "next/link";
 import { z } from "zod";
 import { Eye, Pencil } from "lucide-react";
@@ -20,6 +22,7 @@ function directoryStatus(server: Server, organizationArchived: boolean) {
   if (server.archivedAt) return "服务器已归档";
   if (server.clientArchivedAt) return "客户端已归档";
   if (!server.isListed) return "未上架";
+  if (server.currentReleaseActive && !displayWindowOpen(server)) return "展示区间外";
   return server.currentReleaseActive ? "公开分发" : "等待有效发布";
 }
 
@@ -45,10 +48,16 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
   const listing = !!server && superAdmin;
   const base = { displayName: nameSchema, description: textSchema(), gameAddress: textSchema(255) };
   const listingFields = {
+    displayMode: z.enum(["PERMANENT", "RANGE"]), displayStartsAt: z.string(), displayEndsAt: z.string(),
     sortOrder: z.string().refine(value => value.trim() !== "" && Number.isSafeInteger(Number(value)) && Math.abs(Number(value)) <= 2147483647, t("请输入有效排序整数")),
     themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, t("请输入 #RRGGBB 或留空")), isListed: z.boolean(),
   };
-  const schema = server ? listing ? z.object(base).extend(listingFields) : z.object(base)
+  const schema = server ? listing ? z.object(base).extend(listingFields).superRefine((value, ctx) => {
+    if (value.displayMode === "RANGE") {
+      const start = displayTimeIso(value.displayStartsAt), end = displayTimeIso(value.displayEndsAt);
+      if (!start || !end || start >= end) ctx.addIssue({ code: "custom", path: ["displayEndsAt"], message: t("请选择有效展示区间，结束时间须晚于开始时间") });
+    }
+  }) : z.object(base)
     : z.object(base).extend({ organizationId: z.string().uuid(t("请选择组织")), serverId: z.string().regex(/^[A-Za-z]{3,5}$/, t("ID 须为已有的 3–5 位英文字母")) });
   const fields: Field[] = [
     ...(!server ? [{ name: "organizationId", label: t("所属组织"), type: "select" as const, options: organizations.filter(org => !org.archivedAt).map(org => ({ value: org.id, label: org.displayName, translate: false })) }, { name: "serverId", label: "MUA server ID", hint: t("使用已有 MUA ID，创建后不可更改。"), placeholder: "NPUR" }] : []),
@@ -56,6 +65,9 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
     { name: "description", label: t("简介"), type: "textarea" },
     { name: "gameAddress", label: t("连接地址"), placeholder: "play.example.edu:25565" },
     ...(listing ? [
+      { name: "displayMode", label: t("展示模式"), type: "select" as const, options: [{ value: "PERMANENT", label: t("永久展示") }, { value: "RANGE", label: t("区间展示") }], hint: t("区间仅控制目录展示，到期不会下架客户端或停止下载。") },
+      { name: "displayStartsAt", label: t("展示开始时间（北京时间）"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" } },
+      { name: "displayEndsAt", label: t("展示结束时间（北京时间）"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" }, hint: t("包含开始时间，不包含结束时间。") },
       { name: "sortOrder", label: t("排序"), type: "number" as const, hint: t("数字越小，在 Launcher 中越靠前。") },
       { name: "themeColor", label: t("展示颜色"), placeholder: "#3b82f6" },
       { name: "isListed", label: t("标记上架"), type: "checkbox" as const, hint: t("只有存在有效当前发布且组织、服务器、客户端均启用时，才会出现在公开列表。") },
@@ -70,19 +82,19 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
         <dt className="text-muted-foreground">{t("所属组织")}</dt><dd>{organization?.displayName}</dd>
         <dt className="text-muted-foreground">{t("资源状态")}</dt><dd>{organization?.archivedAt ? t("组织已归档") : server.archivedAt ? t("服务器已归档") : t("启用中")}</dd>
         <dt className="text-muted-foreground">{t("上架标记")}</dt><dd>{server.isListed ? t("已标记上架") : t("未上架")}</dd>
-        <dt className="text-muted-foreground">{t("目录状态")}</dt><dd>{directoryStatus(server, !!organization?.archivedAt)}</dd>
+        <dt className="text-muted-foreground">{t("目录状态")}</dt><dd>{t(directoryStatus(server, !!organization?.archivedAt))}</dd>
         <dt className="text-muted-foreground">{t("连接探测")}</dt><dd><ServerStatusLight serverId={server.serverId} address={server.gameAddress} archived={archived} showLabel /></dd>
-        <dt className="text-muted-foreground">{t("当前客户端")}</dt><dd className="break-words">{server.boundClientName || t("未绑定")} · {releaseStatus(server)}</dd>
+        <dt className="text-muted-foreground">{t("当前客户端")}</dt><dd className="break-words">{server.boundClientName || t("未绑定")} · {t(releaseStatus(server))}<DisplayScheduleNote schedule={server} /></dd>
       </dl>
       {archived && <p className="text-sm text-muted-foreground">{t("归档期间不能修改服务器资料与展示设置。")}{organization?.archivedAt ? t("请先恢复所属组织。") : t("恢复服务器后可继续编辑。")}</p>}
     </section>}
     <ServerMottoField server={server} editable={canEdit} pending={pendingMotto} onPrepare={setPendingMotto} />
     {canEdit ? <SchemaForm key={server?.serverId ?? "new"} schema={schema} fields={fields} disabled={busy} defaults={{
       displayName: server?.displayName ?? "", description: server?.description ?? "", gameAddress: server?.gameAddress ?? "",
-      ...(server ? listing ? { sortOrder: String(server.sortOrder), themeColor: server.themeColor ?? "", isListed: server.isListed } : {}
+      ...(server ? listing ? { displayMode: server.displayMode, displayStartsAt: displayTimeInput(server.displayStartsAt), displayEndsAt: displayTimeInput(server.displayEndsAt), sortOrder: String(server.sortOrder), themeColor: server.themeColor ?? "", isListed: server.isListed } : {}
         : { serverId: "", organizationId: organizations.find(org => !org.archivedAt)?.id ?? "" }),
     }} onSubmit={async values => {
-      const payload = { ...values, ...(listing ? { sortOrder: Number(values.sortOrder) } : {}) };
+      const payload = { ...values, ...(listing ? { sortOrder: Number(values.sortOrder), displayStartsAt: values.displayMode === "RANGE" ? displayTimeIso(String(values.displayStartsAt)) : null, displayEndsAt: values.displayMode === "RANGE" ? displayTimeIso(String(values.displayEndsAt)) : null } : {}) };
       const ok = await run(async () => {
         let serverId = server?.serverId ?? createdServerId;
         if (!serverId) {
@@ -137,12 +149,12 @@ export function ServersPage() {
     { accessorKey: "gameAddress", header: t("连接地址"), cell: ({ row }) => <code className="text-xs">{row.original.gameAddress || t("未设置")}</code> },
     { accessorKey: "sortOrder", header: t("排序") },
     { accessorKey: "themeColor", header: t("展示颜色"), cell: ({ row }) => <code>{row.original.themeColor || t("默认")}</code> },
-    { id: "status", header: t("目录状态"), accessorFn: server => directoryStatus(server, !!organization(server)?.archivedAt), cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge> },
+    { id: "status", header: t("目录状态"), accessorFn: server => t(directoryStatus(server, !!organization(server)?.archivedAt)), cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge> },
     { id: "release", header: t("当前客户端"), accessorFn: server => `${server.boundClientName || ""} ${releaseStatus(server)}`, cell: ({ row }) => <div className="space-y-1">
       {row.original.boundClientId && (row.original.permissions.includes("DRAFT_READ") || row.original.permissions.includes("RELEASE_READ"))
         ? <Link className="font-medium hover:underline" href={`/admin/clients/${row.original.boundClientId}`}>{row.original.boundClientName}</Link>
         : row.original.boundClientName && <p className="font-medium">{row.original.boundClientName}</p>}
-      <p className="text-xs text-muted-foreground">{releaseStatus(row.original)}</p>
+      <p className="text-xs text-muted-foreground">{t(releaseStatus(row.original))}</p><DisplayScheduleNote schedule={row.original} />
     </div> },
     { id: "actions", header: t("操作"), enableHiding: false, cell: ({ row }) => <ServerEditor server={row.original} /> },
   ];

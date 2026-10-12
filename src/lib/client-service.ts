@@ -22,7 +22,6 @@ import { recipeContentSchema, type RecipeContent } from "./muapack-v2-contract";
 import { encodeMuaJson } from "./muapack-protocol";
 import { putImmutableBytes } from "./package-storage";
 import { packagesBucket } from "./storage";
-import { MUA_PLATFORMS } from "./muapack-contract";
 import { enabledPackageFormats } from "./package-format-settings";
 import { clientSummary, securityFunction, uploadOptions, releaseDetails } from "./database-security";
 import { maxUploadSizeMb } from "./upload-size-settings";
@@ -193,7 +192,6 @@ export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknow
   const sha256 = upload.packageFormatVersion === 2 ? await putImmutableBytes(packagesBucket(), manifestKey, encodeMuaJson(manifest)) : (await putJson(manifestKey, manifest)).sha256;
   await db.clientDraft.create({ data: { id: draftId, clientId: upload.clientId, versionLabel: metadata.versionLabel, name: metadata.name,
     packageFormatVersion: upload.packageFormatVersion,
-    ...(upload.packageFormatVersion === 2 ? { supportedPlatforms: [...MUA_PLATFORMS] } : {}),
     summary: metadata.summary, description: metadata.description, changelog: metadata.summary, candidateMetadata: metadata,
     sourceObjectKey: upload.sourceObjectKey, candidateManifestKey: manifestKey, candidateManifestSha256: sha256,
     replacesDraftId: upload.comparisonDraftId, status: "SUBMITTED", createdById: actor.id } });
@@ -294,6 +292,11 @@ export async function clientList(db: Db, actor: Actor) {
     rows.push({ clientId: client.id, name: client.name, organizationId: client.organizationId, organizationName: scope.client.organization.displayName,
       serverId: scope.client.binding?.serverId ?? null, serverName: scope.client.binding?.server.displayName ?? "未绑定",
       requestedServerId: client.requestedServerId, scopeServerId: client.scopeServerId, archived: !!client.archivedAt, blocked: !!scope.client.organization.archivedAt,
+      displaySchedule: scope.client.binding ? {
+        displayMode: scope.client.binding.server.displayMode,
+        displayStartsAt: scope.client.binding.server.displayStartsAt,
+        displayEndsAt: scope.client.binding.server.displayEndsAt,
+      } : null,
       lifecycleStatus: client.archivedAt ? "ARCHIVED" as const : client.currentReleaseId ? "PUBLISHED" as const : "UNPUBLISHED" as const,
       permissions: [...new Set(scope.permissions)], publicationRevision: client.revision, currentReleaseId: client.currentReleaseId,
       initialPackageFormatVersion: summary.initialPackageFormatVersion,

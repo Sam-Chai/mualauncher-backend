@@ -1,5 +1,7 @@
 # MUA Management Platform 管理界面
 
+2026-10-12：服务器管理已支持永久／区间展示，超管可设置北京时间起止；客户端状态下方显示区间说明。到期只隐藏目录，不自动下架或停止下载。见 [服务器展示时间](server-display-schedule.md)。
+
 更新时间：2026-10-12。入口 /admin，本机地址 http://localhost:3001/admin。根路径与旧 /dashboard 跳转至 /admin。
 
 登录页和后台顶部提供中英文与黑白主题切换，默认中文／白色，保存浏览器偏好；切换保留表单内容、路由和权限行为，业务名称及说明保持原文。实现与验证见[界面偏好](interface-preferences.md)。

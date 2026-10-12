@@ -44,7 +44,7 @@ test("Chinese and English login, settings and table controls render in the selec
 
 test("English server editor keeps saved names, descriptions, addresses and RBAC field identifiers unchanged", () => {
   const server: Server = { serverId: "NPA", organizationId: state.actor.id, displayName: "服务器管理", description: "这是用户填写的说明", gameAddress: "mc.example.edu:25565", iconObjectKey: null, mottoImageUrl: null,
-    sortOrder: 0, themeColor: null, isListed: false, archivedAt: null, clientArchivedAt: null, currentReleaseId: null, currentReleaseActive: false, publicationRevision: 0, boundClientId: null, boundClientName: null, permissions: ["SERVER_READ", "SERVER_EDIT"] };
+    sortOrder: 0, themeColor: null, isListed: false, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null, archivedAt: null, clientArchivedAt: null, currentReleaseId: null, currentReleaseActive: false, publicationRevision: 0, boundClientId: null, boundClientName: null, permissions: ["SERVER_READ", "SERVER_EDIT"] };
   const en = render("en-US", <ServerEditorContent server={server} onSaved={() => {}} />);
   assert(en.includes("Server motto")); assert(en.includes('name="gameAddress"')); assert(en.includes('value="服务器管理"')); assert(en.includes("这是用户填写的说明")); assert(en.includes("mc.example.edu:25565"));
 });

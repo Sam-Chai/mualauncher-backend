@@ -92,5 +92,17 @@
   "请先完成已有上传任务（最多 20 个）": "Finish existing uploads first (maximum 20)",
   "密码已变更，请重新登录": "Password changed. Sign in again.",
   "当前密码不正确": "Current password is incorrect",
-  "请求来源不被允许": "Request origin not allowed"
+  "请求来源不被允许": "Request origin not allowed",
+  "展示模式": "Display mode",
+  "永久展示": "Permanent display",
+  "区间展示": "Scheduled display",
+  "区间展示：{0}-{1}": "Display window: {0}-{1}",
+  "展示开始时间（北京时间）": "Display starts (UTC+08:00)",
+  "展示结束时间（北京时间）": "Display ends (UTC+08:00)",
+  "包含开始时间，不包含结束时间。": "The start is inclusive and the end is exclusive.",
+  "区间仅控制目录展示，到期不会下架客户端或停止下载。": "The window controls directory visibility only. Expiry does not unpublish the client or stop downloads.",
+  "请选择有效展示区间，结束时间须晚于开始时间": "Choose a valid display window with an end later than its start",
+  "永久展示不能设置展示区间": "Permanent display cannot have a time window",
+  "展示配置无效": "Invalid display settings",
+  "展示区间外": "Outside display window"
 }

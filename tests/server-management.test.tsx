@@ -12,11 +12,14 @@ import { visibleNavigation } from "../src/components/admin/navigation-access";
 import { rolePermissions } from "../src/lib/roles";
 import { SettingsPage } from "../src/components/admin/system";
 import { uploadFileError, UPLOAD_MB } from "../src/lib/upload-size-policy";
+import { displayTimeInput, displayTimeIso, displayWindowOpen } from "../src/lib/server-display";
+import { DisplayScheduleNote } from "../src/components/admin/display-schedule";
+import { PreferenceProvider } from "../src/components/preferences";
 
 function fixture(permissions: Server["permissions"], superAdmin = false) {
   const server: Server = {
     serverId: "NPB", organizationId: "00000000-0000-4000-8000-000000000001", displayName: "NPU BETA", description: "Test server",
-    gameAddress: "beta.example.edu:25565", iconObjectKey: null, mottoImageUrl: null, sortOrder: 3, themeColor: "#123456", isListed: true,
+    gameAddress: "beta.example.edu:25565", iconObjectKey: null, mottoImageUrl: null, sortOrder: 3, themeColor: "#123456", isListed: true, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null,
     archivedAt: null, clientArchivedAt: null, currentReleaseId: "00000000-0000-4000-8000-000000000002", currentReleaseActive: true,
     publicationRevision: 1, boundClientId: "00000000-0000-4000-8000-000000000003", boundClientName: "Beta client", permissions,
   };
@@ -31,6 +34,24 @@ function fixture(permissions: Server["permissions"], superAdmin = false) {
 function editor(state: State, server: Server) {
   return renderToStaticMarkup(<AdminProvider initial={state}><ServerEditorContent server={server} onSaved={() => {}} /></AdminProvider>);
 }
+
+test("scheduled display uses Beijing time, validates calendar dates and shows translated status subtitles", () => {
+  assert.equal(displayTimeIso("2026-10-12T08:00"), "2026-10-12T00:00:00.000Z");
+  assert.equal(displayTimeInput("2026-10-12T00:00:00.000Z"), "2026-10-12T08:00:00");
+  assert.equal(displayTimeIso("2026-02-30T08:00"), null);
+  const { state, server } = fixture([], true);
+  server.displayMode = "RANGE"; server.displayStartsAt = new Date("2026-10-12T00:00:00Z"); server.displayEndsAt = new Date("2026-10-13T00:00:00Z");
+  assert.equal(displayWindowOpen(server, server.displayStartsAt), true);
+  assert.equal(displayWindowOpen(server, server.displayEndsAt), false);
+  const html = editor(state, server);
+  assert(html.includes('type="datetime-local"')); assert(html.includes('name="displayStartsAt"')); assert(html.includes("区间展示："));
+  const en = renderToStaticMarkup(<PreferenceProvider initialLocale="en-US"><DisplayScheduleNote schedule={server} /></PreferenceProvider>);
+  assert(en.includes("Display window:")); assert(!en.includes("区间展示"));
+  assert.equal(renderToStaticMarkup(<DisplayScheduleNote schedule={{ ...server, displayMode: "PERMANENT" }} />), "");
+  state.actor.isSuperAdmin = false; server.permissions = ["SERVER_READ", "SERVER_EDIT"];
+  const limited = editor(state, server);
+  assert(limited.includes("区间展示：")); assert(!limited.includes('name="displayStartsAt"'));
+});
 
 test("upload size setting is shown only to the MUA superadmin with MB units and the 1024 default", () => {
   for (const superAdmin of [true, false]) {

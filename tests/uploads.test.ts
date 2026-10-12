@@ -116,7 +116,7 @@ async function approved(draftId: string) {
 }
 before(async () => {
   await pool.query('CREATE SCHEMA "' + schema + '"'); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions", "202610120004_v2_platform_independent", "202610120005_server_display_schedule"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
   temp = await mkdtemp(join(tmpdir(), "mua-upload-test-")); process.env.SIGNING_PRIVATE_KEY_PATH = join(temp, "key.pem");
   await writeFile(process.env.SIGNING_PRIVATE_KEY_PATH, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }));
   await initializeStorage();
@@ -1219,7 +1219,8 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } });
   assert.equal(build.platform, "universal"); assert.equal(build.revision, 1); assert.equal(build.status, "PREPARED", build.error ?? "preparation failed");
   const candidate = await c.draftManifest(client, reviewer, identity.clientId, draftId); assert(candidate.format === "mua-recipe-manifest");
-  assert.deepEqual(candidate.supportedPlatforms, [...MUA_PLATFORMS]);
+  assert("protocolRevision" in candidate); assert.equal(candidate.protocolRevision, 2); assert(!("supportedPlatforms" in candidate));
+  assert.deepEqual((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).supportedPlatforms, []);
   assert.equal(candidate.files.filter(file => file.source.type === "remote").length, 4);
   await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Checked v2", contentRevision: 1, packageRevision: 1 }));
   await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true })), denied(409));
@@ -1242,14 +1243,14 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   const release = await client.clientRelease.findUniqueOrThrow({ where: { id: released.releaseId } });
   assert.equal(release.packageFormatVersion, 2); assert.equal(release.manifestObjectKey, build.targetObjectKey);
   assert.equal(release.manifestSha256, build.targetSha256);
-  const manifest = readRecipeManifest((await publicManifest(client, "VTF", "1,2")).bytes); assert.deepEqual(manifest.supportedPlatforms, [...MUA_PLATFORMS]);
+  const manifest = readRecipeManifest((await publicManifest(client, "VTF", "1,2")).bytes); assert("protocolRevision" in manifest); assert.equal(manifest.protocolRevision, 2); assert(!("supportedPlatforms" in manifest));
   assert(verify(null, await readObject(release.manifestObjectKey), createPublicKey((await signingIdentity()).privateKey), Buffer.from(release.signature, "base64")));
   await assert.rejects(publicManifest(client, "VTF"), denied(415));
   await assert.rejects(publicPackage(client, "VTF", "windows-amd64", null), denied(415));
   const universal = await publicPackage(client, "VTF", null, null, "2");
-  assert.equal(universal.platform, "universal");
+  assert(!("platform" in universal)); assert(!("supportedPlatforms" in universal));
   const download = await publicPackage(client, "VTF", "windows-amd64", null, "2");
-  for (const platform of MUA_PLATFORMS) assert.equal((await publicPackage(client, "VTF", platform, null, "2")).sha256, universal.sha256);
+  for (const platform of [...MUA_PLATFORMS, "linux-riscv64"]) assert.equal((await publicPackage(client, "VTF", platform, null, "2")).sha256, universal.sha256);
   assert.equal(download.formatVersion, 2); assert.equal(download.packageType, "full"); assert(download.mods.some(mod => mod.optional));
   assert.equal(digest(Buffer.from(await (await fetch(download.url)).arrayBuffer())), download.sha256);
   const pinned = await publicPackage(client, "VTF", null, null, "2", null, released.releaseId, universal.sha256);
@@ -1495,7 +1496,7 @@ test("format validation, draft locks and archived deletion protect staged v2 upl
   await assert.rejects(work(db => c.createUpload(db, admin, { ...input, clientId: "OTH", packageFormatVersion: 2 })), denied(404));
   const draft = await client.clientDraft.create({ data: { clientId: identity.clientId, packageFormatVersion: 2, createdById: admin.id } });
   await assert.rejects(client.clientDraft.update({ where: { id: draft.id }, data: { packageFormatVersion: 1 } }));
-  await assert.rejects(client.clientDraft.update({ where: { id: draft.id }, data: { status: "SUBMITTED" } }));
+  await assert.rejects(client.clientDraft.update({ where: { id: draft.id }, data: { status: "SUBMITTED", packageRevision: 2, supportedPlatforms: ["invalid-platform"] } }));
   await assert.rejects(client.packageBuild.create({ data: { draftId: draft.id, platform: "windows-amd64", revision: 1 } }));
   const upload = await prepare(await readFile("docs/examples/muapack-v2/inputs/base.mrpack"), admin, identity.clientId, false, "recipe.mrpack", null, 2);
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));

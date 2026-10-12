@@ -16,7 +16,7 @@
 
 行内“绑定 / 解绑”管理关联。选择已有客户端的服务器时必须确认替换。新客户端尚未有当前发布时保存待绑定请求，服务器继续使用旧客户端；审核发布并启用当前版本时，有 CLIENT_BIND 的操作者按已确认的绑定修订完成替换。只有版本切换权限的人员可先启用客户端版本，再由管理员手动绑定。绑定已发布客户端可立即生效，旧客户端及历史保留。请求校验服务器 revision 与 expectedClientId；期间绑定发生变化返回 409，需要取消待绑定请求后重新确认。解绑保留客户端当前版本和全部历史，只停止该服务器分发。
 
-v1 提交可传 platforms，默认选择除 Linux aarch64 外的五个平台；Worker 后台准备环境。v2 上传／审核不选择架构，不提交 platforms，新草稿统一声明六个规范目标并生成一个 universal 包；旧 API 若传有效平台列表，兼容接收但不限制新 v2。审核通过后签名组包，所有必需产物完成前无法发布，见[后台组包](muapack-worker.md)。提交后进入 /admin/releases/review。审核通过后由发布人员发布；同时拥有 RELEASE_ACTIVATE 的发布人员可发布并切换当前版本。仅拥有 RELEASE_PUBLISH 的账号可生成不可变发布，由版本切换人员在发布记录中启用。组织管理员默认能上传、更新、归档，默认没有审核、发布、切换权限。上传和审核期间保持现有当前版本。
+v1 提交可传 platforms，默认除 Linux aarch64 外五项，Worker 准备环境。新 v2 不提交 platforms，使用 protocolRevision:2 的平台无关清单和单一配方任务；旧 API 有效平台列表兼容接收但不限制新 v2。审核后签名组包，必需产物完成才可发布。提交后进入 /admin/releases/review，审核、发布与切换权限继续分离；期间旧当前版本保持可用。
 
 归档保留 Client、草稿、Release 和存储对象，同时停止分发并清除当前绑定。恢复不会自动上架或恢复绑定。并发更新的基准若改变，提交／审核／发布返回 409，要求基于最新当前版本重新上传。
 
@@ -96,15 +96,15 @@ Actions 的 metadata.json 可以带 `"packageFormatVersion": 2`，脚本把它�
 
 ### v2 完整组包与发布
 
-提交生成固定的 `mua-recipe-content`，草稿保存 `supportedPlatforms`；新 v2 固定为六个规范目标，不再供用户改选。读取候选 manifest 时投影为规范 `mua-recipe-manifest`。Worker 创建 `(draftId,platform:"universal",revision:packageRevision)` 单一跨平台任务，准备目标清单后显示 PREPARED 等待审核；APPROVED 后仅读取本地 CAS，生成 mua-pack.json、重建的 modrinth.index.json、完整 target-manifest、v2 独立域签名与 overrides。逐条检查 CRC／SHA-256／大小、完整清单／索引一致性及签名后保存 OSS，任务 READY 才可发布。
+提交生成固定的 `mua-recipe-content`。新草稿旧 supportedPlatforms 列为空，目标投影为 protocolRevision:2 且无平台字段；非空历史草稿保留旧投影及审核／READY 字节。Worker 创建 `(draftId,platform:"universal",revision:packageRevision)` 单一任务，准备完整目标后等待审核；通过后只读本地 CAS，生成 mua-pack.json、完整 mrpack 索引、目标清单、独立域签名和 overrides。CRC／SHA-256／大小、清单／索引一致性与签名验证并保存 OSS 后才为 READY。
 
 2026-10-11 起，平台配置 API 只用于 v1，v2 返回 409；v2 界面仅显示通用配方包状态与失败重试。历史 v2 的任务修订、平台声明、READY 对象与签名保持原样。审核／发布须使用当前修订。发布记录指向最终跨平台 target，而非内部 content；数据库要求当前必需任务 READY、target 摘要／键及签名密钥与发布一致，应用还检查 OSS 对象大小／摘要。远程声明与环境不要求 Worker 下载，因此不可标成已验收。
 
-管理完整下载可省略平台或使用 `platform=universal`／已支持的实际平台，检查原 DRAFT_READ／RELEASE_READ、版本归属与 READY。公开 manifest／packages 加 `acceptedFormatVersions=2` 或 `1,2`；旧请求缺省只接受 1，当前发布为 v2 时返回 415。目录 currentRelease 带 packageFormatVersion。v2 packages 可省略平台，返回 formatVersion:2、minimumLauncherProtocol:2、supportedPlatforms、runtime、optional 模组和 full 下载信息；匹配生成包的基准 ID 及共同平台时返回 packageType:update，并返回 baseReleaseId／baseManifestSha256；无平台请求须基准覆盖目标声明的平台才选 update，兼容历史受限包。其他情况返回 full，基准字段为 null。提供的 baseManifestSha256 与基准不符同样回退 full。旧 CAS 单文件端点不用于 v2。归档仍停止新分发。
+新 v2 管理完整下载不需要平台，旧 platform 参数不限制新修订；历史 v2 仍校验原声明。管理下载保持 DRAFT_READ／RELEASE_READ、版本归属与 READY 检查。公开 manifest／packages 使用 acceptedFormatVersions=2 或 1,2，旧请求只接受 v1，当前 v2 返回 415。新 packages 返回 minimumLauncherProtocol:2、protocolRevision:2、runtime、optional 模组和 full 信息，不返回平台字段。匹配固定基准 ID／摘要才选择 update，新修订不检查平台覆盖，历史受限目标保留旧门槛；失败回退 full 且基准字段为 null。旧 CAS 单文件端点不用于 v2，归档仍停止新分发。
 
 ### v2 自动增量
 
-更新仍上传完整 mrpack／PCL 包，上传时固定 baseReleaseId 与客户端 revision。审核通过后 Worker 读取该已发布 v2 的精确清单并核对摘要／组织／客户端／发布身份，重算 added／modified／removed／policyChanged／sourceChanged 及 runtime／launch／platformsChanged。update 带完整 base／target 清单、完整目标 mrpack 索引、签名及新增／修改／策略变化涉及的本地 after 文件；远程与环境只保存声明，未变化本地文件不放进 update。removalPolicy 固定 retain，删除只记差异，preserve 和玩家文件不自动删除。零变化可生成零载荷更新包。
+更新仍上传完整 mrpack／PCL 包，上传时固定 baseReleaseId 和客户端 revision。审核后 Worker 读取精确已发布 v2 基准，核对摘要／组织／客户端／发布身份，重算文件、策略、来源及 runtime／launch 差异，新修订没有 platformsChanged。更新包携带完整原始基准／目标、目标远程索引和所需本地 after 字节；远程／环境仅为声明，未变化本地不进 update。removalPolicy=retain，preserve／玩家文件不自动删除，零变化允许零载荷。新修订可基于历史 v2 更新；历史目标保留原平台规则。
 
 PackageBuild.artifacts.update 增加 baseManifestSha256（旧 v1 可省略）；发布核对它与上传时的发布基准，full／update 的 OSS 大小与摘要均有效才可发布。没有基准、跨格式或平台没有交集仅生成 full；损坏基准明确失败，不偷偷选择另一版本。当前只生成相对于一个固定发布的更新包，其他旧版本请求回退 full，不提供更新链组合。管理“下载完整包”始终 full，发布包详情显示真实 full／update ZIP 大小；环境未知量不伪造。
 

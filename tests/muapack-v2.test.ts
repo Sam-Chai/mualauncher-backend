@@ -6,19 +6,85 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { ZipFile } from "yazl";
 import { encodeMuaJson } from "../src/lib/muapack-protocol";
-import { createRecipePackMetadata, readRecipeManifest, recipeModrinthIndex, signRecipePackMetadata, validateRecipePackDocuments, verifyRecipePackSignature } from "../src/lib/muapack-v2-protocol";
+import { createRecipePackMetadata, readRecipeManifest, recipeTarget, recipeModrinthIndex, signRecipePackMetadata, validateRecipePackDocuments, verifyRecipePackSignature } from "../src/lib/muapack-v2-protocol";
 import { validateRecipePackArchive } from "../src/lib/muapack-v2-archive";
 
 const root = "docs/examples/muapack-v2";
-async function key() { const value = JSON.parse(await readFile(join(root, "test-public-key.json"), "utf8")); return createPublicKey({ key: Buffer.from(value.spkiDerBase64, "base64"), format: "der", type: "spki" }); }
-async function documents(name: string) {
-  const dir = join(root, name);
+async function key(directory = root) { const value = JSON.parse(await readFile(join(directory, "test-public-key.json"), "utf8")); return createPublicKey({ key: Buffer.from(value.spkiDerBase64, "base64"), format: "der", type: "spki" }); }
+async function documents(name: string, directory = root) {
+  const dir = join(directory, name);
   return { metadata: await readFile(join(dir, "mua-pack.json")), target: await readFile(join(dir, "metadata/target-manifest.json")),
     base: name === "update" ? await readFile(join(dir, "metadata/base-manifest.json")) : null, index: await readFile(join(dir, "modrinth.index.json")), signature: await readFile(join(dir, "metadata/signature.json")) };
 }
-test("production v2 verifier accepts all frozen full/update fixtures and binds regenerated mrpack indexes", async () => {
-  for (const name of ["base-full", "target-full", "update"]) {
-    const docs = await documents(name), result = await validateRecipePackArchive(join(root, name + ".muapack"), await key());
+async function revisedTarget(name: string) {
+  const legacy = JSON.parse((await documents(name)).target.toString()); delete legacy.supportedPlatforms;
+  return recipeTarget(encodeMuaJson({ ...legacy, format: "mua-recipe-content" }));
+}
+
+test("v2 revision 2 removes platform declarations and binds the revision, manifests and complete delta with signatures", async () => {
+  const target = await revisedTarget("target-full"), targetBytes = encodeMuaJson(target);
+  assert("protocolRevision" in target); assert.equal(target.protocolRevision, 2); assert(!("supportedPlatforms" in target));
+  const indexBytes = encodeMuaJson(recipeModrinthIndex(target)), pair = generateKeyPairSync("ed25519");
+  for (const baseBytes of [null, encodeMuaJson(await revisedTarget("base-full")), (await documents("base-full")).target]) {
+    const metadata = createRecipePackMetadata(targetBytes, baseBytes), metadataBytes = encodeMuaJson(metadata);
+    assert("protocolRevision" in metadata); assert.equal(metadata.protocolRevision, 2); assert(!("platformsChanged" in metadata.changes));
+    assert.equal(metadata.payload.length, baseBytes ? 3 : 5);
+    assert.equal(metadata.changes.modified.length, baseBytes ? 3 : 0);
+    const signature = signRecipePackMetadata(metadataBytes, pair.privateKey);
+    verifyRecipePackSignature(metadataBytes, signature, pair.publicKey);
+    validateRecipePackDocuments(metadataBytes, targetBytes, baseBytes, indexBytes);
+    // Revision cannot be changed or removed after signing, even if the envelope is otherwise untouched.
+    const altered = { ...metadata, protocolRevision: 3 };
+    assert.throws(() => verifyRecipePackSignature(encodeMuaJson(altered), signature, pair.publicKey));
+    assert.throws(() => signRecipePackMetadata(encodeMuaJson(altered), pair.privateKey));
+    assert.throws(() => validateRecipePackDocuments(metadataBytes, encodeMuaJson({ ...target, protocolRevision: 3 }), baseBytes, indexBytes));
+  }
+});
+
+test("v2 revision shapes are strict and cannot mix legacy platform fields with the platform-independent revision", async () => {
+  const target = await revisedTarget("target-full"), bytes = encodeMuaJson(target);
+  const metadata = createRecipePackMetadata(bytes), index = encodeMuaJson(recipeModrinthIndex(target)), pair = generateKeyPairSync("ed25519");
+  for (const mutation of [
+    { ...target, protocolRevision: undefined },
+    { ...target, protocolRevision: 1 },
+    { ...target, supportedPlatforms: ["windows-amd64"] },
+    { ...target, unknown: true },
+  ]) {
+    const value = JSON.parse(JSON.stringify(mutation));
+    assert.throws(() => readRecipeManifest(encodeMuaJson(value)));
+  }
+  for (const mutation of [
+    { ...metadata, protocolRevision: undefined },
+    { ...metadata, changes: { ...metadata.changes, platformsChanged: null } },
+    { ...metadata, unknown: true },
+  ]) assert.throws(() => signRecipePackMetadata(encodeMuaJson(JSON.parse(JSON.stringify(mutation))), pair.privateKey));
+  const legacyDocs = await documents("target-full");
+  assert.throws(() => validateRecipePackDocuments(legacyDocs.metadata, bytes, null, index));
+  assert.throws(() => validateRecipePackDocuments(encodeMuaJson(metadata), legacyDocs.target, null, legacyDocs.index));
+});
+
+test("v2 revision 2 full and mixed-revision update archives validate signatures and all local payload bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mua-v2-revision-")), pair = generateKeyPairSync("ed25519");
+  try {
+    const target = await revisedTarget("target-full"), targetBytes = encodeMuaJson(target);
+    for (const base of [null, (await documents("base-full")).target, encodeMuaJson(await revisedTarget("base-full"))]) {
+      const metadata = createRecipePackMetadata(targetBytes, base), bytes = encodeMuaJson(metadata), zip = new ZipFile(), chunks: Buffer[] = [];
+      const done = new Promise<Buffer>((ok, bad) => { zip.outputStream.on("data", b => chunks.push(b)); zip.outputStream.on("error", bad); zip.outputStream.on("end", () => ok(Buffer.concat(chunks))); });
+      zip.addBuffer(bytes, "mua-pack.json"); zip.addBuffer(targetBytes, "metadata/target-manifest.json");
+      zip.addBuffer(encodeMuaJson(recipeModrinthIndex(target)), "modrinth.index.json");
+      zip.addBuffer(signRecipePackMetadata(bytes, pair.privateKey), "metadata/signature.json");
+      if (base) zip.addBuffer(base, "metadata/base-manifest.json");
+      for (const file of metadata.payload) zip.addBuffer(await readFile(join(root, "target-full", file.entry)), file.entry);
+      zip.end(); const path = join(dir, "revision-2.muapack"); await writeFile(path, await done);
+      const parsed = await validateRecipePackArchive(path, pair.publicKey);
+      assert.deepEqual(parsed.metadata, metadata); assert.equal(parsed.objectCount, base ? 3 : 5);
+      if (base) assert.deepEqual(parsed.base, readRecipeManifest(base));
+    }
+  } finally { assert(resolve(dir).startsWith(resolve(tmpdir()))); await rm(dir, { recursive: true, force: true }); }
+});
+test("production v2 verifier accepts all frozen and revision 2 full/update fixtures and binds regenerated mrpack indexes", async () => {
+  for (const directory of [root, join(root, "revision-2")]) for (const name of ["base-full", "target-full", "update"]) {
+    const docs = await documents(name, directory), result = await validateRecipePackArchive(join(directory, name + ".muapack"), await key(directory));
     assert.equal(result.target.formatVersion, 2); assert.equal(result.metadata.packageType, name === "update" ? "update" : "full");
     assert.equal(result.objectCount, name === "update" ? 3 : 5);
     assert.deepEqual(createRecipePackMetadata(docs.target, docs.base, result.metadata.removalPolicy), result.metadata);
