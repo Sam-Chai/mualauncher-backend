@@ -16,6 +16,9 @@ function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString,
     connectionTimeoutMillis: 5_000,
+    // Prisma may issue independent relation queries on one transaction client.
+    // pg 8.23 requires explicit pipelining for concurrent client.query calls.
+    pipeline: true,
   }, { schema: process.env.DATABASE_SCHEMA ?? "public" });
 
   return new PrismaClient({ adapter });

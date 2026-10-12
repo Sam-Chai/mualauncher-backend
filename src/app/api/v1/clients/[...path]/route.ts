@@ -6,6 +6,7 @@ import { AppError } from "@/lib/errors";
 import { json, failure, readJson } from "@/lib/http";
 import { uuid, clientId } from "@/lib/input";
 import * as clients from "@/lib/client-service";
+import { configurePackages, retryPackages, draftPlatformManifest, managementFullPackage } from "@/lib/package-build-service";
 
 async function handle(request: Request, context: { params: Promise<{ path: string[] }> }) {
   await connection();
@@ -25,6 +26,8 @@ async function handle(request: Request, context: { params: Promise<{ path: strin
         if (kind === "uploads" && path.length === 2) return clients.uploadView(await clients.findUpload(db, actor, uuid(id)));
         if (path.length === 1) return clients.clientDetails(db, actor, clientId(kind));
         if (path.length === 4 && id === "drafts" && draftId === "manifest") return clients.draftManifest(db, actor, clientId(kind), uuid(action));
+        if (path.length === 4 && id === "drafts" && draftId === "platform-manifest") return draftPlatformManifest(db, actor, clientId(kind), uuid(action), new URL(request.url).searchParams.get("platform"));
+        if (path.length === 4 && (id === "drafts" || id === "releases") && draftId === "package") return managementFullPackage(db, actor, clientId(kind), id, uuid(action), new URL(request.url).searchParams.get("platform"));
       }
       if (request.method === "POST") {
         if (kind === "uploads" && path.length === 1) return clients.createUpload(db, actor, raw);
@@ -41,6 +44,9 @@ async function handle(request: Request, context: { params: Promise<{ path: strin
         if (path.length === 2 && id === "archive") return clients.archiveClient(db, actor, clientId(kind), raw);
         if (path.length === 2 && id === "delete") return clients.deleteClient(db, actor, clientId(kind));
         if (path.length === 4 && id === "drafts") {
+          if (draftId === "archive") return clients.archiveClientDraft(db, actor, clientId(kind), uuid(action), raw);
+          if (draftId === "platforms") return configurePackages(db, actor, clientId(kind), uuid(action), raw);
+          if (draftId === "retry-packages") return retryPackages(db, actor, clientId(kind), uuid(action));
           if (draftId === "review") return clients.reviewClient(db, actor, clientId(kind), uuid(action), raw);
           if (draftId === "publish") return clients.publishClient(db, actor, clientId(kind), uuid(action), raw);
         }

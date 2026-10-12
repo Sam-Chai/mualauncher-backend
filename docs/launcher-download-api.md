@@ -1,0 +1,65 @@
+# Launcher 客户端下载与链接刷新
+
+更新：2026-10-11。v1／v2 使用同一发布系统和 S3 GetObject 预签名下载。公开下载只允许已上架、未归档组织／服务器当前绑定且未归档、未删除的客户端；后台管理下载仍检查独立 RBAC。以下是已实现的服务端契约，Launcher 安装、恢复事务和信任公钥部署仍需接入。
+
+## 1. 发现当前发布
+
+```http
+GET /api/v1/servers/NPU/packages?platform=windows-amd64&acceptedFormatVersions=1,2
+GET /api/v1/servers/NPU/packages?acceptedFormatVersions=2
+```
+
+v1 必须提供六平台协议中的规范 `platform`。v2 可以省略或传 `universal`，返回 `platform:"universal"`；新 v2 对所有架构使用同一个完整包及同一个对应基准的更新包，不在后台按系统构建。旧调用仍可传规范平台，会核对历史包的 `supportedPlatforms`，不会改写旧清单／签名。省略能力列表只接受 v1，当前发布为 v2 时返回 415；能力顺序不选择历史版本。
+
+新 v2 上传／审核没有架构选择，统一声明六个规范目标；这是端侧解析环境的范围，不能视为六平台游戏启动已验收。旧已签名 v2 的受限平台声明保持原样。
+
+更新请求附上 `baseReleaseId=<已安装 UUID>` 与建议的 `baseManifestSha256=<64 位小写 SHA-256>`。只有匹配上传时固定的已发布基准、格式、平台及清单摘要才返回 update；否则返回同目标 full。v1 的基准摘要是**包内平台清单**的摘要，不是旧 `/manifest` 返回的 `mua-client-manifest` 摘要；v2 是 `mua-recipe-manifest` 摘要。
+
+响应包含 `format`, `formatVersion`, `releaseId`, `version`, `platform`, `packageType`, `baseReleaseId`, `baseManifestSha256`, `sha256`, `size`, `targetManifestSha256`, `signingKeyId`, `url`, `expiresIn:300`, `expiresAt`, `etag`, `refreshUrl`, `mods` 与 `full`。full 的基准字段均为 null；`full` 自身包含 `sha256,size,etag,url,expiresIn,expiresAt,refreshUrl`，始终指向同目标的完整包。ETag 是 S3 返回的原始值（包括引号），不能用作 SHA-256。v2 还提供 `minimumLauncherProtocol:2`, `supportedPlatforms`, `runtime`；optional 标记继续保留。
+
+## 2. 固定发布版本刷新
+
+```http
+GET /api/v1/servers/NPU/releases/<releaseId>/packages?platform=windows-amd64&acceptedFormatVersions=1&packageSha256=<原包 SHA-256>
+GET /api/v1/servers/NPU/releases/<releaseId>/packages?acceptedFormatVersions=2&baseReleaseId=<基准 UUID>&baseManifestSha256=<基准摘要>&packageSha256=<原更新包 SHA-256>
+```
+
+Launcher 应保存并直接请求响应里的相对 `refreshUrl`，以后台 API origin 解析。刷新固定 `releaseId`、包摘要、v1 平台和更新基准，不重新选择服务器最新版本，也不重新组包。新版本上线后，同一个仍绑定的客户端的历史未归档发布仍可刷新；草稿、不属于当前绑定客户端的历史、归档／删除／解绑／下架资源返回 404。这里的 releaseId 是 MUA 不可变发布 ID，不是 S3 bucket 的 `versionId`。
+
+`packageSha256` 在该路由可选，但生成的 refreshUrl 始终携带。摘要与当前可提供的包不符返回 409，不静默替换其他字节；例如更新基准已归档而只能提供 full，原更新下载刷新会失败，需 Launcher 明确重新选择完整包并建立新的下载任务。未提供包摘要时，可使用固定 releaseId 路由首次选择包，但不可依此保证续传文件身份。只需要完整包修复时，使用 `full.refreshUrl`；它不带更新基准。
+
+成功响应 `Cache-Control:no-store`。它包含新预签名链接和从签名时间计算的 UTC `expiresAt`；同秒请求可能得到相同的有效 URL，刷新不要求随机生成 URL。无论服务器最新发布是什么，选定的 releaseId／SHA-256／大小不变才允许继续原下载。
+
+## 3. AWS S3 下载与续传
+
+预签名链接由 AWS SDK 的 `GetObjectCommand` 使用 SigV4 签发，默认有效 300 秒。GET 签名不绑定 `Range`；Launcher 可以对同一对象请求单一范围，并携带后台返回的 ETag：
+
+```http
+GET <presigned-url>
+Range: bytes=1048576-
+If-Match: "<etag>"
+```
+
+续传只接受 `206 Partial Content`，检查 `Content-Range` 起点／终点／总大小以及 ETag 与当前任务一致后写入相应偏移。收到 200 不得直接追加到部分文件；412 表示 ETag 条件失败，416 表示请求范围不成立，应核对下载记录。一个 GET 只请求一个字节范围；并发分块须分别请求，不能发送多范围头。ETag 为不透明对象身份，multipart ETag 不是整个文件的 SHA-256，也不一定是 MD5。
+
+链接过期后，续传的新 GET 会失败；先请求固定 refreshUrl，再以同一 SHA-256、size、ETag 及已有偏移续传。尚在进行中的传输不要求在 URL 到期时主动中断。只有确认是链接到期才刷新，不能把所有 403（权限、签名错误等）都当作到期无限重试。此 URL 签的是 GET，不能换 HEAD 方法；所需大小与 ETag 已在 JSON 响应中提供。不要改写签名 URL 的域名或查询参数。
+
+完整下载完成后必须核对字节数与整个 ZIP 的 SHA-256，再用包外可信公钥验签、校验完整目标／基准、载荷摘要与安装路径。断点记录、原子安装、v2 环境解析和 optional 选择由 Launcher 实现。浏览器客户端还需要实际 OSS CORS 允许 Range／If-Match、暴露 ETag／Content-Range；原生 Launcher 不受浏览器 CORS 限制。
+
+AWS 行为依据：[GetObject（Range、If-Match）](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)、[预签名 URL 有效期](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html)。实际 IAM／临时凭证／bucket 策略可能使 URL 比标称时间更早失效。当前存储客户端使用配置的固定凭证；生产 IAM 与 CDN 策略需另行配置。
+
+## 4. 后端校验与错误
+
+v1 和 v2 在签发前均核对发布清单摘要及身份、READY／required 产物、完整包及所选更新包的 S3 HEAD `ContentLength` 与 `Metadata.sha256`；不会在每次请求时重新下载整个大 ZIP。完整字节／ZIP／签名在 Worker 生成时校验，下载端还必须对实际收到的字节重新校验，HEAD 元数据不替代密码学内容校验。
+
+更新包核对上传时固定的 `baseReleaseId`、已发布基准所属客户端／组织／版本／平台及实际清单摘要。新 v1 更新产物记录 `baseManifestSha256`；旧 READY v1 缺少该字段时，从已封存的平台清单验证并推导，不改写其记录或签名。v2 必须有原本记录的基准摘要。存储／基准损坏不伪装成成功，也不偷偷选其他版本。
+
+| HTTP | 含义 |
+| --- | --- |
+| 400 | 无效平台／UUID／能力列表／SHA-256，或基准摘要缺少基准 ID |
+| 404 | 未公开、已归档／删除／解绑、跨客户端／组织目标，或未提供所需平台包 |
+| 409 | 固定下载包摘要与可提供的包不符，必须重新建立下载任务 |
+| 415 | Launcher 未声明接受目标 muapack 格式 |
+| 503 | 已发布清单、产物、基准身份或 OSS 大小／摘要校验失败／不可读取 |
+
+归档阻止新的发现、下载与刷新请求。已经发出的 S3 URL 仍有剩余有效期，归档本身不即时撤销它，也不保证清除客户端或 CDN 已缓存字节。

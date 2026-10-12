@@ -4,6 +4,7 @@ import type { Actor, Db } from "./auth";
 import { invariant } from "./errors";
 import * as input from "./input";
 import { hashPassword } from "./password";
+import { enabledPackageFormats } from "./package-format-settings";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
 const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true, credential: { select: { username: true } } } as const;
@@ -16,6 +17,7 @@ export async function audit(db: Db, actor: Actor, action: string, targetType: st
 }
 
 export async function getState(db: Db, actor: Actor) {
+  const packageFormats = await enabledPackageFormats(db);
   const organizations = await db.organization.findMany({
     where: actor.isSuperAdmin ? {} : { members: { some: { accountId: actor.id, status: "ACTIVE" } } },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { displayName: "asc" }],
@@ -71,7 +73,7 @@ export async function getState(db: Db, actor: Actor) {
     SELECT to_char(days.day, 'YYYY-MM-DD') AS date, coalesce(counts.count, 0)::int AS count
     FROM days LEFT JOIN counts USING (day) ORDER BY days.day
   ` : [];
-  return { actor, organizations: organizationDtos, accounts, events, auditActivity };
+  return { actor, organizations: organizationDtos, accounts, events, auditActivity, enabledPackageFormats: packageFormats };
 }
 
 export async function createOrganization(db: Db, actor: Actor, raw: unknown) {

@@ -14,16 +14,20 @@ import { locked, type Db } from "./auth";
 import { AppError, invariant } from "./errors";
 import { requireClient } from "./rbac";
 import { digest, packagesBucket, readObject, putJson, storageClient, abortMultipart } from "./storage";
-import { parseClientPack } from "./pack-parser";
+import { parseClientPack, compareFiles } from "./pack-parser";
+import { readInventory } from "./pack-inventory";
+import { comparisonDraft } from "./draft-lifecycle";
 import { audit } from "./management";
 import type { ClientInspection, PackFile, ReleaseManifest } from "./client-contract";
+import { workerDownloadSettings } from "./download-settings";
 
-async function authorizedOwner(db: Db, upload: { createdById: string; clientId: string; baseReleaseId: string | null }) {
+async function authorizedOwner(db: Db, upload: { createdById: string; clientId: string; baseReleaseId: string | null; comparisonDraftId: string | null }) {
   const account = await db.account.findUnique({ where: { id: upload.createdById } });
   invariant(account?.status === "ACTIVE", 403, "上传账号已停用");
   const actor = { id: account.id, displayName: account.displayName, isSuperAdmin: account.isSuperAdmin };
   const scope = await requireClient(db, actor, upload.clientId, "DRAFT_CREATE", true);
   if (upload.baseReleaseId) await requireClient(db, actor, upload.clientId, "DRAFT_EDIT", true);
+  if (upload.comparisonDraftId) await requireClient(db, actor, upload.clientId, "DRAFT_ARCHIVE", true);
   return { actor, scope };
 }
 export async function claimUpload(client: PrismaClient = prisma) {
@@ -31,7 +35,7 @@ export async function claimUpload(client: PrismaClient = prisma) {
     await db.clientUpload.updateMany({ where: { status: "PROCESSING", leaseUntil: { lt: new Date() }, attempts: { gte: 3 } }, data: { status: "FAILED", error: "Worker 多次中断，请重试任务", leaseToken: null, leaseUntil: null } });
     const ids = await db.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "ClientUpload"
-      WHERE (("status" = 'QUEUED' AND "processingPhase" IS DISTINCT FROM 'SELECT_INSTANCE') OR ("status" = 'PROCESSING' AND "leaseUntil" < now())) AND "attempts" < 3
+      WHERE "packageFormatVersion" IN (1,2) AND (("status" = 'QUEUED' AND "processingPhase" IS DISTINCT FROM 'SELECT_INSTANCE') OR ("status" = 'PROCESSING' AND "leaseUntil" < now())) AND "attempts" < 3
       ORDER BY "createdAt" FOR UPDATE SKIP LOCKED LIMIT 1
     `;
     if (!ids[0]) return null;
@@ -55,11 +59,13 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
   try {
     await client.$transaction(db => authorizedOwner(db, upload));
     let previous: PackFile[] = []; let previousVersion: string | null = null;
-    if (upload.baseReleaseId) {
+    if (upload.baseReleaseId && upload.packageFormatVersion === 1) {
       const release = await client.clientRelease.findUnique({ where: { id: upload.baseReleaseId } }); invariant(release, 409, "基准发布不存在");
+      if (release.packageFormatVersion === 1) {
       const bytes = await readObject(release.manifestObjectKey); invariant(digest(bytes) === release.manifestSha256, 422, "基准 Manifest 摘要不匹配");
       const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest; invariant(manifest.format === "mua-client-manifest" && (manifest.schemaVersion === 2 ? manifest.clientId === upload.clientId : manifest.serverId === upload.clientId) && Array.isArray(manifest.files), 422, "基准 Manifest 格式不兼容");
       previous = manifest.files; previousVersion = release.versionLabel;
+      }
     }
     const source = await storageClient().send(new GetObjectCommand({ Bucket: packagesBucket(), Key: upload.sourceObjectKey }));
     invariant(source.Body && source.ContentLength === Number(upload.size), 422, "源 ZIP 不存在或大小不匹配");
@@ -80,26 +86,42 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
     }, client);
     const parsed = await parseClientPack(local, temp, previous, previousVersion, Number(upload.size), value => { progress = value; }, abort.signal, {
       selectedInstanceId: upload.selectedInstanceId,
+      packageFormatVersion: upload.packageFormatVersion === 2 ? 2 : 1,
+      downloadSettings: await workerDownloadSettings(client),
       onInspecting: () => checkpoint({ processingPhase: "INSPECTING" }),
       storeCas: (sha, path, size) => putTrackedCas(upload.clientId, sha, path, size, client),
       onInspected: (info: ClientInspection, mods: string[]) => checkpoint({
         detectedInfo: info as unknown as Prisma.InputJsonObject, detectedMods: mods, warnings: info.warnings,
         ...(info.requiresSelection ? { status: "QUEUED", processingPhase: "SELECT_INSTANCE", leaseToken: null, leaseUntil: null } :
-          { processingPhase: "CAS", selectedInstanceId: info.instanceId }),
+          { processingPhase: upload.packageFormatVersion === 1 && info.importFiles?.some(file => file.source === "remote") ? "DOWNLOADING" : "CAS", selectedInstanceId: info.instanceId }),
       }),
+      onDownloading: info => checkpoint({ processingPhase: "DOWNLOADING", detectedInfo: info as unknown as Prisma.InputJsonObject, progress }),
+      onCas: info => checkpoint({ processingPhase: "CAS", detectedInfo: info as unknown as Prisma.InputJsonObject, progress }),
     });
     if (!parsed) return true;
+    let comparisonStatistics = null;
+    if (upload.comparisonDraftId && parsed.statistics) {
+      const previousDraft = await comparisonDraft(client, upload.clientId, upload.comparisonDraftId);
+      if (previousDraft.packageFormatVersion === 1) {
+      const previousInventory = await readInventory(previousDraft.upload!.filesObjectKey!, previousDraft.upload!.filesSha256!);
+      comparisonStatistics = compareFiles(parsed.files, previousInventory.files, parsed.statistics.newDataSize, previousDraft.versionLabel, Number(upload.size));
+      }
+    }
     const key = `inventories/${upload.id}/${upload.leaseToken}.json`;
-    const stored = await putJson(key, { schemaVersion: 1, files: parsed.files });
+    const recipe = "recipeInventory" in parsed ? parsed.recipeInventory : null;
+    const statistics = "recipeStatistics" in parsed ? parsed.recipeStatistics : parsed.statistics;
+    invariant((upload.packageFormatVersion === 2) === !!recipe, 422, "处理结果与上传格式不匹配");
+    const stored = await putJson(key, recipe ?? { schemaVersion: 1, files: parsed.files });
     await locked(async db => {
       const fresh = await db.clientUpload.findUnique({ where: { id: upload.id } });
       invariant(fresh?.status === "PROCESSING" && fresh.leaseToken === upload.leaseToken && fresh.leaseUntil && fresh.leaseUntil > new Date(), 409, "Worker 租约失效");
       const { actor, scope } = await authorizedOwner(db, fresh);
       invariant(scope.client.currentReleaseId === fresh.baseReleaseId && scope.client.revision === fresh.basePublicationRevision, 409, "当前版本已改变，请重新上传最新完整客户端");
       await db.clientUpload.update({ where: { id: upload.id }, data: { status: "READY", progress: 100, leaseUntil: null, leaseToken: null,
-        sourceSha256, filesObjectKey: key, filesSha256: stored.sha256, statistics: parsed.statistics as unknown as Prisma.InputJsonObject,
-        detectedMods: parsed.detectedMods, warnings: parsed.warnings } });
-      await audit(db, actor, "CLIENT_UPLOAD_READY", "ClientUpload", upload.id, scope.client.organizationId, undefined, { fileCount: parsed.files.length, sourceSha256 });
+        sourceSha256, filesObjectKey: key, filesSha256: stored.sha256, statistics: statistics as unknown as Prisma.InputJsonObject,
+        comparisonStatistics: comparisonStatistics ? comparisonStatistics as unknown as Prisma.InputJsonObject : Prisma.JsonNull,
+        detectedMods: parsed.detectedMods, detectedInfo: parsed.detectedInfo as unknown as Prisma.InputJsonObject, processingPhase: "CAS", warnings: parsed.warnings } });
+      await audit(db, actor, "CLIENT_UPLOAD_READY", "ClientUpload", upload.id, scope.client.organizationId, undefined, { packageFormatVersion: upload.packageFormatVersion, fileCount: recipe?.files.length ?? parsed.files.length, sourceSha256 });
     }, client);
   } catch (error) {
     const message = error instanceof AppError ? error.message : "ZIP 解析、存储或 Worker 处理失败，请检查整合包后重试";

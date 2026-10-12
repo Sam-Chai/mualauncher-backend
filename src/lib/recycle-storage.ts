@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { HeadObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand, CreateMultipartUploadCommand, UploadPartCopyCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand, CreateMultipartUploadCommand, UploadPartCopyCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { Db, Actor } from "./auth";
 import { prisma } from "./prisma";
@@ -8,6 +8,8 @@ import { invariant } from "./errors";
 import { superOnly } from "./rbac";
 import { audit } from "./management";
 import { z } from "zod";
+import { parseRecipeInventory } from "./recipe-inventory";
+import { readRecipeContent, readRecipeManifest } from "./muapack-v2-protocol";
 import { storageClient, missingObject, casBucket, packagesBucket, casKey, putCas, readObject, digest, abortMultipart } from "./storage";
 
 const transactionOptions = { maxWait: 10000, timeout: 2 * 60 * 60 * 1000 };
@@ -90,7 +92,12 @@ export async function indexClientStorage(client: PrismaClient = prisma) {
     const files = new Map<string, number>();
     for (const [key, sha] of indexes) {
       const bytes = await readObject(key); invariant(digest(bytes) === sha, 422, "历史文件索引校验失败；回收清理暂停");
-      const parsed = fileList.safeParse(JSON.parse(bytes.toString("utf8"))); invariant(parsed.success, 422, "历史文件索引无效；回收清理暂停");
+      const raw = JSON.parse(bytes.toString("utf8"));
+      const recipe = raw?.format === "mua-recipe-content" ? readRecipeContent(bytes) : raw?.format === "mua-recipe-manifest" ? readRecipeManifest(bytes) :
+        raw?.schemaVersion === 2 && raw?.format === "mua-import-recipe" ? parseRecipeInventory(raw) : null;
+      const localFiles = recipe ? recipe.files
+        .filter(file => file.source.type === "local").map(file => ({ sha256: file.hashes.sha256, size: file.size })) : raw;
+      const parsed = fileList.safeParse(Array.isArray(localFiles) ? { files: localFiles } : localFiles); invariant(parsed.success, 422, "历史文件索引无效；回收清理暂停");
       for (const file of parsed.data.files) { invariant(!files.has(file.sha256) || files.get(file.sha256) === file.size, 422, "历史 CAS 文件大小冲突"); files.set(file.sha256, file.size); }
     }
     await client.$transaction(async db => {
@@ -126,13 +133,21 @@ export async function maintainRecycleBin(client: PrismaClient = prisma, now = ne
   if (!await indexClientStorage(client)) return;
   // Round-robin reconciliation also catches S3 completions that raced a deletion.
   const owners = await client.client.findMany({ where: { deletedAt: { not: null } }, take: 4, orderBy: [{ recycledAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
-    include: { uploads: true, drafts: true } });
+    include: { uploads: true, drafts: true, releases: true } });
   for (const owner of owners) {
     await client.$transaction(async db => {
       await db.$executeRaw`SELECT pg_advisory_xact_lock(731404, hashtext(${owner.id}))`;
       const keys = new Set<string>();
       for (const upload of owner.uploads) { await abortMultipart(upload.sourceObjectKey, upload.multipartId); keys.add(upload.sourceObjectKey); if (upload.filesObjectKey) keys.add(upload.filesObjectKey); }
       for (const draft of owner.drafts) { if (draft.sourceObjectKey) keys.add(draft.sourceObjectKey); if (draft.candidateManifestKey) keys.add(draft.candidateManifestKey); }
+      for (const release of owner.releases) keys.add(release.manifestObjectKey);
+      // Include failed attempts and lease-loss artifacts, not only the winning database pointer.
+      let continuation: string | undefined;
+      do {
+        const objects = await storageClient().send(new ListObjectsV2Command({ Bucket: packagesBucket(), Prefix: `muapacks/${owner.id}/`, ContinuationToken: continuation }));
+        for (const object of objects.Contents ?? []) if (object.Key) keys.add(object.Key);
+        continuation = objects.NextContinuationToken;
+      } while (continuation);
       for (const key of keys) {
         const bucket = packagesBucket(); const trashKey = `recycle/clients/${owner.id}/${key}`;
         const row = await db.recycleObject.upsert({ where: { bucket_objectKey: { bucket, objectKey: key } }, create: { bucket, objectKey: key, trashKey, clientId: owner.id }, update: {} });

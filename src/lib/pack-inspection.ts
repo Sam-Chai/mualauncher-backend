@@ -2,8 +2,9 @@ import "server-only";
 import { invariant } from "./errors";
 import { MAX_MODS, type PackFile } from "./client-contract";
 import { inspectMinecraftRuntime, type MetadataReader } from "./minecraft-inspection";
+import { inspectModrinthIndex } from "./modrinth-inspection";
 
-export type PackFormat = "minecraft-zip" | "curseforge" | "modrinth" | "multimc";
+export type PackFormat = "minecraft-zip" | "curseforge" | "modrinth" | "pcl" | "multimc";
 type PackAdapter = {
   format: PackFormat;
   matches: (paths: readonly string[]) => boolean;
@@ -42,9 +43,12 @@ function minecraftMods(files: readonly PackFile[], instanceId?: string | null) {
   return mods;
 }
 // A format's detection, game-root normalization and mod inspection live in one adapter.
-// Other formats are recognized but deliberately have no import adapter in this milestone.
+// Unsupported formats keep detection here; Modrinth/PCL share the normalized import pipeline.
 const adapters: readonly PackAdapter[] = [
-  { format: "modrinth", matches: paths => hasMarker(paths, "modrinth.index.json") },
+  { format: "modrinth", matches: paths => hasMarker(paths, "modrinth.index.json"), rootPrefix: paths => {
+    invariant(paths.includes("modrinth.index.json"), 422, "modrinth.index.json 必须位于包根目录"); return "";
+  }, mods: minecraftMods, runtime: async (_paths, reader) => inspectModrinthIndex(await reader.json("modrinth.index.json")).info },
+  { format: "pcl", matches: paths => paths.some(path => /\.mrpack$/i.test(path)) && paths.includes("PCL/Setup.ini"), rootPrefix: () => "", mods: minecraftMods },
   { format: "curseforge", matches: paths => hasMarker(paths, "manifest.json") },
   { format: "multimc", matches: paths => hasMarker(paths, "mmc-pack.json") },
   { format: "minecraft-zip", matches: () => true, rootPrefix: minecraftRoot, mods: minecraftMods, runtime: inspectMinecraftRuntime },
@@ -56,7 +60,7 @@ export function detectPackFormat(paths: readonly string[]): PackFormat {
 }
 export function inspectPackLayout(paths: readonly string[]) {
   const format = detectPackFormat(paths); const adapter = adapters.find(adapter => adapter.format === format)!;
-  invariant(adapter.rootPrefix && adapter.mods, 422, "当前阶段只支持完整 .minecraft ZIP；CurseForge、Modrinth 和 MultiMC 包将在后续接入");
+  invariant(adapter.rootPrefix && adapter.mods, 422, "当前支持 .minecraft ZIP、Modrinth 和 PCL 封装；CurseForge 和 MultiMC 尚未接入");
   return { format, rootPrefix: adapter.rootPrefix(paths) };
 }
 export function inspectPackMods(format: PackFormat, files: readonly PackFile[], instanceId?: string | null) {

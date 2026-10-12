@@ -2,13 +2,21 @@
 
 MUA 高校联盟启动器后端，使用 Next.js 16、Prisma 7 与 PostgreSQL。后台采用 shadcn/ui dashboard-01、Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod；图表仅使用 Tremor Raw。
 
-已实现白名单登录、组织／单服 RBAC、组织和服务器管理、成员授权、归档、审计，以及完整 .minecraft ZIP 上传、MinIO、Worker、SHA-256 CAS、版本差异统计、审核和 Ed25519 签名发布。Launcher 增量安装与 PostgreSQL RLS 尚未接入。
+已实现白名单登录、组织／单服 RBAC、组织和服务器管理、成员授权、归档、审计，以及 .minecraft ZIP／Modrinth mrpack／PCL 封装上传、MinIO、Worker、SHA-256 CAS、版本差异统计、审核和 Ed25519 签名发布。Modrinth 远程下载、optional 全量打包与超管来源／代理设置见 [导入说明](docs/modrinth-import.md)。Launcher 增量安装／optional 选择与 PostgreSQL RLS 尚未接入。
+
+环境下载默认优先 BMCLAPI／中科大／南大和清华 Adoptium，失败回退官方；默认集成 JRE。超管在 Settings 管理下载源、JRE／JDK 与镜像代理开关（默认关闭）；官方环境和 mrpack 使用总代理设置，MinIO 不走代理。镜像覆盖范围、缓存兼容与验收记录见[环境下载源](docs/environment-download-sources.md)。
+
+Forge／NeoForge 已接入官方客户端安装处理器、运行环境缓存与 muapack 组包，支持范围见 [Forge 环境](docs/forge-environments.md)。Worker 宿主需要 Java，推荐配置 FORGE_PROCESSOR_JAVA；目标客户端仍默认 JRE。可选 DOWNLOAD_DNS_OVER_HTTPS 默认关闭，本机因确认 DNS 异常而启用；加密 DNS 查询与镜像文件的代理选择分别遵循既有开关。
 
 [产品需求](docs/mua-backend-requirements.md)、[数据库模型](docs/minimal-data-model.md)、[权限矩阵](docs/permission-matrix.md)、[实施进度](docs/implementation-status.md)、[管理界面](docs/admin-ui.md)。上传流程与标准 API 见[客户端上传文档](docs/client-upload-api.md)。
 
+[muapack v1 协议](docs/muapack-v1.md)已提供整包／更新包模型、六平台环境引用、差异生成、独立签名和只读 ZIP 校验。运行 `npm run test:muapack` 验证协议，或 `npm run muapack:validate -- client.muapack trusted-public-key.pem` 校验实际文件。Worker 环境下载／缓存、六平台后台组包、发布门槛和表格进度已接入，见[后台组包](docs/muapack-worker.md)。Launcher 安装尚未接入。默认选择除 Linux aarch64 外的五个平台，Linux ARM 选项灰色禁用并显示提示；缺少官方 Java／原生库的平台会明确失败，需要调整平台后重新审核。
+
+[muapack v2 协议基线](docs/muapack-v2.md)已冻结，并提供带签名的[完整／更新离线样例](docs/examples/muapack-v2/README.md)。已接入上传选择、共享识别、本地 CAS、完整组包及同一套审核／签名／发布；远程模组与环境只保存声明，由 Launcher 下载。单一跨平台 full 包经过 ZIP／内容／签名校验后才可发布，管理下载与显式能力协商的公开下载已接入。v2 自动增量组包与基准匹配分发已接入，Launcher 安装尚未完成；v1 继续完整运行。后续顺序见[v2 设计记录](docs/muapack-v2-design.md)。
+
 ## 启动本地环境
 
-本机使用 Docker 容器 mualauncher-psql（127.0.0.1:5432）和 mualauncher-minio（127.0.0.1:9000）。连接、存储凭据和签名私钥路径保存在不提交 Git 的 .env 中；新环境从 .env.example 复制并填写。
+本机使用 Docker 容器 mualauncher-psql（127.0.0.1:15432，映射容器 5432）和 mualauncher-minio（127.0.0.1:9000）。连接、存储凭据和签名私钥路径保存在不提交 Git 的 .env 中；新环境从 .env.example 复制并填写，以实际容器映射为准。
 
 ~~~powershell
 npm ci
@@ -35,11 +43,11 @@ APP_ORIGIN 必须匹配页面的协议、主机和端口，末尾不加斜杠。
 
 ## 本机生产预览
 
-当前预览使用 .next/mua-recycle 独立构建目录，监听 http://localhost:3001，仅绑定 127.0.0.1。重新构建前停止此预览实例，再运行：
+当前预览使用 .next/mua-v2-delta 独立构建目录，监听 http://localhost:3001，仅绑定 127.0.0.1。客户端管理提供上传前 v1／v2 选择，以及已生成完整 muapack 的版本／平台选择和下载。重新构建前停止此预览实例，再运行：
 
 ~~~powershell
 $env:APP_ORIGIN = 'http://localhost:3001'
-$env:NEXT_DIST_DIR = '.next/mua-recycle'
+$env:NEXT_DIST_DIR = '.next/mua-v2-delta'
 npm run build
 npm run start -- -p 3001 -H 127.0.0.1
 ~~~
@@ -61,7 +69,7 @@ npm test
 完整 HTTP／自动化脚本测试需要先完成独立生产构建：
 
 ~~~powershell
-$env:MUA_HTTP_TEST_DIST = '.next/mua-recycle'
+$env:MUA_HTTP_TEST_DIST = '.next/mua-v2-delta'
 npm test
 ~~~
 

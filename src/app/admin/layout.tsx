@@ -7,6 +7,8 @@ import { AppError } from "@/lib/errors";
 import { getState } from "@/lib/management";
 import { AdminProvider } from "@/components/admin/provider";
 import { AdminShell } from "@/components/admin/shell";
+// Session validation may redirect; validate deeper admin pages after this gate.
+export const instant = false;
 async function AuthenticatedAdmin({ children }: { children: ReactNode }) {
   await connection();
   const token = (await cookies()).get(COOKIE_NAME)?.value;

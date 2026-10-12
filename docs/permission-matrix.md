@@ -1,8 +1,12 @@
 # 最小权限矩阵提案
 
-日期：2026-10-08。状态：本地白名单登录、应用层 RBAC、手动 ZIP 上传、审核与签名发布已实现，与[最小数据库模型](minimal-data-model.md)配套；具体操作完成范围见[实施进度](implementation-status.md)。本文还包含尚待实施的复制、撤回及发布归档权限，不能视为所有动作均已开放。
+未发布上传版本的撤回／归档已接入 DRAFT_ARCHIVE，支持 SUBMITTED／APPROVED 等未发布状态，检查同组织／单服范围和内容／平台修订，已发布版本禁止通过此操作归档。上传选择替代草稿、发布时改变替代对象也需要 DRAFT_ARCHIVE；发布人员按已确认关系完成的自动归档是发布事务的一部分，不赋予其手动归档权限。归档保留对象与审计，详见[草稿生命周期](draft-lifecycle.md)。
 
-用户已确定实施顺序：第一阶段应用层 RBAC，第二阶段 PostgreSQL RLS。第一阶段采用组织／单服范围的预置角色，统一映射在 `src/lib/rbac.ts`；不开放自定义角色或按账号编辑任意权限集合。RLS 尚未启用。
+更新日期：2026-10-10。状态：本地白名单登录、应用层 RBAC、整合包上传、审核与签名发布、未发布上传版本归档及超管下载设置已实现，与[最小数据库模型](minimal-data-model.md)配套；具体操作完成范围见[实施进度](implementation-status.md)。本文还包含尚待实施的复制及发布归档权限，不能视为所有动作均已开放。
+
+用户已确定实施顺序：第一阶段应用层 RBAC，第二阶段 PostgreSQL RLS。第一阶段采用组织／单服范围的预置角色，统一角色映射在 `src/lib/roles.ts`、服务端范围检查在 `src/lib/rbac.ts`；不开放自定义角色或按账号编辑任意权限集合。RLS 尚未启用。
+
+客户端管理的完整 muapack 下载复用读取权限：草稿包需要 DRAFT_READ，发布／历史包需要 RELEASE_READ，并检查客户端组织／单服范围。只下载 READY、当前选定平台且 OSS 元数据匹配的完整包；无需发布或上架，不能据此开放玩家下载。已归档记录仍可由有权限的后台账号读取，删除客户端不可读；短期签名链接五分钟到期。
 
 ## 1. 主体与权限范围
 
@@ -57,13 +61,13 @@
 | 修改服务器别名、简介、地址、图标 | `SERVER_EDIT` + `SERVER_READ` | 允许，全部本组织服务器 | 未默认授予 |
 | 绑定／解绑客户端、确认替换 | 客户端与目标服务器 CLIENT_BIND，同组织且检查被替换客户端权限 | 允许 | 未默认授予 |
 | 归档、恢复客户端 | CLIENT_ARCHIVE + SERVER_READ | 允许，全部本组织服务器 | 未默认授予 |
-| 删除客户端 | CLIENT_DELETE + SERVER_READ；已归档、从未发布、无实际／待绑定、Worker 未处理中 | 允许，本组织 | 未默认授予 |
+| 删除客户端 | CLIENT_DELETE + SERVER_READ；已归档下架、无实际／待绑定、Worker 未处理中；不限制已发布历史 | 允许，本组织 | 未默认授予 |
 | 查看专用客户端草稿与识别结果 | `DRAFT_READ` + `SERVER_READ` | 允许 | 允许 |
 | 上传整合包、创建新草稿 | `DRAFT_CREATE` + `SERVER_READ` | 允许 | 未默认授予 |
 | 编辑草稿和补充识别信息 | `DRAFT_EDIT` + `DRAFT_READ` + `SERVER_READ` | 允许 | 未默认授予 |
 | 复制为新草稿 | 源草稿需 `DRAFT_READ` / 源发布需 `RELEASE_READ`；目标需 `DRAFT_CREATE`，两侧均需 `SERVER_READ` | 本组织范围允许 | 未默认授予 |
-| 提交或撤回审核 | `DRAFT_SUBMIT` + `DRAFT_READ` + `SERVER_READ` | 允许 | 未默认授予 |
-| 归档、恢复未发布草稿 | `DRAFT_ARCHIVE` + `DRAFT_READ` + `SERVER_READ` | 允许 | 未默认授予 |
+| 提交审核 | `DRAFT_SUBMIT` + `DRAFT_READ` + `SERVER_READ` | 允许 | 未默认授予 |
+| 撤回并归档未发布上传草稿 | `DRAFT_ARCHIVE` + `DRAFT_READ` + `SERVER_READ`；内容／平台修订匹配 | 允许 | 未默认授予 |
 | 审核通过、驳回 | `DRAFT_REVIEW` + `DRAFT_READ` + `SERVER_READ` | 需超管另授 | 允许 |
 | 签名并发布新版本 | `RELEASE_PUBLISH` + `DRAFT_READ` + `RELEASE_READ` + `SERVER_READ` | 需超管另授 | 需超管另授 |
 | 查看客户端历史版本 | `RELEASE_READ` + `SERVER_READ` | 允许 | 允许 |
@@ -90,8 +94,8 @@
 | `DRAFT_READ` | 查看专用客户端草稿及解析结果 | `SERVER_READ` |
 | `DRAFT_CREATE` | 上传并创建该客户端的新草稿 | `SERVER_READ` |
 | `DRAFT_EDIT` | 修改候选内容 | `SERVER_READ`、`DRAFT_READ` |
-| `DRAFT_SUBMIT` | 提交或撤回审核 | `SERVER_READ`、`DRAFT_READ` |
-| `DRAFT_ARCHIVE` | 归档或恢复未发布草稿 | `SERVER_READ`、`DRAFT_READ` |
+| `DRAFT_SUBMIT` | 提交审核 | `SERVER_READ`、`DRAFT_READ` |
+| `DRAFT_ARCHIVE` | 撤回／归档未发布上传草稿、确认替代关系；上传草稿恢复尚未开放 | `SERVER_READ`、`DRAFT_READ` |
 | `RELEASE_READ` | 查看专用客户端的发布历史 | `SERVER_READ` |
 | `DRAFT_REVIEW` | 审核已提交候选版本 | `SERVER_READ`、`DRAFT_READ` |
 | `RELEASE_PUBLISH` | 请求后端签名并发布已批准修订 | `SERVER_READ`、`DRAFT_READ`、`RELEASE_READ` |
@@ -127,7 +131,7 @@
 
 删除统一为归档：组织、服务器、客户端、未发布草稿和发布版本保留记录与历史；账号和成员采用停用，授权撤销清空角色并保留行。归档当前发布或客户端清空所属服务器当前引用；归档服务器还下架该服；归档组织关闭其全部子服务器的上架状态和当前引用。单服归档不影响同组织其他服务器。
 
-归档不直接删除 OSS/CAS 对象，也不释放 server ID 或已发布版本标签。恢复不自动上架、设为当前版本或恢复被单独归档的子资源。所有归档与恢复记审计，面板不提供永久删除。
+归档不直接删除 OSS/CAS 对象，也不释放 server ID 或已发布版本标签。恢复不自动上架、设为当前版本或恢复被单独归档的子资源。所有归档与恢复记审计；已归档客户端可在满足 CLIENT_DELETE 条件后执行不可恢复删除，无论是否曾发布。业务行、签名与审计不硬删除，OSS 文件按回收期清理。
 
 每个管理请求从数据库解析真实组织、服务器和客户端归属，检查账号、成员、有效权限和状态。不能相信请求自报的组织 ID、角色或 server ID。草稿/发布详情、原始包下载、搜索、分页和统计都限制资源范围；嵌套路径组织、服务器必须与资源归属一致。
 
@@ -169,3 +173,9 @@ RLS 不保护字段级修改或整个发布业务流程，现有字段白名单�
 14. 第二阶段使用实际运行账号验证 RLS：即使遗漏组织/服务器过滤，越界行仍不可读写；缺失上下文拒绝管理访问；连接池复用、事务回滚及后台任务不会串用身份。数据库所有者或超级用户的测试成功不能作为 RLS 生效证据。
 
 组织／单服权限、不可提权、撤权、归档、ZIP 解析、CAS、审核签名发布、公开 Manifest／文件下载及并发保护已运行真实 PostgreSQL／MinIO 集成测试；Launcher 源码的验签和增量安装仍待后续实现。详见[实施进度](implementation-status.md)。
+
+muapack 平台选择和失败重试使用原有 DRAFT_CREATE、DRAFT_SUBMIT，已有发布的更新再要求 DRAFT_EDIT；平台／环境清单读取要求 DRAFT_READ。Worker 领取、续租和提交时重新检查上传账号当前 RBAC 与客户端基准。审核同时绑定内容修订和平台方案修订，改变平台不能沿用旧审批。RELEASE_PUBLISH 仍不隐含审核、切换或编辑能力，全部必需产物 READY 才可发布。公开包下载只面向有效当前发布，无任意 bucket／对象键读取接口。
+
+Modrinth／PCL 导入使用相同资源权限、Worker 租约及审核发布检查。远程来源列表、白名单开关及代理地址的 GET／PATCH 只允许 MUA 超管面板会话，普通组织／服务器角色及 API Token 不允许访问；写请求仍检查来源并记录审计。模组 optional 来自已校验 Worker 结果，调用者不能伪造或通过提交数据删减，公开 packages API 仅暴露当前可分发版本的标记。
+
+环境镜像来源、mirrorProxyEnabled 与 Java imageType 使用同一超管面板设置权限，不新增普通账号或 API Token 的授权途径。总代理控制官方环境和 mrpack，镜像代理默认关闭；远程域名白名单仅作用于 mrpack。设置变化只影响后续环境准备／重试，不修改当前任务快照或旧签名发布，详见[环境下载源](environment-download-sources.md)。

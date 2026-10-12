@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { runUploadWorker, expireIncompleteUploads } from "../src/lib/client-worker";
 import { maintainRecycleBin } from "../src/lib/recycle-storage";
+import { runPackageWorker } from "../src/lib/package-worker";
 
 const workerId = randomUUID(); let running = true;
 process.on("SIGINT", () => { running = false; }); process.on("SIGTERM", () => { running = false; });
@@ -11,6 +12,12 @@ async function main() {
   await prisma.workerHeartbeat.create({ data: { id: workerId } });
   console.log(`MUA client Worker ready (${workerId})`);
   let maintenance: Promise<void> | undefined;
+  const packages = (async () => {
+    while (running) {
+      try { if (!await runPackageWorker()) await new Promise(resolve => setTimeout(resolve, 1500)); }
+      catch (error) { console.error("Package queue failed", error instanceof Error ? error.message : "unknown"); await new Promise(resolve => setTimeout(resolve, 3000)); }
+    }
+  })();
   try {
     let lastMaintenance = 0;
     while (running) {
@@ -26,6 +33,6 @@ async function main() {
       }
       catch (error) { console.error("Worker queue failed", error instanceof Error ? error.message : "unknown"); await new Promise(resolve => setTimeout(resolve, 3000)); }
     }
-  } finally { await maintenance; clearInterval(heartbeat); await prisma.$disconnect(); }
+  } finally { running = false; await packages; await maintenance; clearInterval(heartbeat); await prisma.$disconnect(); }
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "Worker failed"); process.exitCode = 1; });

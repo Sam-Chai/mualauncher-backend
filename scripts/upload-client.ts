@@ -1,14 +1,14 @@
 import "dotenv/config";
 import { open, stat, readFile } from "node:fs/promises";
-import { clientSubmissionSchema, type UploadView } from "../src/lib/client-contract";
+import { clientSubmissionSchema, packageFormatVersionSchema, type UploadView } from "../src/lib/client-contract";
 
 async function main() {
   const [fileName, metadataFile, clientId, instanceId] = process.argv.slice(2);
   const origin = process.env.MUA_API_URL; const token = process.env.MUA_API_TOKEN;
   if (!fileName || !metadataFile || !clientId || !origin || !token) throw new Error("Usage: MUA_API_URL=... MUA_API_TOKEN=... npm run client:upload -- client.zip metadata.json CLIENT_ID");
-  const metadata = clientSubmissionSchema.parse(JSON.parse(await readFile(metadataFile, "utf8")));
+  const { packageFormatVersion, ...metadata } = clientSubmissionSchema.extend({ packageFormatVersion: packageFormatVersionSchema.default(1) }).parse(JSON.parse(await readFile(metadataFile, "utf8")));
   const size = (await stat(fileName)).size;
-  if (!/\.zip$/i.test(fileName) || size <= 0 || size > 20 * 1024 ** 3) throw new Error("A complete ZIP up to 20 GiB is required");
+  if (!/\.(zip|mrpack)$/i.test(fileName) || size <= 0 || size > 20 * 1024 ** 3) throw new Error("A complete ZIP or mrpack up to 20 GiB is required");
   const api = async <T>(path: string, body?: unknown): Promise<T> => {
     const response = await fetch(origin.replace(/\/$/, "") + path, { method: body === undefined ? "GET" : "POST",
       headers: { Authorization: "Bearer " + token, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
@@ -18,6 +18,7 @@ async function main() {
   const clients = await api<{ clientId: string; currentReleaseId: string | null; publicationRevision: number }[]>("/api/v1/clients");
   const current = clients.find(client => client.clientId === clientId); if (!current) throw new Error("Server is not accessible with this Token");
   const upload = await api<UploadView>("/api/v1/clients/uploads", { clientId, fileName: fileName.split(/[\\/]/).at(-1), size,
+    packageFormatVersion,
     baseReleaseId: current.currentReleaseId, basePublicationRevision: current.publicationRevision });
   const file = await open(fileName, "r"); let completed = false;
   try {
@@ -38,6 +39,10 @@ async function main() {
     const deadline = Date.now() + 2 * 60 * 60 * 1000; let ready: UploadView;
     for (;;) {
       ready = await api<UploadView>("/api/v1/clients/uploads/" + upload.id);
+      if (ready.status === "WAITING_PROCESSOR") {
+        console.log(JSON.stringify({ clientId, uploadId: ready.id, packageFormatVersion: ready.packageFormatVersion, status: ready.status,
+          message: "Source saved; v2 processor is not installed yet. Not submitted for review." })); return;
+      }
       if (ready.status === "READY") break;
       if (ready.processingPhase === "SELECT_INSTANCE") {
         if (!instanceId) throw new Error(`Upload ${ready.id} contains multiple instances; select one in the panel or pass INSTANCE_ID as the fourth argument`);
@@ -48,7 +53,7 @@ async function main() {
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     const result = await api<{ draftId: string }>("/api/v1/clients/uploads/" + upload.id + "/submit", metadata);
-    console.log(JSON.stringify({ clientId, draftId: result.draftId, status: "SUBMITTED", statistics: ready.statistics }));
+    console.log(JSON.stringify({ clientId, uploadId: ready.id, draftId: result.draftId, status: "SUBMITTED", packageFormatVersion: ready.packageFormatVersion, statistics: ready.statistics, recipeStatistics: ready.recipeStatistics }));
   } finally {
     await file.close();
     if (!completed) { try { await api("/api/v1/clients/uploads/" + upload.id + "/cancel", {}); } catch { /* The user can cancel or retry the persisted task in the panel. */ } }

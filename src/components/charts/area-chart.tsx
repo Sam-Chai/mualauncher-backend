@@ -773,13 +773,13 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                 }
               />
             ) : null}
-            {categories.map((category) => {
-              const categoryId = `${areaId}-${category.replace(/[^a-zA-Z0-9]/g, "")}`
+            {categories.map((category, categoryIndex) => {
+              const categoryId = `${areaId}-${categoryIndex}`
               return (
-                <React.Fragment key={category}>
-                  <defs key={category}>
+                <React.Fragment key={`series-${category}`}>
+                  <defs key={`defs-${category}`}>
                     <linearGradient
-                      key={category}
+                      key={`gradient-${category}`}
                       className={cx(
                         getColorClassName(
                           categoryColors.get(
@@ -897,7 +897,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                       }
                       return <React.Fragment key={index}></React.Fragment>
                     }}
-                    key={category}
+                    key={`area-${category}`}
                     name={category}
                     type="linear"
                     dataKey={category}
@@ -919,7 +919,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                   <Line
                     className={cx("cursor-pointer")}
                     strokeOpacity={0}
-                    key={category}
+                    key={`hit-area-${category}`}
                     name={category}
                     type="linear"
                     dataKey={category}

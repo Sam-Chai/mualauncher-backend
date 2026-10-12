@@ -20,16 +20,38 @@ import { roleLabel } from "../src/components/admin/role-label";
 import { visibleNavigation, visiblePaths } from "../src/components/admin/navigation-access";
 
 const schema = `mua_test_${randomBytes(8).toString("hex")}`;
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},pg_catalog` });
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},pg_catalog`, pipeline: true });
 const client = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
 let created = false;
 let passwordHash: string;
 const rollback = new Error("test rollback");
 
+test("pipelined Prisma transactions preserve dependency order, abort and rollback after query failure", async () => {
+  const id = randomUUID();
+  await assert.rejects(client.$transaction(async db => {
+    await db.account.create({ data: { id, displayName: "pipeline rollback test" } });
+    const account = await db.account.findUniqueOrThrow({ where: { id } });
+    assert.equal(account.displayName, "pipeline rollback test");
+    const results = await Promise.allSettled([
+      db.$queryRaw`SELECT 1 AS value`,
+      db.$queryRaw`SELECT 1 / 0 AS value`,
+      db.$queryRaw`SELECT 2 AS value`,
+    ]);
+    assert.equal(results[0].status, "fulfilled");
+    assert.equal(results[1].status, "rejected");
+    // Prisma may dispatch independent reads in a different order than the array.
+    // After the failure is observed, a dependent query must see the aborted transaction.
+    await assert.rejects(db.$queryRaw`SELECT 3 AS value`);
+    throw rollback;
+  }), error => error === rollback);
+  assert.equal(await client.account.findUnique({ where: { id } }), null);
+  assert.deepEqual(await client.$queryRaw`SELECT 2 AS value`, [{ value: 2 }]);
+});
+
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle"]) {
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings"]) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -461,6 +483,35 @@ test("the client migration preserves legacy releases, source keys, current selec
     assert.equal((await legacy.query('SELECT "clientId" FROM "ClientDraft" WHERE "id"=$1', [draft])).rows[0].clientId, "LGA");
     assert.equal((await legacy.query('SELECT "clientId","sourceObjectKey" FROM "ClientUpload" WHERE "id"=$1', [upload])).rows[0].sourceObjectKey, "legacy/source.zip");
     assert.deepEqual((await legacy.query('SELECT "clientId","releaseId" FROM "ServerPublication" WHERE "serverId"=\'LGA\'')).rows[0], { clientId: "LGA", releaseId: release });
+    for (const migration of ["202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors"])
+      await legacy.query(await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8"));
+    const deletedDraft = randomUUID();
+    await legacy.query('INSERT INTO "ClientDraft" ("id","clientId","createdById","versionLabel","updatedAt") VALUES ($1,\'LGB\',$2,\'0.9.0\',now())', [deletedDraft, account]);
+    await legacy.query('UPDATE "ServerPublication" SET "clientId"=NULL WHERE "serverId"=\'LGB\'');
+    await legacy.query('UPDATE "Client" SET "archivedAt"=now() WHERE "id"=\'LGB\'');
+    await legacy.query('UPDATE "Client" SET "deletedAt"=now() WHERE "id"=\'LGB\'');
+    const tombstone = (await legacy.query('SELECT to_jsonb(c) AS snapshot FROM "Client" c WHERE "id"=\'LGB\'')).rows[0].snapshot;
+    await legacy.query(await readFile("prisma/migrations/202610100001_draft_lifecycle/migration.sql", "utf8"));
+    await legacy.query('UPDATE "ServerPublication" SET "clientId"=NULL,"releaseId"=NULL WHERE "serverId"=\'LGA\'');
+    await legacy.query('UPDATE "Server" SET "isListed"=false WHERE "serverId"=\'LGA\'');
+    await legacy.query('UPDATE "Client" SET "archivedAt"=now() WHERE "id"=\'LGA\'');
+    await legacy.query('UPDATE "ClientUpload" SET "status"=\'CANCELLED\' WHERE "id"=$1', [upload]);
+    await assert.rejects(legacy.query('UPDATE "Client" SET "deletedAt"=now() WHERE "id"=\'LGA\''), "old guard rejects archived published clients");
+    await legacy.query(await readFile("prisma/migrations/202610100002_archived_client_deletion/migration.sql", "utf8"));
+    await legacy.query(await readFile("prisma/migrations/202610100003_package_format_choice/migration.sql", "utf8"));
+    await legacy.query(await readFile("prisma/migrations/202610100004_v2_recipe_import/migration.sql", "utf8"));
+    await legacy.query(await readFile("prisma/migrations/202610100005_v2_recipe_packages/migration.sql", "utf8"));
+    for (const table of ["ClientUpload", "ClientDraft", "ClientRelease"]) {
+      assert((await legacy.query('SELECT "packageFormatVersion" FROM "' + table + '"')).rows.every(row => row.packageFormatVersion === 1));
+    }
+    assert.deepEqual((await legacy.query('SELECT "id","manifestObjectKey","manifestSha256","signature" FROM "ClientRelease"')).rows, before);
+    assert.deepEqual((await legacy.query('SELECT to_jsonb(c) AS snapshot FROM "Client" c WHERE "id"=\'LGB\'')).rows[0].snapshot, tombstone);
+    assert((await legacy.query('SELECT "versionSequence" FROM "ClientDraft" WHERE "id"=$1', [deletedDraft])).rows[0].versionSequence > 0);
+    await assert.rejects(legacy.query('UPDATE "ClientDraft" SET "name"=\'must not edit deleted history\' WHERE "id"=$1', [deletedDraft]));
+    await assert.rejects(legacy.query('UPDATE "ClientDraft" SET "name"=\'must not edit published history\' WHERE "id"=$1', [draft]));
+    await legacy.query('UPDATE "Client" SET "deletedAt"=now() WHERE "id"=\'LGA\'');
+    assert.deepEqual((await legacy.query('SELECT "id","manifestObjectKey","manifestSha256","signature" FROM "ClientRelease"')).rows, before);
+    await assert.rejects(legacy.query('UPDATE "Client" SET "deletedAt"=NULL WHERE "id"=\'LGA\''));
   } finally {
     assert.match(legacySchema, /^mua_legacy_test_[0-9a-f]{16}$/);
     await legacy.query('DROP SCHEMA IF EXISTS "' + legacySchema + '" CASCADE'); await legacy.end();

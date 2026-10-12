@@ -9,6 +9,7 @@ export const digest = (bytes: Buffer | string) => createHash("sha256").update(by
 export const casKey = (sha256: string) => `sha256/${sha256.slice(0, 2)}/${sha256}`;
 export const packagesBucket = () => process.env.S3_PACKAGES_BUCKET ?? "mua-packages";
 export const casBucket = () => process.env.S3_CAS_BUCKET ?? "mua-cas";
+export const environmentsBucket = () => process.env.S3_ENVIRONMENTS_BUCKET ?? "mua-environments";
 let cached: { configuration: string; client: S3Client } | undefined;
 export function storageClient() {
   invariant(process.env.S3_ENDPOINT && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY, 503, "对象存储未配置");
@@ -24,7 +25,7 @@ export const missingObject = (error: unknown) => !!error && typeof error === "ob
   (error.$metadata as { httpStatusCode?: number }).httpStatusCode === 404;
 export async function initializeStorage() {
   const client = storageClient();
-  for (const Bucket of [packagesBucket(), casBucket()]) {
+  for (const Bucket of [packagesBucket(), casBucket(), environmentsBucket()]) {
     try { await client.send(new HeadBucketCommand({ Bucket })); }
     catch (error) { if (!missingObject(error)) throw error; await client.send(new CreateBucketCommand({ Bucket })); }
   }
@@ -92,6 +93,12 @@ export async function abortMultipart(key: string, uploadId: string) {
   try { await storageClient().send(new AbortMultipartUploadCommand({ Bucket: packagesBucket(), Key: key, UploadId: uploadId })); }
   catch (error) { if (!missingObject(error)) throw error; }
 }
-export function signedDownload(key: string, bucket = packagesBucket()) {
-  return getSignedUrl(storageClient(), new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: 300 });
+export async function signedDownloadInfo(key: string, bucket = packagesBucket(), fileName?: string) {
+  const disposition = fileName ? `attachment; filename="client.muapack"; filename*=UTF-8''${encodeURIComponent(fileName).replaceAll("'", "%27")}` : undefined;
+  const signingDate = new Date(Math.floor(Date.now() / 1000) * 1000), expiresIn = 300;
+  const url = await getSignedUrl(storageClient(), new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentDisposition: disposition }), { expiresIn, signingDate });
+  return { url, expiresIn, expiresAt: new Date(signingDate.getTime() + expiresIn * 1000).toISOString() };
+}
+export async function signedDownload(key: string, bucket = packagesBucket(), fileName?: string) {
+  return (await signedDownloadInfo(key, bucket, fileName)).url;
 }

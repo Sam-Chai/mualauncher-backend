@@ -8,6 +8,8 @@ import * as management from "@/lib/management";
 import { createApiToken, revokeApiToken, tokenSelect } from "@/lib/api-auth";
 import { infrastructureStatus } from "@/lib/infrastructure";
 import { recycleSettings, updateRecycleSettings } from "@/lib/recycle-storage";
+import { downloadSettings, updateDownloadSettings } from "@/lib/download-settings";
+import { packageFormatSettings, updatePackageFormatSettings } from "@/lib/package-format-settings";
 
 type Context = { params: Promise<{ path: string[] }> };
 async function handle(request: Request, context: Context) {
@@ -21,6 +23,8 @@ async function handle(request: Request, context: Context) {
     const result = await authorized(token, write, async (db, actor) => {
       const [kind, id, action, accountId, grant, sid] = path;
       if (request.method === "GET") {
+        if (path.length === 1 && kind === "package-format-settings") return packageFormatSettings(db, actor);
+        if (path.length === 1 && kind === "download-settings") return downloadSettings(db, actor);
         if (path.length === 1 && kind === "recycle-settings") return recycleSettings(db, actor);
         if (path.length === 1 && kind === "tokens") return db.apiToken.findMany({ where: { accountId: actor.id }, select: tokenSelect, orderBy: { createdAt: "desc" } });
         if (path.length === 1 && kind === "pipeline") return infrastructureStatus(db, actor);
@@ -42,6 +46,8 @@ async function handle(request: Request, context: Context) {
         }
       }
       if (request.method === "PATCH" && path.length === 1 && kind === "recycle-settings") return updateRecycleSettings(db, actor, raw);
+      if (request.method === "PATCH" && path.length === 1 && kind === "download-settings") return updateDownloadSettings(db, actor, raw);
+      if (request.method === "PATCH" && path.length === 1 && kind === "package-format-settings") return updatePackageFormatSettings(db, actor, raw);
       if (request.method === "PATCH" && path.length === 2) {
         if (kind === "organizations") return management.updateOrganization(db, actor, uuid(id), raw);
         if (kind === "servers") return management.updateServer(db, actor, serverId(id), raw);

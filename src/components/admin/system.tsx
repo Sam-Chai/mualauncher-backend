@@ -9,6 +9,9 @@ import { Heading, NoPermission } from "./common";
 import { SchemaForm, passwordSchema } from "./form";
 import { navigateAfterAuthChange } from "@/lib/auth-navigation";
 import { ApiTokens } from "./api-tokens";
+import type { DownloadSettings } from "@/lib/download-settings";
+import { MINECRAFT_SOURCES, JAVA_SOURCES } from "@/lib/download-sources";
+import { PackageFormatSettingsCard } from "./package-format-settings";
 export function AuditPage() {
   const { state } = useAdmin();
   if (!state.actor.isSuperAdmin) return <NoPermission />;
@@ -30,7 +33,35 @@ export function SettingsPage() {
     <Card><CardHeader><CardTitle>平台接入</CardTitle><CardDescription>当前为白名单登录与应用层 RBAC。</CardDescription></CardHeader><CardContent className="space-y-4 text-sm">{[["身份认证", "本地白名单 · 已启用"], ["MUA OIDC / Auth.js", "待接入"], ["PostgreSQL RLS", "规划中 · 当前使用 RBAC"], ["对象存储", "S3 API / MinIO · 已接入"], ["任务处理", "独立 Worker · PostgreSQL 持久任务"]].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b pb-3 last:border-0"><span className="text-muted-foreground">{label}</span><span className="text-right">{value}</span></div>)}</CardContent></Card>
     <ApiTokens />
     {state.actor.isSuperAdmin && <RecycleSettings />}
+    {state.actor.isSuperAdmin && <DownloadSettingsCard />}
+    {state.actor.isSuperAdmin && <PackageFormatSettingsCard />}
   </div></>;
+}
+function DownloadSettingsCard() {
+  const { busy, run } = useAdmin(); const [settings, setSettings] = useState<DownloadSettings | null>(null), [error, setError] = useState("");
+  useEffect(() => { let active = true; void api<DownloadSettings>("/api/admin/download-settings").then(value => { if (active) setSettings(value); }).catch(error => { if (active) setError(error instanceof Error ? error.message : "读取下载设置失败"); }); return () => { active = false; }; }, []);
+  return <Card><CardHeader><CardTitle>Worker 下载源与代理</CardTitle><CardDescription>仅 MUA 超级管理员可配置。环境先使用所选国内镜像，失败后回退官方；已缓存环境直接复用。上传 MinIO 不经过代理。</CardDescription></CardHeader><CardContent className="space-y-5">
+    {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !settings ? <p role="status">读取下载设置…</p> : <SchemaForm key={JSON.stringify(settings)}
+      schema={z.object({ whitelist: z.boolean(), hosts: z.string().max(30000), proxy: z.boolean(), proxyUrl: z.string().trim().max(2000),
+        mirrors: z.array(z.enum(["bmclapi", "ustc", "nju"])), javaMirrors: z.array(z.enum(["tuna"])), mirrorProxy: z.boolean(), javaType: z.enum(["jre", "jdk"]) })}
+      fields={[{ name: "mirrors", label: "Minecraft 与加载器下载源", type: "roles", options: MINECRAFT_SOURCES.map(source => ({ value: source.value, label: source.label })),
+        hint: "按 BMCLAPI → 中科大 → 南大顺序尝试所选源，最后回退官方。中科大／南大主要覆盖 Maven 库；不提供 BMCLAPI 元数据接口。全部取消即仅用官方。" },
+        { name: "javaMirrors", label: "Java 下载源", type: "roles", options: JAVA_SOURCES.map(source => ({ value: source.value, label: source.label })), hint: "Java 压缩包优先走清华，缺失或校验失败时回退官方。版本及 SHA-256 从 Adoptium 官方 API 获取。" },
+        { name: "javaType", label: "集成的 Java 环境", type: "select", options: [{ value: "jre", label: "JRE（默认，运行游戏）" }, { value: "jdk", label: "JDK（兼容需要开发工具的客户端）" }], hint: "部分 Java／平台组合无 JRE（例如目前 Java 25 Windows ARM64），任务会明确提示调整平台或改用 JDK。旧发布不受此设置影响。" },
+        { name: "proxy", label: "通过代理下载官方环境与整合包远程文件", type: "checkbox" },
+        { name: "proxyUrl", label: "HTTP／HTTPS 代理地址", placeholder: "http://127.0.0.1:7890", hint: "支持 CONNECT 代理，不含账号密码。作用于官方环境来源及整合包远程文件。" },
+        { name: "mirrorProxy", label: "镜像源下载也通过代理", type: "checkbox", hint: "默认关闭：镜像及其 CDN 直连。仅在上面的代理开关启用后生效；官方回退仍使用代理。" },
+        { name: "whitelist", label: "开启整合包远程来源白名单", type: "checkbox", hint: "只控制整合包远程文件，不控制内置环境源。默认关闭；HTTPS、公开地址、重定向和哈希保护始终启用。" },
+        { name: "hosts", label: "允许的远程来源", type: "textarea", hint: "每行一个完整域名。不填写协议、路径或通配符；无需包含 Minecraft 官方环境来源。" },
+        ]}
+      defaults={{ whitelist: settings.remoteSourceWhitelistEnabled, hosts: settings.remoteSourceHosts.join("\n"), proxy: settings.downloadProxyEnabled, proxyUrl: settings.downloadProxyUrl,
+        mirrors: settings.minecraftDownloadSources, javaMirrors: settings.javaDownloadSources, mirrorProxy: settings.mirrorProxyEnabled, javaType: settings.javaImageType }} disabled={busy} label="保存下载设置"
+      onSubmit={values => run(async () => { const next = await api<DownloadSettings>("/api/admin/download-settings", "PATCH", { remoteSourceWhitelistEnabled: values.whitelist,
+        remoteSourceHosts: String(values.hosts).split(/[\s,]+/).filter(Boolean), downloadProxyEnabled: values.proxy, downloadProxyUrl: values.proxyUrl,
+        minecraftDownloadSources: MINECRAFT_SOURCES.filter(source => Array.isArray(values.mirrors) && values.mirrors.includes(source.value)).map(source => source.value),
+        javaDownloadSources: values.javaMirrors, mirrorProxyEnabled: values.mirrorProxy, javaImageType: values.javaType }); setSettings(next); }, "下载设置已保存")} />}
+    <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground"><p>环境镜像来源：</p>{[...MINECRAFT_SOURCES, ...JAVA_SOURCES].map(source => <p key={source.value}><a className="underline" href={"documentation" in source ? source.documentation : source.url + "/"} target="_blank" rel="noreferrer">{source.label}</a> · {source.url}</p>)}</div>
+  </CardContent></Card>;
 }
 function RecycleSettings() {
   const { busy, run } = useAdmin(); const [days, setDays] = useState<number | null>(null); const [error, setError] = useState("");

@@ -33,6 +33,7 @@ enum DraftStatus {
 
 enum UploadStatus {
   UPLOADING
+  WAITING_PROCESSOR
   QUEUED
   PROCESSING
   READY
@@ -207,6 +208,15 @@ model RecycleObject {
 model PlatformSettings {
   id                   String   @id @default("platform")
   recycleRetentionDays Int      @default(7)
+  remoteSourceWhitelistEnabled Boolean @default(false)
+  remoteSourceHosts String[] @default(["cdn.modrinth.com", "github.com", "raw.githubusercontent.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "gitlab.com", "edge.forgecdn.net", "mediafilez.forgecdn.net"])
+  downloadProxyEnabled Boolean @default(false)
+  downloadProxyUrl String @default("")
+  minecraftDownloadSources String[] @default(["bmclapi", "ustc", "nju"])
+  javaDownloadSources String[] @default(["tuna"])
+  mirrorProxyEnabled Boolean @default(false)
+  javaImageType String @default("jre")
+  enabledPackageFormats Int[] @default([1, 2])
   updatedAt            DateTime @updatedAt @db.Timestamptz(6)
 }
 
@@ -229,7 +239,13 @@ model ServerGrant {
 model ClientDraft {
   id                      String         @id @default(uuid()) @db.Uuid
   clientId                String
+  packageFormatVersion    Int            @default(1)
+  supportedPlatforms      String[]       @default([])
   versionLabel            String?
+  versionSequence         Int            @default(autoincrement()) @unique
+  replacesDraftId         String?        @db.Uuid
+  archiveReason           String?
+  supersededByDraftId     String?        @db.Uuid
   name                    String?
   description             String         @default("")
   changelog               String         @default("")
@@ -239,6 +255,8 @@ model ClientDraft {
   candidateManifestKey    String?
   candidateManifestSha256 String?        @db.Char(64)
   contentRevision         Int            @default(1)
+  packageRevision         Int            @default(1)
+  reviewedPackageRevision Int?
   status                  DraftStatus    @default(DRAFT)
   createdById             String         @db.Uuid
   reviewedById            String?        @db.Uuid
@@ -253,13 +271,44 @@ model ClientDraft {
   reviewedBy              Account?       @relation("DraftReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
   release                 ClientRelease?
   upload                  ClientUpload?
+  packageBuilds           PackageBuild[]
+  replacesDraft           ClientDraft?   @relation("DraftReplacement", fields: [clientId, replacesDraftId], references: [clientId, id], onDelete: Restrict, onUpdate: NoAction)
+  replacementDrafts       ClientDraft[]  @relation("DraftReplacement")
+  supersededByDraft       ClientDraft?   @relation("DraftSupersession", fields: [clientId, supersededByDraftId], references: [clientId, id], onDelete: Restrict, onUpdate: NoAction)
+  supersededDrafts        ClientDraft[]  @relation("DraftSupersession")
+  comparisonUploads      ClientUpload[] @relation("UploadComparison")
 
   @@unique([clientId, id])
+}
+
+model PackageBuild {
+  id                String      @id @default(uuid()) @db.Uuid
+  draftId           String      @db.Uuid
+  platform          String
+  revision          Int         @default(1)
+  required          Boolean     @default(true)
+  status            String      @default("QUEUED")
+  phase             String      @default("等待环境准备")
+  progress          Int         @default(0)
+  attempts          Int         @default(0)
+  leaseToken        String?     @db.Uuid
+  leaseUntil        DateTime?
+  error             String?
+  targetObjectKey   String?
+  targetSha256      String?     @db.Char(64)
+  artifacts         Json?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  draft             ClientDraft @relation(fields: [draftId], references: [id], onDelete: Restrict)
+
+  @@unique([draftId, platform, revision])
+  @@index([status, leaseUntil, createdAt])
 }
 
 model ClientRelease {
   id                  String             @id @default(uuid()) @db.Uuid
   clientId            String
+  packageFormatVersion Int               @default(1)
   sourceDraftId       String             @unique @db.Uuid
   versionLabel        String
   name                String
@@ -290,6 +339,7 @@ model ClientRelease {
 model ClientUpload {
   id                      String        @id @default(uuid()) @db.Uuid
   clientId                String
+  packageFormatVersion    Int           @default(1)
   createdById             String        @db.Uuid
   fileName                String
   size                    BigInt
@@ -308,6 +358,8 @@ model ClientUpload {
   filesObjectKey          String?
   filesSha256             String?       @db.Char(64)
   statistics              Json?
+  comparisonDraftId       String?       @db.Uuid
+  comparisonStatistics    Json?
   detectedMods            String[]      @default([])
   processingPhase         String?
   detectedInfo            Json?
@@ -320,6 +372,7 @@ model ClientUpload {
   client                  Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdBy               Account       @relation(fields: [createdById], references: [id], onDelete: Restrict)
   draft                   ClientDraft?  @relation(fields: [clientId, draftId], references: [clientId, id], onDelete: Restrict)
+  comparisonDraft         ClientDraft?  @relation("UploadComparison", fields: [clientId, comparisonDraftId], references: [clientId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([clientId, draftId])
   @@index([status, leaseUntil, createdAt])

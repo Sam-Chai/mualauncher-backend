@@ -8,8 +8,8 @@ export async function publishedServers(db: Db) {
     orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }],
     select: { serverId: true, displayName: true, description: true, gameAddress: true, themeColor: true, sortOrder: true,
       organization: { select: { id: true, displayName: true } }, publication: { select: { revision: true, release: {
-        select: { id: true, clientId: true, versionLabel: true, name: true, manifestSha256: true } } } } },
+        select: { id: true, clientId: true, versionLabel: true, name: true, manifestSha256: true, packageFormatVersion: true } } } } },
   });
   return servers.map(({ publication, ...server }) => ({ ...server, currentRelease: publication?.release ? { ...publication.release,
-    manifestUrl: `/api/v1/servers/${server.serverId}/manifest` } : null, publicationRevision: publication?.revision }));
+    manifestUrl: `/api/v1/servers/${server.serverId}/manifest`, packagesUrl: `/api/v1/servers/${server.serverId}/packages` } : null, publicationRevision: publication?.revision }));
 }
