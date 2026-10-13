@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "description": "后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。"
   },
   "servers": [
@@ -8093,6 +8093,2206 @@
                 "schema": {
                   "type": "string",
                   "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clients/uploads/{uploadId}/distribution-statistics": {
+      "get": {
+        "operationId": "getUploadDistribution",
+        "tags": [
+          "Clients"
+        ],
+        "summary": "查询 v2 上传分发统计",
+        "description": "只读，v1 返回 409，文件索引未准备完成返回 409。使用上传时固定的同客户端已发布 v2 基准，READY 后以实际产物基准为准；跨格式或无可用基准按完整包。changes 为新增、修改、移除、策略／optional、地址差异，移除不删除玩家文件。remoteDownloadBytes 按内容去重，地址变化不重复下载。假设基准完整、无额外缓存且全部 optional；knownNetworkBytes=所选 ZIP+远程内容，不包含环境与协议开销。未组包的 ZIP／网络量为 null，environmentBytes 始终 null、由 Launcher 解析；CAS 复用不等于玩家流量节省。读取历史不改写字节或签名。",
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "ApiToken": []
+          }
+        ],
+        "x-permissions": [
+          "DRAFT_READ"
+        ],
+        "x-superadmin-only": false,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uploadId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；字段可见性仍受当前 RBAC 和资源状态约束。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "formatVersion": {
+                      "type": "number",
+                      "enum": [
+                        2
+                      ]
+                    },
+                    "base": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "releaseId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "manifestSha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "releaseId",
+                        "version",
+                        "manifestSha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "localFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "localBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteDeclaredBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "optionalFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "localPayloadBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteDownloadBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "fullPackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "updatePackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "selectedPackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "knownNetworkBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "environmentBytes": {
+                      "type": "null"
+                    },
+                    "runtimeChanged": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "launchChanged": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "kinds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "added",
+                                "modified",
+                                "removed",
+                                "policy",
+                                "source"
+                              ]
+                            }
+                          },
+                          "before": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "local"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "entry"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha1": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{40}$"
+                                      },
+                                      "sha512": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{128}$"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha1",
+                                      "sha512"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "remote"
+                                        ]
+                                      },
+                                      "downloads": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 4000
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 10
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "downloads"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "after": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "local"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "entry"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha1": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{40}$"
+                                      },
+                                      "sha512": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{128}$"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha1",
+                                      "sha512"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "remote"
+                                        ]
+                                      },
+                                      "downloads": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 4000
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 10
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "downloads"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "kinds",
+                          "before",
+                          "after"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "formatVersion",
+                    "base",
+                    "localFiles",
+                    "localBytes",
+                    "remoteFiles",
+                    "remoteDeclaredBytes",
+                    "optionalFiles",
+                    "localPayloadBytes",
+                    "remoteDownloadBytes",
+                    "fullPackageBytes",
+                    "updatePackageBytes",
+                    "selectedPackageBytes",
+                    "knownNetworkBytes",
+                    "environmentBytes",
+                    "runtimeChanged",
+                    "launchChanged",
+                    "changes"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clients/{clientId}/drafts/{draftId}/distribution-statistics": {
+      "get": {
+        "operationId": "getDraftDistribution",
+        "tags": [
+          "Clients"
+        ],
+        "summary": "查询 v2 草稿分发统计",
+        "description": "只读，v1 返回 409，文件索引未准备完成返回 409。使用上传时固定的同客户端已发布 v2 基准，READY 后以实际产物基准为准；跨格式或无可用基准按完整包。changes 为新增、修改、移除、策略／optional、地址差异，移除不删除玩家文件。remoteDownloadBytes 按内容去重，地址变化不重复下载。假设基准完整、无额外缓存且全部 optional；knownNetworkBytes=所选 ZIP+远程内容，不包含环境与协议开销。未组包的 ZIP／网络量为 null，environmentBytes 始终 null、由 Launcher 解析；CAS 复用不等于玩家流量节省。读取历史不改写字节或签名。",
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "ApiToken": []
+          }
+        ],
+        "x-permissions": [
+          "DRAFT_READ"
+        ],
+        "x-superadmin-only": false,
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z]{3,5}$"
+                }
+              ]
+            },
+            "required": true,
+            "name": "clientId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "draftId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；字段可见性仍受当前 RBAC 和资源状态约束。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "formatVersion": {
+                      "type": "number",
+                      "enum": [
+                        2
+                      ]
+                    },
+                    "base": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "releaseId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "manifestSha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "releaseId",
+                        "version",
+                        "manifestSha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "localFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "localBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteDeclaredBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "optionalFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "localPayloadBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteDownloadBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "fullPackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "updatePackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "selectedPackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "knownNetworkBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "environmentBytes": {
+                      "type": "null"
+                    },
+                    "runtimeChanged": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "launchChanged": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "kinds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "added",
+                                "modified",
+                                "removed",
+                                "policy",
+                                "source"
+                              ]
+                            }
+                          },
+                          "before": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "local"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "entry"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha1": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{40}$"
+                                      },
+                                      "sha512": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{128}$"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha1",
+                                      "sha512"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "remote"
+                                        ]
+                                      },
+                                      "downloads": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 4000
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 10
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "downloads"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "after": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "local"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "entry"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha1": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{40}$"
+                                      },
+                                      "sha512": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{128}$"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha1",
+                                      "sha512"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "remote"
+                                        ]
+                                      },
+                                      "downloads": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 4000
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 10
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "downloads"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "kinds",
+                          "before",
+                          "after"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "formatVersion",
+                    "base",
+                    "localFiles",
+                    "localBytes",
+                    "remoteFiles",
+                    "remoteDeclaredBytes",
+                    "optionalFiles",
+                    "localPayloadBytes",
+                    "remoteDownloadBytes",
+                    "fullPackageBytes",
+                    "updatePackageBytes",
+                    "selectedPackageBytes",
+                    "knownNetworkBytes",
+                    "environmentBytes",
+                    "runtimeChanged",
+                    "launchChanged",
+                    "changes"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/clients/{clientId}/releases/{releaseId}/distribution-statistics": {
+      "get": {
+        "operationId": "getReleaseDistribution",
+        "tags": [
+          "Clients"
+        ],
+        "summary": "查询 v2 发布分发统计",
+        "description": "只读，v1 返回 409，文件索引未准备完成返回 409。使用上传时固定的同客户端已发布 v2 基准，READY 后以实际产物基准为准；跨格式或无可用基准按完整包。changes 为新增、修改、移除、策略／optional、地址差异，移除不删除玩家文件。remoteDownloadBytes 按内容去重，地址变化不重复下载。假设基准完整、无额外缓存且全部 optional；knownNetworkBytes=所选 ZIP+远程内容，不包含环境与协议开销。未组包的 ZIP／网络量为 null，environmentBytes 始终 null、由 Launcher 解析；CAS 复用不等于玩家流量节省。读取历史不改写字节或签名。",
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "ApiToken": []
+          }
+        ],
+        "x-permissions": [
+          "RELEASE_READ"
+        ],
+        "x-superadmin-only": false,
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z]{3,5}$"
+                }
+              ]
+            },
+            "required": true,
+            "name": "clientId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功；字段可见性仍受当前 RBAC 和资源状态约束。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "formatVersion": {
+                      "type": "number",
+                      "enum": [
+                        2
+                      ]
+                    },
+                    "base": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "releaseId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "manifestSha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "releaseId",
+                        "version",
+                        "manifestSha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "localFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "localBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteDeclaredBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "optionalFiles": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "localPayloadBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "remoteDownloadBytes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "fullPackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "updatePackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "selectedPackageBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "knownNetworkBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
+                    },
+                    "environmentBytes": {
+                      "type": "null"
+                    },
+                    "runtimeChanged": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "launchChanged": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "kinds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "added",
+                                "modified",
+                                "removed",
+                                "policy",
+                                "source"
+                              ]
+                            }
+                          },
+                          "before": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "local"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "entry"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha1": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{40}$"
+                                      },
+                                      "sha512": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{128}$"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha1",
+                                      "sha512"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "remote"
+                                        ]
+                                      },
+                                      "downloads": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 4000
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 10
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "downloads"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "after": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha256"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "local"
+                                        ]
+                                      },
+                                      "entry": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "entry"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "size": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 2147483648
+                                  },
+                                  "policy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "managed",
+                                      "preserve"
+                                    ]
+                                  },
+                                  "optional": {
+                                    "type": "boolean"
+                                  },
+                                  "executable": {
+                                    "type": "boolean"
+                                  },
+                                  "hashes": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sha1": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{40}$"
+                                      },
+                                      "sha512": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{128}$"
+                                      },
+                                      "sha256": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "sha1",
+                                      "sha512"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "source": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "remote"
+                                        ]
+                                      },
+                                      "downloads": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "maxLength": 4000
+                                        },
+                                        "minItems": 1,
+                                        "maxItems": 10
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "downloads"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "size",
+                                  "policy",
+                                  "optional",
+                                  "executable",
+                                  "hashes",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "kinds",
+                          "before",
+                          "after"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "formatVersion",
+                    "base",
+                    "localFiles",
+                    "localBytes",
+                    "remoteFiles",
+                    "remoteDeclaredBytes",
+                    "optionalFiles",
+                    "localPayloadBytes",
+                    "remoteDownloadBytes",
+                    "fullPackageBytes",
+                    "updatePackageBytes",
+                    "selectedPackageBytes",
+                    "knownNetworkBytes",
+                    "environmentBytes",
+                    "runtimeChanged",
+                    "launchChanged",
+                    "changes"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
                 }
               }
             },

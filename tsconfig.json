@@ -82,7 +82,11 @@
     ".next/union-link-api-complete/types/**/*.ts",
     ".next/union-link-api-complete/dev/types/**/*.ts",
     ".next/union-link-motto/types/**/*.ts",
-    ".next/union-link-motto/dev/types/**/*.ts"
+    ".next/union-link-motto/dev/types/**/*.ts",
+    ".next/union-link-v2-statistics/types/**/*.ts",
+    ".next/union-link-v2-statistics/dev/types/**/*.ts",
+    ".next/union-link-v2-statistics-final/types/**/*.ts",
+    ".next/union-link-v2-statistics-final/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "description": "Phase one documents five public Launcher read endpoints. Client automation, administration and authentication endpoints are outside this specification. API route v1, muapack formatVersion and the document version are separate concepts. Examples, code generation and test requests are limited to the declared scope."
   },
   "servers": [

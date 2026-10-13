@@ -41,7 +41,7 @@ async function main() {
       ready = await api<UploadView>("/api/v1/clients/uploads/" + upload.id);
       if (ready.status === "WAITING_PROCESSOR") {
         console.log(JSON.stringify({ clientId, uploadId: ready.id, packageFormatVersion: ready.packageFormatVersion, status: ready.status,
-          message: "Source saved; v2 processor is not installed yet. Not submitted for review." })); return;
+          message: "Legacy upload has not been requeued. Ask an administrator to check the account and client status, or cancel and upload again. Not submitted for review." })); return;
       }
       if (ready.status === "READY") break;
       if (ready.processingPhase === "SELECT_INSTANCE") {

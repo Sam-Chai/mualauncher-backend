@@ -1,5 +1,8 @@
 "use client";
 import { useI18n } from "@/components/preferences";
+import { useEffect, useState } from "react";
+import { api, useAdmin } from "./provider";
+import type { RecipeDistributionStatistics } from "@/lib/recipe-distribution-contract";
 import type { Translate } from "@/lib/i18n";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -79,3 +82,43 @@ const recipeColumns = (t: Translate): ColumnDef<RecipeFile>[] => [
 ];
 export function RecipeFileTable({ files }: { files: RecipeFile[] }) {
   const { t } = useI18n(); return <DataTable data={files} columns={recipeColumns(t)} getRowId={file => file.path} caption={t("v2 完整文件清单")} />; }
+
+export function RecipeDistributionStats({ path, revision }: { path: string; revision?: string }) {
+  const { t } = useI18n(), { epoch } = useAdmin();
+  const [result, setResult] = useState<{ path: string; data?: RecipeDistributionStatistics; error?: string } | null>(null);
+  useEffect(() => {
+    let active = true;
+    void api<RecipeDistributionStatistics>(path).then(data => { if (active) setResult({ path, data }); }).catch(error => { if (active) setResult({ path, error: error instanceof Error ? error.message : "请求失败" }); });
+    return () => { active = false; };
+  }, [path, epoch, revision]);
+  const data = result?.path === path ? result.data : undefined;
+  if (!data) return <p role="status" className="text-sm text-muted-foreground">{t(result?.path === path && result.error ? result.error : "正在读取 v2 分发统计…")}</p>;
+  return <RecipeDistributionDetails statistics={data} />;
+}
+
+export function RecipeDistributionDetails({ statistics: s }: { statistics: RecipeDistributionStatistics }) {
+  const { t } = useI18n();
+  const size = (value: number | null) => value === null ? t("组包完成后可计算") : formatBytes(value);
+  const labels = { added: t("新增"), modified: t("修改"), removed: t("移除声明"), policy: t("策略／optional 变化"), source: t("下载地址变化") };
+  const columns: ColumnDef<RecipeDistributionStatistics["changes"][number]>[] = [
+    { accessorKey: "path", header: t("路径"), cell: ({ getValue }) => <code className="text-xs">{String(getValue())}</code> },
+    { id: "change", header: t("差异"), accessorFn: row => row.kinds.map(kind => labels[kind]).join(" · ") },
+    { id: "before", header: t("原文件"), accessorFn: row => row.before ? `${row.before.source.type === "local" ? t("本地文件") : t("远程声明")} · ${formatBytes(row.before.size)}` : "—" },
+    { id: "after", header: t("目标文件"), accessorFn: row => row.after ? `${row.after.source.type === "local" ? t("本地文件") : t("远程声明")} · ${formatBytes(row.after.size)}` : "—" },
+  ];
+  return <Card data-v2-distribution className="bg-muted/30"><CardContent className="space-y-4 pt-5">
+    <p className="font-semibold">{t("v2 分发与玩家下载预估")}</p>
+    <p className="text-sm">{s.base ? t("玩家安装基准 · {0}", { "0": s.base.version }) : t("无可用 v2 发布基准 · 使用完整包")}</p>
+    <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">{[
+      [t("目标本地文件"), `${s.localFiles} · ${formatBytes(s.localBytes)}`], [t("目标远程声明"), `${s.remoteFiles} · ${formatBytes(s.remoteDeclaredBytes)}`],
+      [t("optional 文件"), s.optionalFiles], [t("本次本地载荷（未压缩）"), formatBytes(s.localPayloadBytes)],
+      [t("远程预计下载（去重）"), formatBytes(s.remoteDownloadBytes)], [t("完整包 ZIP 大小"), size(s.fullPackageBytes)],
+      [t("更新包 ZIP 大小"), s.base ? size(s.updatePackageBytes) : t("不适用")],
+      [t("已知网络量（包＋远程）"), size(s.knownNetworkBytes)], [t("环境下载大小"), t("待 Launcher 解析")],
+    ].map(([label, value]) => <div key={label} className="flex justify-between gap-3 border-b pb-2"><dt className="text-muted-foreground">{label}</dt><dd className="shrink-0 whitespace-nowrap text-right tabular-nums">{value}</dd></div>)}</dl>
+    <p className="text-xs text-muted-foreground">{t("预计量假设基准完整、无额外玩家缓存且选择全部 optional。包 ZIP 加需要下载的去重远程内容，不包含未知环境大小与协议开销；preserve、optional 选择和缓存会改变实际下载。CAS 复用率仅表示后台存储复用。")}</p>
+    <p className="text-xs text-muted-foreground">{t("运行环境变化")}: {s.runtimeChanged === null ? t("尚未比较") : s.runtimeChanged ? t("有") : t("无")} · {t("启动配置变化")}: {s.launchChanged === null ? t("尚未比较") : s.launchChanged ? t("有") : t("无")}</p>
+    <details><summary className="cursor-pointer text-sm font-medium">{t("文件差异") + " "}{s.changes.length}</summary><div className="mt-3"><DataTable data={s.changes} columns={columns} getRowId={file => file.path} empty={t("文件声明未变化")} /></div></details>
+    <p className="text-xs text-muted-foreground">{t("移除仅表示清单差异，removalPolicy=retain，不自动删除玩家文件。地址变化不计为内容下载；策略变化与内容变化分别记录。")}</p>
+  </CardContent></Card>;
+}

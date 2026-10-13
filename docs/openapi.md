@@ -1,6 +1,6 @@
 # Union Link OpenAPI 与 Scalar
 
-第 1–7 步已接入：OpenAPI 3.1 中英文完整规范覆盖 66 个实际业务操作，后台左侧 `API` 在 `/admin/api` 内嵌 Scalar。默认完整规范，可切换 Launcher 公开规范；语言、主题和登录重定向沿用网站设置。执行顺序见[客户端操作指南](api-workflows.md)，变更见[兼容性记录](openapi-changelog.md)，路径见[接口清单](api-inventory.md)。
+第 1–7 步已接入：OpenAPI 3.1 中英文完整规范覆盖 69 个实际业务操作，后台左侧 `API` 在 `/admin/api` 内嵌 Scalar。默认完整规范，可切换 Launcher 公开规范；语言、主题和登录重定向沿用网站设置。执行顺序见[客户端操作指南](api-workflows.md)，变更见[兼容性记录](openapi-changelog.md)，路径见[接口清单](api-inventory.md)。
 
 ## 发布边界
 

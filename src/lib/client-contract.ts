@@ -66,7 +66,7 @@ export type UploadView = {
 };
 export function uploadProcessingLabel(upload: Pick<UploadView, "status" | "processingPhase" | "progress"> & Partial<Pick<UploadView, "packageFormatVersion">>) {
   if (upload.packageFormatVersion === 2 && upload.status === "READY") return "v2 识别完成 · 待提交";
-  if (upload.status === "WAITING_PROCESSOR") return "上传已保存 · 等待 v2 处理器接入";
+  if (upload.status === "WAITING_PROCESSOR") return "历史上传待迁移 · 请联系管理员";
   if (upload.processingPhase === "SELECT_INSTANCE") return "请选择要发布的客户端实例";
   if (upload.status === "QUEUED") return "等待 Worker 处理";
   if (upload.processingPhase === "FETCHING") return "正在读取上传的整合包";

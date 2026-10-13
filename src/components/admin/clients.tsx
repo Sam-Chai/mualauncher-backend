@@ -17,7 +17,7 @@ import { DataTable } from "./data-table";
 import { Heading, NoPermission } from "./common";
 import { ArchiveButton, EditorDialog } from "./form";
 import { ClientUploadDialog } from "./client-upload";
-import { MarkdownText, UpdateStats, RecipeImportStats, RecipeFileTable, ModTable } from "./client-shared";
+import { MarkdownText, UpdateStats, RecipeImportStats, RecipeFileTable, RecipeDistributionStats, ModTable } from "./client-shared";
 import { clientMetadataSchema, packageFormatVersionSchema, formatBytes, uploadProcessingLabel, type ClientMetadata, type UpdateStatistics, type ReleaseManifest, type PackFile } from "@/lib/client-contract";
 import type { clientList } from "@/lib/client-service";
 import { navigateAfterAuthChange } from "@/lib/auth-navigation";
@@ -38,7 +38,7 @@ type ReleaseRow = { row: ClientRow; release: Release };
 const clientRowId = (row: ClientRow) => row.clientId;
 const reviewRowId = (item: ReviewRow) => item.draft.id;
 const releaseRowId = (item: ReleaseRow) => item.release.id;
-const statusLabels: Record<string, string> = { UPLOADING: "上传未完成", WAITING_PROCESSOR: "上传已保存 · 等待 v2 处理器", QUEUED: "等待处理", PROCESSING: "正在分析", READY: "等待填写提交", FAILED: "解析失败", SUBMITTED: "待审核", APPROVED: "审核通过 · 待发布", REJECTED: "已驳回", RELEASED: "已发布", DRAFT: "资料草稿" };
+const statusLabels: Record<string, string> = { UPLOADING: "上传未完成", WAITING_PROCESSOR: "历史上传待迁移 · 请联系管理员", QUEUED: "等待处理", PROCESSING: "正在分析", READY: "等待填写提交", FAILED: "解析失败", SUBMITTED: "待审核", APPROVED: "审核通过 · 待发布", REJECTED: "已驳回", RELEASED: "已发布", DRAFT: "资料草稿" };
 function metadata(version: Draft | Release | undefined): ClientMetadata | undefined {
   if (!version) return undefined;
   const parsed = clientMetadataSchema.safeParse("candidateMetadata" in version ? version.candidateMetadata : version.environmentSnapshot);
@@ -148,11 +148,11 @@ export function ClientsPage({ serverId }: { serverId?: string }) {
   return <><Heading title={t("客户端管理")} description={t("上传完整客户端、创建新版本并提交审核；客户端可独立上传和保留；每个服务器同时只绑定一个客户端。")}
     action={organizations.length > 0 && !serverId && <ClientUploadDialog targets={targets} organizations={organizations} onDone={() => {}} disabled={!rows || busy || (!organizations.some(org => org.canUnbound) && !targets.some(target => organizations.some(org => org.id === target.organizationId)))} />} />
     {error && <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert>}
-    {!rows && !error ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{t("读取客户端…")}</p> : <DataTable data={visible} columns={columns} getRowId={clientRowId} empty={t("暂无客户端。点击右侧“添加客户端”上传完整 .minecraft ZIP。")} searchPlaceholder={t("搜索客户端、组织或服务器…")} />}
+    {!rows && !error ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{t("读取客户端…")}</p> : <DataTable data={visible} columns={columns} getRowId={clientRowId} empty={t("暂无客户端。点击“添加客户端”上传完整 ZIP 或 mrpack 源包。")} searchPlaceholder={t("搜索客户端、组织或服务器…")} />}
   </>;
 }
 export function ClientDetailPage() { return <ClientsPage serverId={useParams<{ id: string }>().id} />; }
-function VersionDetails({ version }: { version: Draft | Release }) {
+function VersionDetails({ version, clientId }: { version: Draft | Release; clientId: string }) {
   const { t } = useI18n();
   const data = metadata(version)!;
   const upload = "upload" in version ? version.upload : version.sourceDraft?.upload;
@@ -161,6 +161,7 @@ function VersionDetails({ version }: { version: Draft | Release }) {
     <div className="space-y-3"><h3 className="text-sm font-medium">{t("模组列表 ·") + " "}{data.mods.length}</h3><ModTable mods={data.mods} details={data.modDetails} /></div>
     {"reviewNote" in version && version.reviewNote && <Alert><AlertDescription>{t("审核说明：")}{version.reviewNote}</AlertDescription></Alert>}
     {upload?.statistics && (version.packageFormatVersion === 2 ? <RecipeImportStats statistics={upload.statistics as unknown as RecipeImportStatistics} /> : <UpdateStats statistics={upload.statistics as unknown as UpdateStatistics} comparison={upload.comparisonStatistics as unknown as UpdateStatistics | null} version={data.versionLabel} updating={!!upload.comparisonStatistics} />)}
+    {version.packageFormatVersion === 2 && <RecipeDistributionStats path={`/api/v1/clients/${clientId}/${"candidateMetadata" in version ? "drafts" : "releases"}/${version.id}/distribution-statistics`} revision={JSON.stringify(version.packageBuilds)} />}
   </div>;
 }
 function ActivateButton({ row, release }: { row: ClientRow; release: Release }) {
@@ -178,7 +179,7 @@ function VersionHistory({ row }: { row: ClientRow }) {
     { id: "action", header: t("操作"), cell: ReleaseActionsCell }];
   return <EditorDialog title={t("{0} · 版本记录", { "0": row.name })} trigger={<Button variant="ghost" size="sm"><History className="size-3.5" />{t("记录")}</Button>} description={t("保留所有版本与审核记录，更新客户端会创建新版本。")}>{() => <div className="space-y-6">
     <DataTable data={row.releases.map(release => ({ row, release }))} columns={columns} getRowId={releaseRowId} empty={t("尚无发布版本。")} />
-    {row.drafts.map(draft => <details key={draft.id} className="rounded-lg border p-4"><summary className="cursor-pointer text-sm font-medium">{draft.versionLabel} · {draft.archivedAt ? draft.archiveReason === "SUPERSEDED" ? t("已被新发布替代 · 归档") : t("已归档") : t(statusLabels[draft.status])}</summary><div className="mt-4 space-y-4"><VersionDetails version={draft} />
+    {row.drafts.map(draft => <details key={draft.id} className="rounded-lg border p-4"><summary className="cursor-pointer text-sm font-medium">{draft.versionLabel} · {draft.archivedAt ? draft.archiveReason === "SUPERSEDED" ? t("已被新发布替代 · 归档") : t("已归档") : t(statusLabels[draft.status])}</summary><div className="mt-4 space-y-4"><VersionDetails version={draft} clientId={row.clientId} />
       {draft.replacesDraftId && <p className="text-xs text-muted-foreground">{t("替代草稿：")}{row.drafts.find(previous => previous.id === draft.replacesDraftId)?.versionLabel ?? draft.replacesDraftId}</p>}
       {draft.supersededByDraftId && <p className="text-xs text-muted-foreground">{t("替代发布：")}{row.releases.find(release => release.id === draft.supersededByDraftId)?.versionLabel ?? draft.supersededByDraftId}</p>}
       <ArchiveDraftButton row={row} draft={draft} /></div></details>)}
@@ -197,7 +198,7 @@ function ReviewDialog({ row, draft }: { row: ClientRow; draft: Draft }) {
   const columns: ColumnDef<PackFile>[] = [{ accessorKey: "path", header: t("路径") }, { accessorKey: "size", header: t("大小"), cell: ({ getValue }) => formatBytes(Number(getValue())) }, { accessorKey: "policy", header: t("文件策略") }, { accessorKey: "sha256", header: "SHA-256", cell: ({ getValue }) => <code className="text-xs" title={String(getValue())}>{String(getValue()).slice(0, 16)}…</code> }];
   return <Dialog open={open} onOpenChange={value => { if (value) setPackageRevision(draft.packageRevision); setOpen(value); }}><DialogTrigger asChild><Button size="sm" variant="outline">{t("查看 / 审核")}</Button></DialogTrigger><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>{draft.name} · {draft.versionLabel}</DialogTitle><DialogDescription>{row.organizationName} / {row.serverName} ({row.serverId}) · {t(statusLabels[draft.status])}</DialogDescription></DialogHeader>
     <p className="text-xs text-muted-foreground">{draft.packageFormatVersion === 2 ? t("v2 通用配方包 · 组包修订 {0}", { "0": draft.packageRevision }) : t("v1 · 平台方案 {0}：{1}", { "0": draft.packageRevision, "1": draft.packageBuilds.map(build => build.platform).join("、") })}</p>{packageRevision !== draft.packageRevision && <Alert variant="destructive"><AlertDescription>{t("组包方案已改变，请关闭后重新打开审核窗口核对。")}</AlertDescription></Alert>}
-    <Tabs defaultValue="details"><TabsList><TabsTrigger value="details">{t("版本资料")}</TabsTrigger><TabsTrigger value="files">{t("文件清单")}</TabsTrigger></TabsList><TabsContent value="details" className="mt-4"><VersionDetails version={draft} /></TabsContent><TabsContent value="files" className="mt-4">{manifest ? manifest.format === "mua-recipe-manifest" ? <><p className="mb-3 text-xs text-muted-foreground">{t("远程文件仅声明，字节未在后台验证；环境由 Launcher 准备。")}</p><RecipeFileTable files={manifest.files} /></> : <DataTable data={manifest.files} columns={columns} /> : <p className="text-sm text-muted-foreground">{t(error) || t("正在读取文件清单…")}</p>}</TabsContent></Tabs>
+    <Tabs defaultValue="details"><TabsList><TabsTrigger value="details">{t("版本资料")}</TabsTrigger><TabsTrigger value="files">{t("文件清单")}</TabsTrigger></TabsList><TabsContent value="details" className="mt-4"><VersionDetails version={draft} clientId={row.clientId} /></TabsContent><TabsContent value="files" className="mt-4">{manifest ? manifest.format === "mua-recipe-manifest" ? <><p className="mb-3 text-xs text-muted-foreground">{t("远程文件仅声明，字节未在后台验证；环境由 Launcher 准备。")}</p><RecipeFileTable files={manifest.files} /></> : <DataTable data={manifest.files} columns={columns} /> : <p className="text-sm text-muted-foreground">{t(error) || t("正在读取文件清单…")}</p>}</TabsContent></Tabs>
     {draft.status === "SUBMITTED" && row.permissions.includes("DRAFT_REVIEW") && !row.archived && !row.blocked && <div className="space-y-3 border-t pt-5"><Input placeholder={t("审核说明（驳回时请说明原因）")} value={note} onChange={event => setNote(event.target.value)} /><div className="flex justify-end gap-3">{([ ["reject", t("驳回")], ["approve", t("审核通过")] ] as const).map(([decision, label]) => <Button key={decision} variant={decision === "reject" ? "outline" : "default"} disabled={busy || !manifest || packageRevision !== draft.packageRevision || (decision === "reject" && !note.trim())} onClick={async () => {
       if (await run(() => api(`/api/v1/clients/${row.clientId}/drafts/${draft.id}/review`, "POST", { decision, note, contentRevision: draft.contentRevision, packageRevision }), decision === "approve" ? t("已审核通过，等待发布") : t("已驳回"))) setOpen(false);
     }}>{label}</Button>)}</div></div>}
@@ -274,12 +275,12 @@ function PlatformManifestDialog({ row, draft, platform }: { row: ClientRow; draf
 }
 function ReviewActionsCell({ row: item }: CellContext<ReviewRow, unknown>) {
   const { t } = useI18n();
-  if (item.original.row.archived || item.original.draft.archivedAt) return <EditorDialog title={t("已归档草稿")} trigger={<Button size="sm" variant="ghost">{t("详情")}</Button>} description={t("保留归档记录与文件。")}>{() => <VersionDetails version={item.original.draft} />}</EditorDialog>;
+  if (item.original.row.archived || item.original.draft.archivedAt) return <EditorDialog title={t("已归档草稿")} trigger={<Button size="sm" variant="ghost">{t("详情")}</Button>} description={t("保留归档记录与文件。")}>{() => <VersionDetails version={item.original.draft} clientId={item.original.row.clientId} />}</EditorDialog>;
   return <div className="flex flex-wrap gap-2"><ReviewDialog row={item.original.row} draft={item.original.draft} /><PackageDialog row={item.original.row} draft={item.original.draft} /><PublishButton row={item.original.row} draft={item.original.draft} /><ArchiveDraftButton row={item.original.row} draft={item.original.draft} /></div>;
 }
 function ReleaseActionsCell({ row: item }: CellContext<ReleaseRow, unknown>) {
   const { t } = useI18n();
-  return <div className="flex gap-2"><EditorDialog title={t("版本 {0}", { "0": item.original.release.versionLabel })} trigger={<Button size="sm" variant="ghost">{t("详情")}</Button>} description={t("已发布版本内容不可修改。")}>{() => <VersionDetails version={item.original.release} />}</EditorDialog><ActivateButton row={item.original.row} release={item.original.release} /></div>;
+  return <div className="flex gap-2"><EditorDialog title={t("版本 {0}", { "0": item.original.release.versionLabel })} trigger={<Button size="sm" variant="ghost">{t("详情")}</Button>} description={t("已发布版本内容不可修改。")}>{() => <VersionDetails version={item.original.release} clientId={item.original.row.clientId} />}</EditorDialog><ActivateButton row={item.original.row} release={item.original.release} /></div>;
 }
 export function ReleasesPage({ mode = "published" }: { mode?: "all" | "review" | "published" | "revoked" }) {
   const { t, formatDate } = useI18n();

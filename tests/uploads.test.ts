@@ -44,6 +44,7 @@ import { packageFormatSettings, updatePackageFormatSettings } from "../src/lib/p
 import { maxUploadSizeMb, uploadSizeSettings, updateUploadSizeSettings } from "../src/lib/upload-size-settings";
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "../src/lib/upload-size-policy";
 import { assertApiRequest, assertApiResponse } from "./openapi-validation";
+import { recipeDistributionStats } from "../src/lib/recipe-distribution";
 
 const suffix = randomBytes(8).toString("hex"); const schema = "mua_upload_test_" + suffix;
 process.env.DATABASE_SCHEMA = schema;
@@ -611,6 +612,13 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     assert.equal(v2Result.packageFormatVersion, 2); assert.equal(v2Result.status, "SUBMITTED"); assert(v2Result.draftId);
     const waitingResponse = await fetch(origin + `/api/v1/clients/uploads/${v2Result.uploadId}`, { headers: authorization }); assert.equal(waitingResponse.status, 200);
     const waiting = await waitingResponse.json(); assert.equal(waiting.status, "SUBMITTED"); assert.equal(waiting.attempts, undefined); assert.equal(waiting.recipeStatistics.remoteFiles, 4); assert.equal(waiting.statistics, null);
+    const uploadStatsPath = `/api/v1/clients/uploads/${v2Result.uploadId}/distribution-statistics`;
+    assert.equal((await fetch(origin + uploadStatsPath)).status, 401);
+    const uploadStatsResponse = await fetch(origin + uploadStatsPath, { headers: authorization }); assert.equal(uploadStatsResponse.status, 200);
+    const uploadStats = await uploadStatsResponse.json(); assert.equal(uploadStats.base, null, "v1 baseline cannot be used for v2 delta statistics"); assert.equal(uploadStats.knownNetworkBytes, null);
+    const draftStatsPath = `/api/v1/clients/OTH/drafts/${v2Result.draftId}/distribution-statistics`;
+    assert.equal((await fetch(origin + draftStatsPath.replace("/OTH/", "/NPA/"), { headers: authorization })).status, 404);
+    assert.equal((await fetch(origin + `/api/v1/clients/OTH/releases/${result.draftId}/distribution-statistics`, { headers: authorization })).status, 409);
     const recipe = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/manifest`, { headers: authorization }); assert.equal(recipe.status, 200); assert.equal((await recipe.json()).format, "mua-recipe-manifest");
     await runPackageWorker(workerClient, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
     await post(`/api/v1/clients/OTH/drafts/${v2Result.draftId}/review`, { decision: "approve", note: "HTTP v2 verified", contentRevision: 1 });
@@ -621,6 +629,16 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const v2Bytes = Buffer.from(await (await fetch(v2Artifact.url)).arrayBuffer()); assert.equal(digest(v2Bytes), v2Artifact.sha256);
     const v2Path = join(temp, "http-v2.muapack"); await writeFile(v2Path, v2Bytes); await validateRecipePackArchive(v2Path, createPublicKey((await signingIdentity()).privateKey));
     const v2Published = await post(`/api/v1/clients/OTH/drafts/${v2Result.draftId}/publish`, { activate: false });
+    const readyStatsResponse = await fetch(origin + draftStatsPath, { headers: authorization }); assert.equal(readyStatsResponse.status, 200);
+    const readyStats = await readyStatsResponse.json(); assert.equal(readyStats.fullPackageBytes, v2Artifact.size); assert.equal(readyStats.knownNetworkBytes, readyStats.fullPackageBytes + readyStats.remoteDownloadBytes);
+    const releaseStatsPath = `/api/v1/clients/OTH/releases/${v2Published.releaseId}/distribution-statistics`;
+    assert.equal((await fetch(origin + releaseStatsPath, { headers: authorization })).status, 200);
+    assert.equal((await fetch(origin + releaseStatsPath, { headers: operatorHeaders })).status, 404, "other-organization access is denied");
+    const otherOrg = (await client.client.findUniqueOrThrow({ where: { id: "OTH" } })).organizationId;
+    await work(db => m.setMember(db, root, otherOrg, operator.id, { roles: ["RELEASE_OPERATOR"], status: "ACTIVE" }));
+    const cookieStats = await fetch(origin + releaseStatsPath, { headers: operatorHeaders }); assert.equal(cookieStats.status, 200, "release-only readers do not require draft access");
+    assert.equal((await fetch(origin + draftStatsPath, { headers: operatorHeaders })).status, 403);
+    assert.deepEqual(await cookieStats.json(), readyStats);
     assert.equal((await client.clientRelease.findUniqueOrThrow({ where: { id: v2Published.releaseId } })).packageFormatVersion, 2);
     assert.equal((await client.client.findUniqueOrThrow({ where: { id: "OTH" } })).currentReleaseId, result.draftId, "publishing without activation keeps the previous version online");
     await work(db => c.activateClient(db, root, "OTH", v2Published.releaseId, { publicationRevision: currentClient.revision }));
@@ -1228,6 +1246,9 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   const upload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), admin, identity.clientId, true, "recipe.mrpack", null, 2);
   assert.equal(upload.status, "READY", upload.error ?? "import failed");
   const environmentsBefore = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
+  const importDistribution = await recipeDistributionStats(client, admin, "uploads", upload.id);
+  assert.equal(importDistribution.fullPackageBytes, null); assert.equal(importDistribution.remoteFiles, 4);
+  await assert.rejects(recipeDistributionStats(client, admin, "drafts", upload.id, "NPA"), denied(404));
   const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, platforms: ["windows-amd64", "linux-amd64"] }));
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 must never download environment binaries"); };
   await assert.rejects(work(db => c.reviewClient(db, reader, identity.clientId, draftId, { decision: "approve", note: "test", contentRevision: 1 })), denied(403));
@@ -1243,6 +1264,10 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   await runPackageWorker(workerClient, neverResolve);
   build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "build failed");
   const oldArtifacts = build.artifacts, oldTarget = build.targetSha256;
+  const fullDistribution = await recipeDistributionStats(client, admin, "drafts", draftId, identity.clientId);
+  assert.equal(fullDistribution.base, null); assert.equal(fullDistribution.fullPackageBytes, packageArtifactsSchema.parse(build.artifacts).full.size);
+  assert.equal(fullDistribution.knownNetworkBytes, fullDistribution.fullPackageBytes! + fullDistribution.remoteDownloadBytes);
+  assert.equal(fullDistribution.environmentBytes, null);
   const full = await managementFullPackage(client, admin, identity.clientId, "drafts", draftId, "universal");
   const bytes = Buffer.from(await (await fetch(full.url)).arrayBuffer()); assert.equal(digest(bytes), full.sha256);
   const packPath = join(temp, "verified-v2.muapack"); await writeFile(packPath, bytes);
@@ -1259,6 +1284,7 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   const release = await client.clientRelease.findUniqueOrThrow({ where: { id: released.releaseId } });
   assert.equal(release.packageFormatVersion, 2); assert.equal(release.manifestObjectKey, build.targetObjectKey);
   assert.equal(release.manifestSha256, build.targetSha256);
+  assert.deepEqual(await recipeDistributionStats(client, admin, "releases", release.id, identity.clientId), fullDistribution);
   const manifest = readRecipeManifest((await publicManifest(client, "VTF", "1,2")).bytes); assert("protocolRevision" in manifest); assert.equal(manifest.protocolRevision, 2); assert(!("supportedPlatforms" in manifest));
   assert(verify(null, await readObject(release.manifestObjectKey), createPublicKey((await signingIdentity()).privateKey), Buffer.from(release.signature, "base64")));
   await assert.rejects(publicManifest(client, "VTF"), denied(415));
@@ -1323,6 +1349,11 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   assert.deepEqual(delta.target, full.target); assert.deepEqual(delta.base, readRecipeManifest(baseBytes));
   assert.deepEqual(delta.metadata, createRecipePackMetadata(await readObject(build.targetObjectKey!), baseBytes));
   assert.equal(delta.metadata.removalPolicy, "retain"); assert(delta.metadata.changes.removed.length > 0); assert(delta.metadata.changes.sourceChanged.length > 0); assert(delta.metadata.changes.policyChanged.length > 0);
+  const distribution = await recipeDistributionStats(client, admin, "drafts", draftId, identity.clientId);
+  assert.equal(distribution.base?.releaseId, base.id); assert.equal(distribution.updatePackageBytes, artifacts.update.size);
+  assert.equal(distribution.localPayloadBytes, delta.metadata.payload.reduce((sum, file) => sum + file.size, 0));
+  assert.equal(distribution.changes.filter(file => file.kinds.includes("modified")).length, delta.metadata.changes.modified.length);
+  assert.equal(distribution.knownNetworkBytes, artifacts.update.size + distribution.remoteDownloadBytes);
   const before = await publicPackage(client, "VTD", "windows-amd64", null, "2"); assert.equal(before.releaseId, first, "built candidates remain private until published");
   const removed = artifacts.update.key;
   await storageClient().send(new DeleteObjectsCommand({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: removed }] } }));

@@ -7,7 +7,7 @@ import { sha256Schema } from "../muapack-contract";
 import { acceptedFormats, directorySchema, errorSchema, fileLinkSchema, legacyManifestSchema, packageQuery, packageResponseSchema, refreshQuery, serverParams } from "./schemas";
 
 extendZodWithOpenApi(z);
-export const OPENAPI_VERSION = "0.2.1";
+export const OPENAPI_VERSION = "0.3.0";
 export const PUBLIC_OPERATION_IDS = ["listServers", "getServerManifest", "getServerFile", "getServerPackages", "refreshReleasePackages"] as const;
 
 export function publicOpenApi(locale: Locale = "zh-CN") {

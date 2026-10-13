@@ -1,5 +1,7 @@
 # 实施进度
 
+2026-10-13 v2 第 6 步收尾：上传填写、审核及历史详情新增固定发布基准差异、本地载荷、远程去重预计下载、实际完整／更新 ZIP 大小及已知网络量。未组包 ZIP／网络量为 null，环境大小明确由 Launcher 解析，CAS 复用不计为玩家流量节省。新增三条 Cookie／Bearer 只读统计接口，完整规范覆盖 69/69。修正历史 WAITING_PROCESSOR 提示、客户端空列表及“六个平台限制”等过时说明；保留历史验证记录和旧签名。统计／界面 20 项、OpenAPI 9 项、v2 完整／增量流水线 2 项及真实 HTTP／权限契约 1 项通过，中英文 v2 与 Scalar 共 2 项浏览器回归、TypeScript、全仓 lint 和生产构建通过。见 [统计口径](v2-distribution-statistics.md)。
+
 2026-10-13 箴言图片调整：列表图片铺满图片单元格、以表格为外框，透明渐隐露出当前黑白主题背景；编辑预览完整显示且无渐隐。新裁剪固定 2.35:1，输出 1410×600；旧图不改写，重裁剪时适配。图片契约 4 项、后台组件 16 项、OpenAPI 9 项、规范覆盖 66/66、TypeScript、全仓 lint 和生产构建通过。新增 Playwright 检查贴边几何、黑白主题渐隐像素、编辑预览及拖动／方向键／重置；见 [图片说明](server-motto-images.md)。系统／权限页面的 RLS 状态已更新，待办表澄清未发布草稿撤回并归档已实现。下方按日期保留历史验证记录，其旧比例和未复验说明以此轮记录为准。
 
 2026-10-13：OpenAPI 第 1–7 步已接入，66 个实际操作完整覆盖客户端自动化、后台、认证及 Launcher，中英文规范与后台内嵌 Scalar 默认完整文档，可切换公开规范。公开入口仍仅五个 Launcher GET，完整 JSON 逐请求校验 Cookie，业务 RBAC／RLS 保留。新增真实 HTTP 请求／响应契约、路由覆盖／源码／兼容性检查、构建与浏览器回归和 CI 公开 JSON artifact 流程；工作流远端执行须提交后触发。Registry／云端站点未接入。见 [接入与验证](openapi.md)、[完整客户端流程](api-workflows.md)、[兼容性](openapi-changelog.md)。
@@ -61,7 +63,7 @@ ClientUpload 的来源、所有者、基准与准备完成的内容不可修改�
 
 | 工作 | 当前状态 |
 | --- | --- |
-| muapack v2：分发统计与 Launcher 安装 | 第 1–5 步完成，full／自动 update、审核／签名／发布和基准匹配下载已接入；剩余差异展示、玩家网络量统计和 Launcher 安装待实施；v1 保留 |
+| muapack v2：Launcher 安装 | 第 1–6 步完成，full／自动 update、审核／签名／发布、基准匹配下载、差异展示与已知网络量统计已接入；Launcher 安装仍待实施，环境大小由端侧解析；v1 保留 |
 | Modrinth／PCL 导入 | 已支持索引、依赖与 Java、覆盖层、远程下载双哈希／大小验证、来源白名单（默认关闭）、HTTP(S) CONNECT 代理、表格字节进度和 optional 全量打包；Launcher 选择尚未实施，见 [导入说明](modrinth-import.md) |
 | CurseForge／MultiMC 自动识别与元数据填充 | 当前明确拒绝，尚未接入 |
 | .muapack 六平台后台组包、环境缓存与发布门槛 | 已接入持久任务、原版／Fabric／Quilt／已适配 Forge／NeoForge 环境下载和缓存、审核后签名、整包／更新包、平台选择、真实进度、重试、API／数据库发布门槛与公开下载描述；缺少所需环境的平台失败，见 [实施说明](muapack-worker.md) |

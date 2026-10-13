@@ -1,63 +1,258 @@
 {
-  "listClients": ["List accessible clients and package progress", "Returns only clients readable under current RBAC; deleted records are hidden. Drafts/uploads require DRAFT_READ; releases require RELEASE_READ. Poll drafts[].packageBuilds and releases[].packageBuilds for build progress: there is no separate build-status endpoint. ARCHIVED takes precedence. Upload canEdit indicates ownership or superadmin access."],
-  "createClient": ["Create an independent client", "Names are unique within an organization after NFKC normalization and case folding; use update for existing names. Organization sessions may create unbound clients; Bearer tokens must choose an authorized server. Choosing a server additionally requires CLIENT_BIND and confirmed server publicationRevision, expectedClientId and replaceConfirmed when replacing a binding. New IDs are UUIDs; legacy IDs remain readable."],
-  "getClient": ["Get client details and actual task progress", "Read the client publicationRevision, current release, server bindingRevision, draft contentRevision/packageRevision, uploads and packageBuilds. Permission-filtered history arrays may be empty. Cross-scope access returns 404 or 403. These revision types are not interchangeable."],
-  "createClientUpload": ["Create a complete source-pack upload", "Upload a full .zip/.mrpack, not a delta ZIP. Pin client baseReleaseId and basePublicationRevision; updates additionally require DRAFT_EDIT. comparisonDraftId compares/replaces an unpublished draft and needs DRAFT_ARCHIVE. Format is immutable and defaults to 1. Disabled formats return 409, the current upload limit returns 413, and 20 active uploads return 429. Parts are 64 MiB; sessions expire after 24 hours."],
-  "signUploadPart": ["Sign a single multipart PUT", "Requires an unexpired UPLOADING task and a partNumber within its part count. PUT binary bytes directly to the returned storage URL and save the original ETag; this is not backend multipart/form-data. Nonfinal parts use partSize; the last may be smaller. Browser storage CORS must expose ETag. Only the upload owner or superadmin may write; updates also require DRAFT_EDIT."],
-  "completeClientUpload": ["Complete multipart upload and queue import", "Submit all part numbers and original ETags. Storage validates parts and total size before assembly; assembly runs outside the database lock, then identity and scope are checked again. Repeated completion retains the existing state. QUEUED means awaiting import, not imported, built or published."],
-  "getClientUpload": ["Read import progress and instance candidates", "Poll status, processingPhase, detectedInfo, detectedMods, warnings and progress. SELECT_INSTANCE requires an explicit choice from candidates. Upload READY means import completion only. v2 remote files remain DECLARED and Launcher prepares their bytes and environments. statistics/recipeStatistics describe the published player base; comparisonStatistics describes an unpublished draft comparison."],
-  "selectClientInstance": ["Select a target instance from the source pack", "Only QUEUED with processingPhase=SELECT_INSTANCE is accepted. instanceId must match a detected candidate. Resumes Worker processing and rechecks the pinned publication base without reuploading bytes."],
-  "submitClientUpload": ["Submit an imported version for review", "First submission requires READY. Identical retries return the same draftId; changed metadata returns 409. Omitted Minecraft/Java values use Worker results or fail with 400. Worker facts override supplied mods/modDetails. Existing client names are immutable; the first unique upload with no history may confirm its detected name. Versions must be newer than their published base. v1 defaults to five platforms; new v2 ignores compatible platform inputs."],
-  "retryClientUpload": ["Retry a failed import", "Only FAILED tasks may be retried. Clears progress, errors and leases and queues the saved source bytes again; no source reupload is needed."],
-  "cancelClientUpload": ["Cancel an unsubmitted upload", "Only UPLOADING, WAITING_PROCESSOR, QUEUED, READY or FAILED may be cancelled. PROCESSING and submitted tasks cannot be cancelled this way. Business history is preserved."],
-  "getDraftManifest": ["Read a draft review manifest", "Requires DRAFT_READ and verifies the candidate digest. v1 returns the legacy client manifest; v2 constructs the recipe target from draft content. The response is reserialized JSON and is not the original signed bytes of a published manifest."],
-  "getDraftPlatformManifest": ["Read a prepared platform or recipe manifest", "v1 requires a canonical platform. v2 uses a universal task; new platform-independent drafts ignore platform inputs while historical declarations are checked. Unprepared manifests return 404; corrupt or changed plans return 422."],
-  "reviewClientDraft": ["Approve or reject a submitted draft", "Requires SUBMITTED and the observed contentRevision/packageRevision (legacy packageRevision defaults to 1). Rejection requires a nonempty note. Rechecks the pinned base and candidate digest; changed state, revision or base returns 409. Approval allows Worker signing/building, but is neither PackageBuild READY nor publication."],
-  "configureDraftPlatforms": ["Change required v1 build platforms", "Only unarchived v1 SUBMITTED/APPROVED drafts. Requires DRAFT_CREATE and DRAFT_SUBMIT; updates also need DRAFT_EDIT. v2 returns 409. A changed selection increments packageRevision, clears review and returns to SUBMITTED for review again. An unchanged selection returns ok."],
-  "retryDraftPackages": ["Retry failed required package tasks", "Only unarchived SUBMITTED/APPROVED drafts; updates also require DRAFT_EDIT. Requeues failed required builds. Poll client details; every required task must be READY before publication."],
-  "publishClientDraft": ["Publish an approved and fully built version", "Requires APPROVED with matching reviewed revisions and verified READY artifacts. activate=true also requires RELEASE_ACTIVATE. Changing replacesDraftId requires DRAFT_ARCHIVE and both current draft revisions. Only successful publication archives the explicit replacement chain. Published content is immutable. First responses include activated/archivedDraftIds; retries return only releaseId/versionLabel."],
-  "activateClientRelease": ["Activate or roll back to an existing release", "publicationRevision is the client revision, not the server binding revision; read it from current client details. Only this client's unarchived releases may be activated. Pending replacement also checks CLIENT_BIND and the confirmed server binding; conflicts return 409."],
-  "archiveClientDraft": ["Withdraw an unpublished draft", "Requires DRAFT_ARCHIVE and both draft revisions. Published releases cannot be withdrawn through this operation. Invalidates active build leases while retaining READY artifacts and references. Repeated archival returns ok; there is no restore parameter here."],
-  "downloadDraftPackage": ["Download a full draft package", "Requires DRAFT_READ. Always returns full with a 300-second link, regardless of public server listing. v1 requires a canonical platform. New v2 ignores platform inputs, but management responses still include platform=universal. Not READY returns 409; storage size/digest failures return 422."],
-  "downloadReleasePackage": ["Download a full release package", "Requires RELEASE_READ and current client scope. Always returns full with a 300-second link, regardless of public server listing. v1 requires a canonical platform. New v2 ignores platform inputs, but management responses still include platform=universal. Not READY returns 409; storage size/digest failures return 422."],
-  "bindClient": ["Bind a server in the same organization", "Checks the client, target server and any replaced client with CLIENT_BIND. publicationRevision is the server binding revision; expectedClientId must match, and replacements need replaceConfirmed. A client binds at most one server. An unpublished replacement may return pending=true, retaining the old client until reviewed publication and activation completes the confirmed replacement."],
-  "unbindClient": ["Unbind a client or cancel a pending binding", "serverId/publicationRevision must match the current binding; both are null when unbound. Archived clients may also be unbound. Keeps the current release, history, storage and fixed scopeServerId. Does not automatically restore distribution."],
-  "archiveClient": ["Archive or restore a client", "Requires CLIENT_ARCHIVE. Archival stops distribution and clears actual/pending bindings without removing immutable releases or moving storage objects. Restoration does not automatically list or bind the client. ARCHIVED overrides published lifecycle status."],
-  "deleteClient": ["Delete an archived, unbound client", "Requires CLIENT_DELETE, archival, no actual/pending binding and no PROCESSING upload/build. Published history does not prevent deletion. Retains irreversible deletion markers, signed history and audit, hides the client and releases its name. Cancels pending uploads; Worker recycles files with shared CAS reference protection."],
-  "getAdminState": ["Read scoped administration state", "Every active panel session may read. Organizations, servers and members are filtered by current RBAC. Account directory, events and complete-window audit counts are superadmin-only and otherwise empty. Ordinary accounts read enabledPackageFormats/maxUploadSizeMb here."],
-  "getPipeline": ["Read storage, Worker and signing status", "Superadmin panel sessions only. Reports actual bucket connectivity, nullable public signing identity, queues and Worker heartbeats from the last 30 seconds. No private keys or storage credentials are returned."],
-  "getServerClients": ["Read the bound client's legacy version view", "Requires SERVER_READ; draft/release arrays additionally require DRAFT_READ/RELEASE_READ and are empty without a binding. This compatibility view omits the independent client's full upload/build progress; use client details for that."],
-  "searchOrganizationAccounts": ["Search allowlisted accounts for grants", "Requires organization ORG_MEMBERS_READ. q needs at least three trimmed characters and at most 64 original characters. Searches ACTIVE accounts by username/display name, case-insensitively, returning up to ten sorted by display name."],
-  "listApiTokens": ["List this account's token metadata", "Panel Cookie only. Returns this account's tokens, including revoked records, without plaintext. Bearer tokens cannot authenticate this administration endpoint."],
-  "createApiToken": ["Create a scoped API token", "Panel Cookie only. All serverIds/permissions must be within current account authority. SERVER_READ is mandatory; ORG_* and SERVER_EDIT are forbidden. Valid for 1-90 days. Plaintext appears only in this creation response. Effective authority intersects current account RBAC; disabling accounts, removing grants or revoking tokens takes effect immediately."],
-  "revokeApiToken": ["Revoke this account's API token", "Only tokens belonging to the current account may be revoked. Records remain; subsequent Bearer calls return 401."],
-  "createOrganization": ["Create an organization", "Superadmin only. Creates an internal UUID; display alias, avatar object key and description may later be edited."],
-  "updateOrganization": ["Edit organization details", "Requires organization ORG_EDIT. Only the listed detail fields may change; the internal ID is immutable."],
-  "createServer": ["Register an existing MUA server ID", "Superadmin plus ORG_EDIT. Uses the existing 3-5-letter server ID, not a new identity system. server-mottos/ image keys must be set via the image upload endpoint."],
-  "updateServer": ["Edit server details and display settings", "SERVER_EDIT edits details. sortOrder/themeColor/isListed/displayMode/displayStartsAt/displayEndsAt additionally require superadmin. RANGE needs valid ordered times; PERMANENT clears the range. API times include a timezone; the panel uses Beijing time. server-mottos/ image replacement must use its dedicated endpoint."],
-  "archiveOrganization": ["Archive or restore an organization", "Superadmin only. Keeps history while stopping distribution and clearing affected bindings. Restoration does not automatically relist or rebind resources."],
-  "archiveServer": ["Archive or restore a server", "Superadmin only, with server scope validation. Keeps history while stopping distribution and clearing binding. Restoration does not automatically relist or rebind."],
-  "archiveClientLegacy": ["Archive or restore a client via a compatibility route", "Requires CLIENT_ARCHIVE. Keeps immutable history while stopping distribution and clearing bindings. Restoration does not automatically relist or rebind."],
-  "setOrganizationMember": ["Set membership status and organization roles", "Requires ORG_MEMBERS_MANAGE. Disabled accounts cannot be newly added. Ordinary administrators cannot alter superadmins or members with reserved roles. ORG_ADMIN/REVIEWER/PUBLISHER/RELEASE_OPERATOR grants and revocations require superadmin. Disabled membership records remain."],
-  "setServerGrant": ["Set a member's single-server roles", "Requires ORG_MEMBERS_MANAGE and SERVER_READ. The account must already belong to this organization, and the server must be in it. ORG_ADMIN cannot be a single-server grant. Empty roles revoke access while retaining records. Reserved roles still require superadmin."],
-  "createAccount": ["Create an allowlisted account", "Superadmin only. Usernames are trimmed and lowercased, 3-64 letters/digits or underscore, dot and hyphen. Initial passwords need 12-128 characters. Do not embed real passwords in documentation examples or persisted test settings."],
-  "updateAccount": ["Change account status, platform role or password", "Superadmin only. Retain at least one ACTIVE superadmin. Disabling, changing the superadmin flag or resetting a password revokes account sessions. Username is not an allowed update field."],
-  "getRecycleSettings": ["Read recycle retention", "Dedicated GET/PATCH endpoints require a superadmin panel session. Retention is 1-365 integer days, default 7. Shortening it causes expired files to be removed on the next Worker cleanup; shared references remain protected."],
-  "setRecycleSettings": ["Change recycle retention", "Superadmin only, audited. Retention is 1-365 integer days, default 7. Expired recycled files may be permanently removed during the next cleanup; shared references remain protected."],
-  "getUploadSizeSettings": ["Read the source upload limit", "Dedicated GET/PATCH endpoints require superadmin. Ordinary panel accounts read the limit through /api/admin/state. Range 1-20480 integer MB, default 1024; one MB is 1024 squared bytes. Only new source uploads are limited."],
-  "setUploadSizeSettings": ["Change the source upload limit", "Superadmin only, audited. Range 1-20480 integer MB; one MB is 1024 squared bytes. Affects new uploads only, without cancelling existing tasks or limiting generated artifacts."],
-  "getPackageFormatSettings": ["Read enabled muapack formats", "Superadmin-only dedicated GET/PATCH. Ordinary panel accounts read enabled formats through /api/admin/state. Defaults to [1,2], with at least one distinct format enabled."],
-  "setPackageFormatSettings": ["Change enabled muapack formats", "Superadmin only, audited. At least one distinct format must remain enabled. Disabling prevents new uploads but does not cancel existing tasks or delist historical releases."],
-  "getDownloadSettings": ["Read Worker source and proxy settings", "Superadmin panel session only. Returns current host allowlist, proxy, mirror preferences and Java image type."],
-  "setDownloadSettings": ["Change Worker source and proxy settings", "Superadmin only, audited. Older callers may omit mirror fields to preserve current values. An enabled proxy needs a credential-free HTTP(S) host/port URL. Disabling the host allowlist retains HTTPS/public-IP/DNS-pinning/redirect/hash safeguards. Mirror proxying also needs the global proxy; MinIO bypasses it. JRE is default; only superadmins may choose JDK."],
-  "createLegacyMetadataDraft": ["Create a legacy metadata-only draft", "Requires DRAFT_CREATE and an existing bound client. This does not complete an upload or expose submission/review/publication for metadata-only content. Use the source upload workflow for client publication."],
-  "updateLegacyMetadataDraft": ["Edit a legacy metadata-only draft", "Requires DRAFT_EDIT. Only unarchived DRAFT/REJECTED records without associated uploads may be edited, matching and incrementing contentRevision. Uploaded drafts cannot be edited in place."],
-  "archiveLegacyMetadataDraft": ["Archive or restore a legacy metadata draft", "Requires DRAFT_ARCHIVE. Only DRAFT/REJECTED records belonging to the currently bound client. This differs from withdrawing an independent client's draft with two revision fields."],
-  "probeServer": ["Read actual Minecraft connectivity", "Requires SERVER_READ before and after probing. Uses the saved address only, with public DNS pinning, SRV, timeout, cache and concurrency safeguards. ONLINE confirms MC and low latency; HIGH_LATENCY defaults to at least 300 ms. Missing configuration, archival or service errors produce UNKNOWN."],
-  "getServerMotto": ["Read the server image, source or crop metadata", "Requires SERVER_READ. variant=image/source returns binary image/webp; metadata returns JSON. Optional version is the current image directory UUID; changes return 409. Retained sources are normalized WebP and may be cropped again. Private reads use private, no-store cache control."],
-  "uploadServerMotto": ["Upload or recrop the server motto image", "Requires SERVER_EDIT. multipart/form-data crop and expectedIconObjectKey are JSON-encoded text, not nested form objects; an empty key is the text null. Omit source to recrop the retained source. New source supports static PNG/JPEG/WebP, at most 8 MiB and 16 million pixels; required crop ratio 2.35:1. Rechecks crop, identity, session, scope and revision after storage."],
-  "removeServerMotto": ["Remove the current motto image binding", "Requires SERVER_EDIT and an expectedIconObjectKey matching the current key; conflicts return 409. Retains old storage image objects and does not modify publication signatures."],
-  "login": ["Sign in with an allowlisted account", "Same-origin Origin is required; an old Cookie is optional. Returns ok and sets mua_session with HttpOnly, SameSite=Strict, Path=/, Secure on HTTPS, and 12-hour expiry. Invalid credentials/disabled accounts return 401; throttling returns 429."],
-  "logout": ["Sign out the current session", "Same-origin Origin is required; Cookie is optional. Removes the current session and clears mua_session with Max-Age=0. Send an empty JSON object."],
-  "changePassword": ["Change this account's password", "Requires an active Cookie session and same-origin Origin. Validates the current password and a 12-128-character replacement. Revokes all account sessions and clears Cookie, requiring login again. Does not rewrite API token plaintext or permissions."]
+  "listClients": [
+    "List accessible clients and package progress",
+    "Returns only clients readable under current RBAC; deleted records are hidden. Drafts/uploads require DRAFT_READ; releases require RELEASE_READ. Poll drafts[].packageBuilds and releases[].packageBuilds for build progress: there is no separate build-status endpoint. ARCHIVED takes precedence. Upload canEdit indicates ownership or superadmin access."
+  ],
+  "createClient": [
+    "Create an independent client",
+    "Names are unique within an organization after NFKC normalization and case folding; use update for existing names. Organization sessions may create unbound clients; Bearer tokens must choose an authorized server. Choosing a server additionally requires CLIENT_BIND and confirmed server publicationRevision, expectedClientId and replaceConfirmed when replacing a binding. New IDs are UUIDs; legacy IDs remain readable."
+  ],
+  "getClient": [
+    "Get client details and actual task progress",
+    "Read the client publicationRevision, current release, server bindingRevision, draft contentRevision/packageRevision, uploads and packageBuilds. Permission-filtered history arrays may be empty. Cross-scope access returns 404 or 403. These revision types are not interchangeable."
+  ],
+  "createClientUpload": [
+    "Create a complete source-pack upload",
+    "Upload a full .zip/.mrpack, not a delta ZIP. Pin client baseReleaseId and basePublicationRevision; updates additionally require DRAFT_EDIT. comparisonDraftId compares/replaces an unpublished draft and needs DRAFT_ARCHIVE. Format is immutable and defaults to 1. Disabled formats return 409, the current upload limit returns 413, and 20 active uploads return 429. Parts are 64 MiB; sessions expire after 24 hours."
+  ],
+  "signUploadPart": [
+    "Sign a single multipart PUT",
+    "Requires an unexpired UPLOADING task and a partNumber within its part count. PUT binary bytes directly to the returned storage URL and save the original ETag; this is not backend multipart/form-data. Nonfinal parts use partSize; the last may be smaller. Browser storage CORS must expose ETag. Only the upload owner or superadmin may write; updates also require DRAFT_EDIT."
+  ],
+  "completeClientUpload": [
+    "Complete multipart upload and queue import",
+    "Submit all part numbers and original ETags. Storage validates parts and total size before assembly; assembly runs outside the database lock, then identity and scope are checked again. Repeated completion retains the existing state. QUEUED means awaiting import, not imported, built or published."
+  ],
+  "getClientUpload": [
+    "Read import progress and instance candidates",
+    "Poll status, processingPhase, detectedInfo, detectedMods, warnings and progress. SELECT_INSTANCE requires an explicit choice from candidates. Upload READY means import completion only. v2 remote files remain DECLARED and Launcher prepares their bytes and environments. statistics/recipeStatistics describe the published player base; comparisonStatistics describes an unpublished draft comparison."
+  ],
+  "selectClientInstance": [
+    "Select a target instance from the source pack",
+    "Only QUEUED with processingPhase=SELECT_INSTANCE is accepted. instanceId must match a detected candidate. Resumes Worker processing and rechecks the pinned publication base without reuploading bytes."
+  ],
+  "submitClientUpload": [
+    "Submit an imported version for review",
+    "First submission requires READY. Identical retries return the same draftId; changed metadata returns 409. Omitted Minecraft/Java values use Worker results or fail with 400. Worker facts override supplied mods/modDetails. Existing client names are immutable; the first unique upload with no history may confirm its detected name. Versions must be newer than their published base. v1 defaults to five platforms; new v2 ignores compatible platform inputs."
+  ],
+  "retryClientUpload": [
+    "Retry a failed import",
+    "Only FAILED tasks may be retried. Clears progress, errors and leases and queues the saved source bytes again; no source reupload is needed."
+  ],
+  "cancelClientUpload": [
+    "Cancel an unsubmitted upload",
+    "Only UPLOADING, WAITING_PROCESSOR, QUEUED, READY or FAILED may be cancelled. PROCESSING and submitted tasks cannot be cancelled this way. Business history is preserved."
+  ],
+  "getDraftManifest": [
+    "Read a draft review manifest",
+    "Requires DRAFT_READ and verifies the candidate digest. v1 returns the legacy client manifest; v2 constructs the recipe target from draft content. The response is reserialized JSON and is not the original signed bytes of a published manifest."
+  ],
+  "getDraftPlatformManifest": [
+    "Read a prepared platform or recipe manifest",
+    "v1 requires a canonical platform. v2 uses a universal task; new platform-independent drafts ignore platform inputs while historical declarations are checked. Unprepared manifests return 404; corrupt or changed plans return 422."
+  ],
+  "reviewClientDraft": [
+    "Approve or reject a submitted draft",
+    "Requires SUBMITTED and the observed contentRevision/packageRevision (legacy packageRevision defaults to 1). Rejection requires a nonempty note. Rechecks the pinned base and candidate digest; changed state, revision or base returns 409. Approval allows Worker signing/building, but is neither PackageBuild READY nor publication."
+  ],
+  "configureDraftPlatforms": [
+    "Change required v1 build platforms",
+    "Only unarchived v1 SUBMITTED/APPROVED drafts. Requires DRAFT_CREATE and DRAFT_SUBMIT; updates also need DRAFT_EDIT. v2 returns 409. A changed selection increments packageRevision, clears review and returns to SUBMITTED for review again. An unchanged selection returns ok."
+  ],
+  "retryDraftPackages": [
+    "Retry failed required package tasks",
+    "Only unarchived SUBMITTED/APPROVED drafts; updates also require DRAFT_EDIT. Requeues failed required builds. Poll client details; every required task must be READY before publication."
+  ],
+  "publishClientDraft": [
+    "Publish an approved and fully built version",
+    "Requires APPROVED with matching reviewed revisions and verified READY artifacts. activate=true also requires RELEASE_ACTIVATE. Changing replacesDraftId requires DRAFT_ARCHIVE and both current draft revisions. Only successful publication archives the explicit replacement chain. Published content is immutable. First responses include activated/archivedDraftIds; retries return only releaseId/versionLabel."
+  ],
+  "activateClientRelease": [
+    "Activate or roll back to an existing release",
+    "publicationRevision is the client revision, not the server binding revision; read it from current client details. Only this client's unarchived releases may be activated. Pending replacement also checks CLIENT_BIND and the confirmed server binding; conflicts return 409."
+  ],
+  "archiveClientDraft": [
+    "Withdraw an unpublished draft",
+    "Requires DRAFT_ARCHIVE and both draft revisions. Published releases cannot be withdrawn through this operation. Invalidates active build leases while retaining READY artifacts and references. Repeated archival returns ok; there is no restore parameter here."
+  ],
+  "downloadDraftPackage": [
+    "Download a full draft package",
+    "Requires DRAFT_READ. Always returns full with a 300-second link, regardless of public server listing. v1 requires a canonical platform. New v2 ignores platform inputs, but management responses still include platform=universal. Not READY returns 409; storage size/digest failures return 422."
+  ],
+  "downloadReleasePackage": [
+    "Download a full release package",
+    "Requires RELEASE_READ and current client scope. Always returns full with a 300-second link, regardless of public server listing. v1 requires a canonical platform. New v2 ignores platform inputs, but management responses still include platform=universal. Not READY returns 409; storage size/digest failures return 422."
+  ],
+  "bindClient": [
+    "Bind a server in the same organization",
+    "Checks the client, target server and any replaced client with CLIENT_BIND. publicationRevision is the server binding revision; expectedClientId must match, and replacements need replaceConfirmed. A client binds at most one server. An unpublished replacement may return pending=true, retaining the old client until reviewed publication and activation completes the confirmed replacement."
+  ],
+  "unbindClient": [
+    "Unbind a client or cancel a pending binding",
+    "serverId/publicationRevision must match the current binding; both are null when unbound. Archived clients may also be unbound. Keeps the current release, history, storage and fixed scopeServerId. Does not automatically restore distribution."
+  ],
+  "archiveClient": [
+    "Archive or restore a client",
+    "Requires CLIENT_ARCHIVE. Archival stops distribution and clears actual/pending bindings without removing immutable releases or moving storage objects. Restoration does not automatically list or bind the client. ARCHIVED overrides published lifecycle status."
+  ],
+  "deleteClient": [
+    "Delete an archived, unbound client",
+    "Requires CLIENT_DELETE, archival, no actual/pending binding and no PROCESSING upload/build. Published history does not prevent deletion. Retains irreversible deletion markers, signed history and audit, hides the client and releases its name. Cancels pending uploads; Worker recycles files with shared CAS reference protection."
+  ],
+  "getAdminState": [
+    "Read scoped administration state",
+    "Every active panel session may read. Organizations, servers and members are filtered by current RBAC. Account directory, events and complete-window audit counts are superadmin-only and otherwise empty. Ordinary accounts read enabledPackageFormats/maxUploadSizeMb here."
+  ],
+  "getPipeline": [
+    "Read storage, Worker and signing status",
+    "Superadmin panel sessions only. Reports actual bucket connectivity, nullable public signing identity, queues and Worker heartbeats from the last 30 seconds. No private keys or storage credentials are returned."
+  ],
+  "getServerClients": [
+    "Read the bound client's legacy version view",
+    "Requires SERVER_READ; draft/release arrays additionally require DRAFT_READ/RELEASE_READ and are empty without a binding. This compatibility view omits the independent client's full upload/build progress; use client details for that."
+  ],
+  "searchOrganizationAccounts": [
+    "Search allowlisted accounts for grants",
+    "Requires organization ORG_MEMBERS_READ. q needs at least three trimmed characters and at most 64 original characters. Searches ACTIVE accounts by username/display name, case-insensitively, returning up to ten sorted by display name."
+  ],
+  "listApiTokens": [
+    "List this account's token metadata",
+    "Panel Cookie only. Returns this account's tokens, including revoked records, without plaintext. Bearer tokens cannot authenticate this administration endpoint."
+  ],
+  "createApiToken": [
+    "Create a scoped API token",
+    "Panel Cookie only. All serverIds/permissions must be within current account authority. SERVER_READ is mandatory; ORG_* and SERVER_EDIT are forbidden. Valid for 1-90 days. Plaintext appears only in this creation response. Effective authority intersects current account RBAC; disabling accounts, removing grants or revoking tokens takes effect immediately."
+  ],
+  "revokeApiToken": [
+    "Revoke this account's API token",
+    "Only tokens belonging to the current account may be revoked. Records remain; subsequent Bearer calls return 401."
+  ],
+  "createOrganization": [
+    "Create an organization",
+    "Superadmin only. Creates an internal UUID; display alias, avatar object key and description may later be edited."
+  ],
+  "updateOrganization": [
+    "Edit organization details",
+    "Requires organization ORG_EDIT. Only the listed detail fields may change; the internal ID is immutable."
+  ],
+  "createServer": [
+    "Register an existing MUA server ID",
+    "Superadmin plus ORG_EDIT. Uses the existing 3-5-letter server ID, not a new identity system. server-mottos/ image keys must be set via the image upload endpoint."
+  ],
+  "updateServer": [
+    "Edit server details and display settings",
+    "SERVER_EDIT edits details. sortOrder/themeColor/isListed/displayMode/displayStartsAt/displayEndsAt additionally require superadmin. RANGE needs valid ordered times; PERMANENT clears the range. API times include a timezone; the panel uses Beijing time. server-mottos/ image replacement must use its dedicated endpoint."
+  ],
+  "archiveOrganization": [
+    "Archive or restore an organization",
+    "Superadmin only. Keeps history while stopping distribution and clearing affected bindings. Restoration does not automatically relist or rebind resources."
+  ],
+  "archiveServer": [
+    "Archive or restore a server",
+    "Superadmin only, with server scope validation. Keeps history while stopping distribution and clearing binding. Restoration does not automatically relist or rebind."
+  ],
+  "archiveClientLegacy": [
+    "Archive or restore a client via a compatibility route",
+    "Requires CLIENT_ARCHIVE. Keeps immutable history while stopping distribution and clearing bindings. Restoration does not automatically relist or rebind."
+  ],
+  "setOrganizationMember": [
+    "Set membership status and organization roles",
+    "Requires ORG_MEMBERS_MANAGE. Disabled accounts cannot be newly added. Ordinary administrators cannot alter superadmins or members with reserved roles. ORG_ADMIN/REVIEWER/PUBLISHER/RELEASE_OPERATOR grants and revocations require superadmin. Disabled membership records remain."
+  ],
+  "setServerGrant": [
+    "Set a member's single-server roles",
+    "Requires ORG_MEMBERS_MANAGE and SERVER_READ. The account must already belong to this organization, and the server must be in it. ORG_ADMIN cannot be a single-server grant. Empty roles revoke access while retaining records. Reserved roles still require superadmin."
+  ],
+  "createAccount": [
+    "Create an allowlisted account",
+    "Superadmin only. Usernames are trimmed and lowercased, 3-64 letters/digits or underscore, dot and hyphen. Initial passwords need 12-128 characters. Do not embed real passwords in documentation examples or persisted test settings."
+  ],
+  "updateAccount": [
+    "Change account status, platform role or password",
+    "Superadmin only. Retain at least one ACTIVE superadmin. Disabling, changing the superadmin flag or resetting a password revokes account sessions. Username is not an allowed update field."
+  ],
+  "getRecycleSettings": [
+    "Read recycle retention",
+    "Dedicated GET/PATCH endpoints require a superadmin panel session. Retention is 1-365 integer days, default 7. Shortening it causes expired files to be removed on the next Worker cleanup; shared references remain protected."
+  ],
+  "setRecycleSettings": [
+    "Change recycle retention",
+    "Superadmin only, audited. Retention is 1-365 integer days, default 7. Expired recycled files may be permanently removed during the next cleanup; shared references remain protected."
+  ],
+  "getUploadSizeSettings": [
+    "Read the source upload limit",
+    "Dedicated GET/PATCH endpoints require superadmin. Ordinary panel accounts read the limit through /api/admin/state. Range 1-20480 integer MB, default 1024; one MB is 1024 squared bytes. Only new source uploads are limited."
+  ],
+  "setUploadSizeSettings": [
+    "Change the source upload limit",
+    "Superadmin only, audited. Range 1-20480 integer MB; one MB is 1024 squared bytes. Affects new uploads only, without cancelling existing tasks or limiting generated artifacts."
+  ],
+  "getPackageFormatSettings": [
+    "Read enabled muapack formats",
+    "Superadmin-only dedicated GET/PATCH. Ordinary panel accounts read enabled formats through /api/admin/state. Defaults to [1,2], with at least one distinct format enabled."
+  ],
+  "setPackageFormatSettings": [
+    "Change enabled muapack formats",
+    "Superadmin only, audited. At least one distinct format must remain enabled. Disabling prevents new uploads but does not cancel existing tasks or delist historical releases."
+  ],
+  "getDownloadSettings": [
+    "Read Worker source and proxy settings",
+    "Superadmin panel session only. Returns current host allowlist, proxy, mirror preferences and Java image type."
+  ],
+  "setDownloadSettings": [
+    "Change Worker source and proxy settings",
+    "Superadmin only, audited. Older callers may omit mirror fields to preserve current values. An enabled proxy needs a credential-free HTTP(S) host/port URL. Disabling the host allowlist retains HTTPS/public-IP/DNS-pinning/redirect/hash safeguards. Mirror proxying also needs the global proxy; MinIO bypasses it. JRE is default; only superadmins may choose JDK."
+  ],
+  "createLegacyMetadataDraft": [
+    "Create a legacy metadata-only draft",
+    "Requires DRAFT_CREATE and an existing bound client. This does not complete an upload or expose submission/review/publication for metadata-only content. Use the source upload workflow for client publication."
+  ],
+  "updateLegacyMetadataDraft": [
+    "Edit a legacy metadata-only draft",
+    "Requires DRAFT_EDIT. Only unarchived DRAFT/REJECTED records without associated uploads may be edited, matching and incrementing contentRevision. Uploaded drafts cannot be edited in place."
+  ],
+  "archiveLegacyMetadataDraft": [
+    "Archive or restore a legacy metadata draft",
+    "Requires DRAFT_ARCHIVE. Only DRAFT/REJECTED records belonging to the currently bound client. This differs from withdrawing an independent client's draft with two revision fields."
+  ],
+  "probeServer": [
+    "Read actual Minecraft connectivity",
+    "Requires SERVER_READ before and after probing. Uses the saved address only, with public DNS pinning, SRV, timeout, cache and concurrency safeguards. ONLINE confirms MC and low latency; HIGH_LATENCY defaults to at least 300 ms. Missing configuration, archival or service errors produce UNKNOWN."
+  ],
+  "getServerMotto": [
+    "Read the server image, source or crop metadata",
+    "Requires SERVER_READ. variant=image/source returns binary image/webp; metadata returns JSON. Optional version is the current image directory UUID; changes return 409. Retained sources are normalized WebP and may be cropped again. Private reads use private, no-store cache control."
+  ],
+  "uploadServerMotto": [
+    "Upload or recrop the server motto image",
+    "Requires SERVER_EDIT. multipart/form-data crop and expectedIconObjectKey are JSON-encoded text, not nested form objects; an empty key is the text null. Omit source to recrop the retained source. New source supports static PNG/JPEG/WebP, at most 8 MiB and 16 million pixels; required crop ratio 2.35:1. Rechecks crop, identity, session, scope and revision after storage."
+  ],
+  "removeServerMotto": [
+    "Remove the current motto image binding",
+    "Requires SERVER_EDIT and an expectedIconObjectKey matching the current key; conflicts return 409. Retains old storage image objects and does not modify publication signatures."
+  ],
+  "login": [
+    "Sign in with an allowlisted account",
+    "Same-origin Origin is required; an old Cookie is optional. Returns ok and sets mua_session with HttpOnly, SameSite=Strict, Path=/, Secure on HTTPS, and 12-hour expiry. Invalid credentials/disabled accounts return 401; throttling returns 429."
+  ],
+  "logout": [
+    "Sign out the current session",
+    "Same-origin Origin is required; Cookie is optional. Removes the current session and clears mua_session with Max-Age=0. Send an empty JSON object."
+  ],
+  "changePassword": [
+    "Change this account's password",
+    "Requires an active Cookie session and same-origin Origin. Validates the current password and a 12-128-character replacement. Revokes all account sessions and clears Cookie, requiring login again. Does not rewrite API token plaintext or permissions."
+  ],
+  "getUploadDistribution": [
+    "Get v2 upload distribution statistics",
+    "Read-only. v1 and unprepared inventories return 409. Use the upload-pinned published v2 baseline for the same client; READY statistics use the actual artifact baseline. Cross-format or unavailable baselines use full packages. Changes separate additions, content, removal, policy/optional and URLs; removal does not delete player files. Remote bytes are content-deduplicated; URL-only changes do not download again. Assume a complete baseline, no extra cache and all optional files selected. knownNetworkBytes is the selected ZIP plus remote content, excluding environment and protocol overhead. ZIP/network sizes are null before packaging. environmentBytes is always null, pending Launcher resolution. CAS reuse is not player bandwidth savings. Historical bytes and signatures remain unchanged."
+  ],
+  "getDraftDistribution": [
+    "Get v2 draft distribution statistics",
+    "Read-only. v1 and unprepared inventories return 409. Use the upload-pinned published v2 baseline for the same client; READY statistics use the actual artifact baseline. Cross-format or unavailable baselines use full packages. Changes separate additions, content, removal, policy/optional and URLs; removal does not delete player files. Remote bytes are content-deduplicated; URL-only changes do not download again. Assume a complete baseline, no extra cache and all optional files selected. knownNetworkBytes is the selected ZIP plus remote content, excluding environment and protocol overhead. ZIP/network sizes are null before packaging. environmentBytes is always null, pending Launcher resolution. CAS reuse is not player bandwidth savings. Historical bytes and signatures remain unchanged."
+  ],
+  "getReleaseDistribution": [
+    "Get v2 release distribution statistics",
+    "Read-only. v1 and unprepared inventories return 409. Use the upload-pinned published v2 baseline for the same client; READY statistics use the actual artifact baseline. Cross-format or unavailable baselines use full packages. Changes separate additions, content, removal, policy/optional and URLs; removal does not delete player files. Remote bytes are content-deduplicated; URL-only changes do not download again. Assume a complete baseline, no extra cache and all optional files selected. knownNetworkBytes is the selected ZIP plus remote content, excluding environment and protocol overhead. ZIP/network sizes are null before packaging. environmentBytes is always null, pending Launcher resolution. CAS reuse is not player bandwidth savings. Historical bytes and signatures remain unchanged."
+  ]
 }

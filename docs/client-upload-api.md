@@ -160,3 +160,7 @@ detectedInfo 包含 schemaVersion:1、instanceId、minecraftVersion、javaVersio
 GET /api/v1/servers/:serverId/manifest 返回精确签名 JSON 字节，响应头包含 X-MUA-Manifest-Sha256、X-MUA-Signing-Key、X-MUA-Signature、X-MUA-Signature-Algorithm。GET /api/v1/servers/:serverId/files/:sha256 仅允许当前公开版本中的哈希，返回 5 分钟下载 URL。归档／下架停止生成新链接；已签发链接在短期到期前仍可用。猜测其他组织私有 CAS 哈希不能通过此接口下载。
 
 后续：其他包格式解析、生产密钥生命周期、Launcher 验签／安装与旧 managed 文件清理。服务器目录的 currentRelease 包含 clientId、packageFormatVersion 与 manifestUrl；服务器身份由目录及请求路由确定，不写死进新版不可变清单。旧 schemaVersion 1 的清单、摘要和签名保留原字节，只能绑定原服务器；跨服务器绑定前须新版本生成带 clientId 的清单。旧 Manifest schemaVersion 与 muapack formatVersion 独立。启动器源码尚未修改，需联调 clientId / serverId 分离和 v2 安装协议。
+
+## v2 分发统计（2026-10-13）
+
+上传、草稿与发布支持只读 `distribution-statistics`，不与导入 CAS 统计混用。详细字段、基准和估算口径见 [v2 分发统计](v2-distribution-statistics.md)。

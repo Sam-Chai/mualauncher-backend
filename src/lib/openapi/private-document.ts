@@ -9,6 +9,7 @@ import { publicManifestSchema, errorSchema } from "./schemas";
 import * as s from "./private-schemas";
 import * as r from "./requests.generated";
 import english from "../locales/openapi-private-en.json";
+import { recipeDistributionSchema } from "../recipe-distribution-contract";
 
 type Operation = { method: "get" | "post" | "patch" | "put" | "delete"; path: string; id: string; tag: string;
   summary: string; description: string; response: z.ZodTypeAny; body?: z.ZodTypeAny; query?: z.AnyZodObject;
@@ -19,6 +20,12 @@ const client = (method: Operation["method"], path: string, id: string, summary: 
   ops.push({ method, path: clientPath + path, id, summary, response, permissions, description, body, query, status, tag, auth: "either" });
 const admin = (method: Operation["method"], path: string, id: string, summary: string, response: z.ZodTypeAny, description: string, body?: z.ZodTypeAny, permissions: string[] = [], superadmin = false, status = 200, query?: z.AnyZodObject) =>
   ops.push({ method, path: adminPath + path, id, summary, response, description, body, permissions, superadmin, status, query, tag: "Administration", auth: "session" });
+
+for (const [path, id, summary, permission] of [
+  ["/uploads/{uploadId}/distribution-statistics", "getUploadDistribution", "查询 v2 上传分发统计", "DRAFT_READ"],
+  ["/{clientId}/drafts/{draftId}/distribution-statistics", "getDraftDistribution", "查询 v2 草稿分发统计", "DRAFT_READ"],
+  ["/{clientId}/releases/{releaseId}/distribution-statistics", "getReleaseDistribution", "查询 v2 发布分发统计", "RELEASE_READ"],
+] as const) client("get", path, id, summary, recipeDistributionSchema, [permission], "只读，v1 返回 409，文件索引未准备完成返回 409。使用上传时固定的同客户端已发布 v2 基准，READY 后以实际产物基准为准；跨格式或无可用基准按完整包。changes 为新增、修改、移除、策略／optional、地址差异，移除不删除玩家文件。remoteDownloadBytes 按内容去重，地址变化不重复下载。假设基准完整、无额外缓存且全部 optional；knownNetworkBytes=所选 ZIP+远程内容，不包含环境与协议开销。未组包的 ZIP／网络量为 null，environmentBytes 始终 null、由 Launcher 解析；CAS 复用不等于玩家流量节省。读取历史不改写字节或签名。");
 
 client("get", "", "listClients", "获取可访问客户端和组包状态", z.array(s.client), ["DRAFT_READ OR RELEASE_READ"], "只返回当前 RBAC 可读客户端；删除记录隐藏。drafts、uploads 要求 DRAFT_READ，releases 要求 RELEASE_READ。组包状态在 drafts[].packageBuilds，发布历史在 releases[].packageBuilds，没有单独组包状态路由。lifecycleStatus 以 ARCHIVED 优先；uploads[].canEdit 表示所有者或超管。", undefined);
 client("post", "", "createClient", "创建独立客户端", s.createdClient, ["DRAFT_CREATE", "DRAFT_SUBMIT"], "组织内名称按 NFKC、忽略大小写查重；同名返回 409，须使用更新。纯组织会话可创建未绑定客户端；Bearer Token 必须选择授权服务器。选择 serverId 另需 CLIENT_BIND；绑定替换需确认服务器 publicationRevision、expectedClientId 与 replaceConfirmed。新 ID 为 UUID，历史 ID 保留。", r.CreateClient, undefined, 201);

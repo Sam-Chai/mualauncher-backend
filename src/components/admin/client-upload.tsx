@@ -15,7 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { api, useAdmin, type Server } from "./provider";
 import { clientMetadataSchema, formatBytes, uploadProcessingLabel, runtimeAutofill, type ClientMetadata, type UploadView, type PackageFormatVersion } from "@/lib/client-contract";
-import { UpdateStats, RecipeImportStats, MarkdownText, ModTable } from "./client-shared";
+import { UpdateStats, RecipeImportStats, RecipeDistributionStats, MarkdownText, ModTable } from "./client-shared";
 import { PackageBuildOptions } from "./package-platforms";
 import { PackageFormatChoice } from "./package-format-choice";
 import { defaultMuaPlatforms } from "@/lib/muapack-contract";
@@ -178,7 +178,7 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
       <span className="text-sm text-muted-foreground">{upload ? `${upload.fileName} · ${formatBytes(upload.size)}` : t(".minecraft ZIP／Modrinth mrpack／PCL 导出 ZIP · 最大 {0} MB", { "0": state.maxUploadSizeMb })}</span>
       {uploading && <span className="h-2 w-64 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${percent}%` }} /></span>}
     </button>
-    {upload?.status === "WAITING_PROCESSOR" && <Alert><AlertDescription>{t("v2 源包已上传保存，等待 v2 处理器接入。当前不会下载远程模组或运行环境，也不能提交审核；已发布版本继续可用。")}</AlertDescription></Alert>}
+    {upload?.status === "WAITING_PROCESSOR" && <Alert><AlertDescription>{t("这是尚未重新排队的历史 v2 上传，请联系管理员检查账号与客户端状态；也可取消后重新上传。已发布版本继续可用。")}</AlertDescription></Alert>}
     {upload?.packageFormatVersion === 2 && upload.status === "READY" && <Alert><AlertDescription>{t("v2 信息识别与本地文件校验完成，远程声明已保存。核对并提交审核后，Worker 会在后台生成跨平台完整 .muapack；审核、签名和产物校验完成后才可发布。")}</AlertDescription></Alert>}
     {upload && ["UPLOADING", "WAITING_PROCESSOR", "QUEUED", "READY", "FAILED"].includes(upload.status) && !uploading && <Button type="button" variant="outline" onClick={() => void run(async () => {
       await api(`/api/v1/clients/uploads/${upload.id}/cancel`, "POST", {});
@@ -216,6 +216,7 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
     </fieldset>
     {upload?.statistics && <UpdateStats statistics={upload.statistics} comparison={upload.comparisonStatistics} version={version} updating={!!fixedClient} />}
     {upload?.recipeStatistics && <RecipeImportStats statistics={upload.recipeStatistics} />}
+    {upload?.recipeStatistics && <RecipeDistributionStats path={`/api/v1/clients/uploads/${upload.id}/distribution-statistics`} />}
     {!!warnings.length && <Alert><AlertDescription>{warnings.map(warning => <p key={warning}>{t(warning)}</p>)}</AlertDescription></Alert>}
     <PackageBuildOptions packageFormatVersion={packageFormatVersion} value={platforms} onChange={setPlatforms} disabled={uploading || submitting} />
     <div className="flex items-center justify-between gap-4 border-t pt-5"><p className="text-xs text-muted-foreground">{packageFormatVersion === 2 ? t("v2 完整包仅包含本地载荷和远程配方，环境由 Launcher 准备。") : t("MC 与 Java 自动识别后可核对调整；客户端发布版本仍需填写。完整校验完成后可提交审核。")}</p><Button type="submit" disabled={packageFormatVersion === 1 && !platforms.length || upload?.status !== "READY" || uploading || submitting}>{submitting && <LoaderCircle className="size-4 animate-spin" />}{t("提交审核")}</Button></div>

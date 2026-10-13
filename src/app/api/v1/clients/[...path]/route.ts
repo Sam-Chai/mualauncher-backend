@@ -6,6 +6,7 @@ import { AppError } from "@/lib/errors";
 import { json, failure, readJson } from "@/lib/http";
 import { uuid, clientId } from "@/lib/input";
 import * as clients from "@/lib/client-service";
+import { recipeDistributionStats } from "@/lib/recipe-distribution";
 import { configurePackages, retryPackages, draftPlatformManifest, managementFullPackage } from "@/lib/package-build-service";
 
 async function handle(request: Request, context: { params: Promise<{ path: string[] }> }) {
@@ -23,6 +24,8 @@ async function handle(request: Request, context: { params: Promise<{ path: strin
     }
     const result = await authorizeApi(request, token, write, async (db, actor) => {
       if (request.method === "GET") {
+        if (kind === "uploads" && path.length === 3 && action === "distribution-statistics") return recipeDistributionStats(db, actor, "uploads", uuid(id));
+        if (path.length === 4 && (id === "drafts" || id === "releases") && draftId === "distribution-statistics") return recipeDistributionStats(db, actor, id, uuid(action), clientId(kind));
         if (kind === "uploads" && path.length === 2) return clients.uploadView(await clients.findUpload(db, actor, uuid(id)));
         if (path.length === 1) return clients.clientDetails(db, actor, clientId(kind));
         if (path.length === 4 && id === "drafts" && draftId === "manifest") return clients.draftManifest(db, actor, clientId(kind), uuid(action));
