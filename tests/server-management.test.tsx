@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AdminProvider, type Server, type State } from "../src/components/admin/provider";
 import { ServerEditorContent, ServersPage } from "../src/components/admin/servers";
 import { MottoCropGrid, MottoPreview } from "../src/components/admin/server-motto";
-import { mottoCrop } from "../src/lib/server-motto-contract";
+import { mottoCrop, SERVER_MOTTO_RATIO } from "../src/lib/server-motto-contract";
 import { ProbeLamp, ServerStatusLight } from "../src/components/admin/server-status";
 import type { ServerProbeResult } from "../src/lib/server-probe-contract";
 import { currentNavigation, navigation } from "../src/components/admin/navigation";
@@ -126,15 +126,24 @@ test("unified server navigation and table retain truthful distribution and bindi
   assert([...html.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/g)][0][1].includes("服务器箴言"));
 });
 
-test("motto preview uses the reference proportion and a white fade beginning at the golden section", () => {
-  const html = renderToStaticMarkup(<MottoPreview src="/api/admin/servers/NPB/motto-image?version=test" alt="Beta 箴言" />);
-  assert(html.includes("aspect-ratio:2.652173913043478")); assert(html.includes("transparent 61.8034%, white 100%"));
-  assert(html.includes('alt="Beta 箴言"')); assert(html.includes("bg-white"));
+test("table motto fills its cell and reveals the theme background; editor preserves the full unfaded image", () => {
+  const { state, server } = fixture([...rolePermissions.SERVER_EDITOR]);
+  server.mottoImageUrl = "/api/admin/servers/NPB/motto-image?version=test";
+  const table = renderToStaticMarkup(<AdminProvider initial={state}><ServersPage /></AdminProvider>);
+  const cell = table.match(/<td[^>]*>([\s\S]*?data-server-motto="table"[\s\S]*?)<\/td>/);
+  assert(cell); assert(cell[0].includes("relative w-48 p-0"));
+  assert(cell[0].includes("aspect-ratio:2.35")); assert(cell[0].includes("mask-image:linear-gradient(to right, black 61.8034%, transparent 100%)"));
+  assert(!cell[0].includes("rounded-md")); assert(!cell[0].includes("bg-white"));
+  const html = editor(state, server);
+  assert(html.includes('alt="NPU BETA箴言"')); assert(html.includes("2.35:1"));
+  assert(html.includes("object-contain")); assert(!html.includes("mask-image"));
+  const prepared = renderToStaticMarkup(<MottoPreview src={null} alt="Prepared" draft={{ file: {} as File, crop: mottoCrop(610, 400), width: 610, height: 400, previewUrl: "blob:prepared" }} />);
+  assert(prepared.includes("blob:prepared")); assert(!prepared.includes("mask-image"));
   const crop = mottoCrop(610, 400);
   const grid = renderToStaticMarkup(<MottoCropGrid source={{ url: "/image.webp", width: 610, height: 400 }} crop={crop} onChange={() => {}} />);
   assert(grid.includes('viewBox="0 0 610 400"')); assert.equal((grid.match(/<line /g) ?? []).length, 4);
   const selection = grid.match(/<rect\b[^>]*width="([^"]+)"[^>]*height="([^"]+)"/);
-  assert(selection); assert(Math.abs(Number(selection[1]) - 610) < 1e-6); assert(Math.abs(Number(selection[2]) - 230) < 1e-6);
+  assert(selection); assert(Math.abs(Number(selection[1]) - 610) < 1e-6); assert(Math.abs(Number(selection[1]) / Number(selection[2]) - SERVER_MOTTO_RATIO) < 1e-6);
   assert(grid.includes('role="application"')); assert(grid.includes("方向键移动"));
 });
 

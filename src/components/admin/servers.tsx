@@ -140,7 +140,7 @@ export function ServersPage() {
   const { state, servers } = useAdmin();
   const organization = (server: Server) => state.organizations.find(org => org.id === server.organizationId);
   const columns: ColumnDef<Server>[] = [
-    { id: "motto", header: t("服务器箴言"), enableSorting: false, enableHiding: false, cell: ({ row }) => <MottoPreview src={row.original.mottoImageUrl} alt={t("{0}箴言", { "0": row.original.displayName })} /> },
+    { id: "motto", header: t("服务器箴言"), enableSorting: false, enableHiding: false, cell: ({ row }) => <MottoPreview table className="w-full min-w-48" src={row.original.mottoImageUrl} alt={t("{0}箴言", { "0": row.original.displayName })} /> },
     { accessorKey: "displayName", header: t("服务器"), cell: ({ row }) => <div className="flex items-center gap-3">
       <ServerStatusLight serverId={row.original.serverId} address={row.original.gameAddress} archived={!!row.original.archivedAt || !!organization(row.original)?.archivedAt} />
       <div><p className="font-medium">{row.original.displayName}</p><p className="text-xs text-muted-foreground">{row.original.serverId}</p></div>
@@ -161,6 +161,6 @@ export function ServersPage() {
   return <>
     <Heading title={t("服务器管理")} description={t("统一管理服务器资料、Launcher 展示与分发状态。")} action={state.actor.isSuperAdmin && <ServerEditor />} />
     <Alert><AlertDescription>{t("状态灯每分钟探测一次 Minecraft Java 服务器，悬停查看延迟与原因，点击可刷新。延迟从后端测得；目录状态仍表示上架与客户端发布配置。")}</AlertDescription></Alert>
-    <DataTable data={servers} columns={columns} getRowId={server => server.serverId} empty={t("暂无可访问服务器。请先创建组织并登记 MUA server ID。")} />
+    <DataTable data={servers} columns={columns} columnClassNames={{ motto: { header: "w-48", cell: "relative w-48 p-0" } }} getRowId={server => server.serverId} empty={t("暂无可访问服务器。请先创建组织并登记 MUA server ID。")} />
   </>;
 }

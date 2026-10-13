@@ -1,8 +1,9 @@
 import { z } from "zod";
 
-export const SERVER_MOTTO_RATIO = 61 / 23;
-export const SERVER_MOTTO_RATIO_LABEL = "61:23（约 2.65:1）";
-export const SERVER_MOTTO_FADE = "linear-gradient(to right, transparent 61.8034%, white 100%)";
+export const SERVER_MOTTO_RATIO = 2.35;
+export const SERVER_MOTTO_RATIO_LABEL = "2.35:1";
+// Reveal the actual table background, including its dark theme and hover state.
+export const SERVER_MOTTO_FADE = "linear-gradient(to right, black 61.8034%, transparent 100%)";
 export const MAX_MOTTO_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const MAX_MOTTO_PIXELS = 16_000_000;
 export const mottoCropSchema = z.object({
@@ -26,6 +27,13 @@ export function mottoCrop(width: number, height: number, scale = 1, center = { x
 export function validMottoCrop(crop: MottoCrop, width: number, height: number) {
   return crop.left + crop.width <= 1 + 1e-8 && crop.top + crop.height <= 1 + 1e-8 &&
     Math.abs(crop.width * width / (crop.height * height) - SERVER_MOTTO_RATIO) < 0.001;
+}
+
+export function currentMottoCrop(crop: MottoCrop, width: number, height: number): MottoCrop {
+  if (validMottoCrop(crop, width, height)) return crop;
+  const maximum = mottoCrop(width, height);
+  return mottoCrop(width, height, Math.min(crop.width / maximum.width, crop.height / maximum.height),
+    { x: crop.left + crop.width / 2, y: crop.top + crop.height / 2 });
 }
 
 export function isServerMottoKey(key: string | null, organizationId: string, serverId: string): key is string {

@@ -27,7 +27,8 @@
   "src/lib/rbac.ts": "5c420d89a19f4d693e6370091cdd095363ed8138a8817240916e9426d569f2c1",
   "src/lib/recycle-storage.ts": "7ae081ea7d8090297bea3ed060b841538e951dbb36e997f23ec9d3a3852e95de",
   "src/lib/roles.ts": "95ffdecd3bf02107128fa1ff5dceebd9603dfe7bd18dd27841ac6a26168a5f86",
-  "src/lib/server-motto.ts": "36eee6b6d34c20809d110caa739cc52f581ecfc097b9791c5ed9383caaa7f7f3",
+  "src/lib/server-motto-contract.ts": "dbad0ab0774d9e8a97ca432ccf19bd8b184111244c5d3334f8c7db4cdbf42695",
+  "src/lib/server-motto.ts": "a78a39e53b01ee6efc734239e4a01f47c82cfd103bc17b77da456d7fdec77c2b",
   "src/lib/server-probe-contract.ts": "bb35c0ee72affc1ea8297a0c23f77888ba2c2c112080182d1efbd14d1403c088",
   "src/lib/upload-size-settings.ts": "ff767ed89d7f3ade497ff148b30be5ec9e7685ff97cefa16c0a2fe43c021e874"
 }

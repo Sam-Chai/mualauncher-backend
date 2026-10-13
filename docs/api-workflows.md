@@ -72,6 +72,6 @@ npm run client:upload -- .\source.zip .\metadata.json CLIENT_ID INSTANCE_ID
 
 后台接口仅 Cookie。组织／服务器／账号创建、组织／服务器归档、审计、pipeline 以及四种 Settings 的独立 GET／PATCH 都仅超管；普通账号从 state 读取开放格式／上传上限。组织编辑与成员／授权受组织权限控制，服务器资料和图片受 SERVER_EDIT／READ 控制；排序、颜色、上架与展示区间仅超管。详见 Scalar 的逐操作说明及[权限矩阵](permission-matrix.md)。
 
-图片 POST `/api/admin/servers/{serverId}/motto-image` 使用 multipart/form-data，不手填 Content-Type 的 boundary：source 为静态 PNG／JPEG／WebP 文件（≤8 MiB、1600 万像素），crop 是 JSON 文本，610×400 原图的例子为 `{"left":0,"top":0,"width":1,"height":0.575}`，expectedIconObjectKey 也是 JSON 文本，首次填写文字 `null`，已有图片填写 JSON 引号包裹的对象键。选区比例须符合 61:23，其他尺寸须重新计算或用前端裁剪器产生；省略 source 使用保留原图重裁剪。上传前 GET `?variant=metadata` 读取当前 key 和 crop，变化 409 后重新读取，不自动覆盖。
+图片 POST `/api/admin/servers/{serverId}/motto-image` 使用 multipart/form-data，不手填 Content-Type 的 boundary：source 为静态 PNG／JPEG／WebP 文件（≤8 MiB、1600 万像素），crop 是 JSON 文本，610×400 原图的例子为 `{"left":0,"top":0,"width":1,"height":0.648936170212766}`，expectedIconObjectKey 也是 JSON 文本，首次填写文字 `null`，已有图片填写 JSON 引号包裹的对象键。选区比例须符合 2.35:1，其他尺寸须重新计算或用前端裁剪器产生；省略 source 使用保留原图重裁剪。上传前 GET `?variant=metadata` 读取当前 key 和 crop，变化 409 后重新读取，不自动覆盖。
 
 GET 默认及 `variant=source` 返回 image/webp 二进制；`variant=metadata` 返回 JSON。DELETE 使用 JSON expectedIconObjectKey，权限及修订同样检查，旧对象保留。probe GET 仅按已保存 gameAddress 探测，任意查询地址不会改变目标。Token 创建、列举与撤销只操作本账号，普通账号也可为自己已有的允许权限创建受限 Token。

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。"
   },
   "servers": [
@@ -30241,7 +30241,7 @@
           "Administration"
         ],
         "summary": "上传或重新裁剪服务器箴言图片",
-        "description": "SERVER_EDIT；multipart/form-data 字段 crop 和 expectedIconObjectKey 均为 JSON 编码文本（空对象键必须填 null 文本），不是嵌套表单对象。source 可省略以使用保留原图重裁剪；新 source 为静态 PNG／JPEG／WebP，最多 8 MiB／1600 万像素。推荐 61:23，服务器复核选区和归属，存储完成后再次检查会话、范围和修订。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
+        "description": "SERVER_EDIT；multipart/form-data 字段 crop 和 expectedIconObjectKey 均为 JSON 编码文本（空对象键必须填 null 文本），不是嵌套表单对象。source 可省略以使用保留原图重裁剪；新 source 为静态 PNG／JPEG／WebP，最多 8 MiB／1600 万像素。固定 2.35:1，服务器复核选区和归属，存储完成后再次检查会话、范围和修订。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
         "security": [
           {
             "SessionCookie": []
@@ -30286,7 +30286,7 @@
                   "crop": {
                     "type": "string",
                     "description": "JSON 编码选区文本：left、top、width、height 为 0–1 的比例，宽高必须大于 0。",
-                    "example": "{\"left\":0,\"top\":0,\"width\":1,\"height\":0.575}"
+                    "example": "{\"left\":0,\"top\":0,\"width\":1,\"height\":0.648936170212766}"
                   },
                   "expectedIconObjectKey": {
                     "type": "string",

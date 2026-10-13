@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "第一阶段完整描述 5 个 Launcher 公开读取接口。客户端自动化、后台及认证接口尚未纳入本规范。API 路由 v1、muapack formatVersion 与文档版本是不同概念。所有示例、代码生成和在线请求都应以此处声明的范围为准。"
   },
   "servers": [

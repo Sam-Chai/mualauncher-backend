@@ -33,6 +33,7 @@
     "test:openapi": "node --import tsx --test tests/openapi.test.ts",
     "test:openapi:contracts": "node --conditions=react-server --import tsx --test --test-name-pattern=\"standard HTTP API\" tests/uploads.test.ts && npm run test:server-motto",
     "test:openapi:browser": "playwright test --config playwright.openapi.config.ts",
+    "test:server-motto:browser": "playwright test --config playwright.motto.config.ts",
     "check:http": "node --import tsx scripts/check-http.ts",
     "storage:init": "node --conditions=react-server --import tsx scripts/initialize-storage.ts",
     "worker": "node --conditions=react-server --import tsx scripts/client-worker.ts",

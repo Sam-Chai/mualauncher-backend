@@ -104,5 +104,6 @@
   "请选择有效展示区间，结束时间须晚于开始时间": "Choose a valid display window with an end later than its start",
   "永久展示不能设置展示区间": "Permanent display cannot have a time window",
   "展示配置无效": "Invalid display settings",
-  "展示区间外": "Outside display window"
+  "展示区间外": "Outside display window",
+  "选区须在图片内，且保持 2.35:1 比例": "The crop must stay inside the image and keep a 2.35:1 aspect ratio"
 }

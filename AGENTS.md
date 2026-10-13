@@ -23,7 +23,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - 管理界面采用 shadcn/ui dashboard-01 基础，保留用户指定的七个分组菜单与 `/admin` 路由；参见 [docs/admin-ui.md](docs/admin-ui.md)。Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod 为统一组件体系，Tremor Raw 仅用于图表。
 - 页面不得使用模板模拟业务指标。Storage、Worker、签名显示真实运行状态，未接入的内容与 CDN 显示明确待接入状态；审计曲线仅超管可读，按完整时间窗口聚合。共享角色定义在 `src/lib/roles.ts`，服务端仍在每次请求中检查 RBAC。
 - 服务器的 Server、Listing、状态已合并为 `/admin/servers`“服务器管理”，统一编辑／详情窗口；旧 `/admin/listings` 与 `/admin/servers/status` 跳转到该入口。SERVER_READ 可查看，SERVER_EDIT 可修改资料；排序／颜色／上架和服务器归档／恢复仍仅超管可控制，服务端范围及字段校验保留。
-- 服务器“图标对象键”界面改为“服务器箴言”真实图片上传／编辑，推荐比例 61:23，默认固定比例三分网格裁剪；保留原图可重裁剪。列表最左侧显示图片，在横向 61.8034% 起向右淡出到白色。沿用 iconObjectKey，图片／原图／选区存私有 OSS，SERVER_EDIT 写、SERVER_READ 读，写入时重新校验范围和修订；不改发布签名。旧图片保留，自动回收及玩家公开图片尚未接入，见 [docs/server-motto-images.md](docs/server-motto-images.md)。
+- 服务器“图标对象键”界面改为“服务器箴言”真实图片上传／编辑，固定比例 2.35:1，默认三分网格裁剪；保留原图可重裁剪。列表图片铺满最左侧单元格，以表格为外框，在横向 61.8034% 起向右渐隐到当前主题的表格背景；编辑页完整显示图片且无渐隐。旧图保持原样，重新裁剪时适配新比例。沿用 iconObjectKey，图片／原图／选区存私有 OSS，SERVER_EDIT 写、SERVER_READ 读，写入时重新校验范围和修订；不改发布签名。旧图片保留，自动回收及玩家公开图片尚未接入，见 [docs/server-motto-images.md](docs/server-motto-images.md)。
 - 服务器连接状态灯已接入：后端按已保存 gameAddress 直接探测 MC Java 状态协议和 Ping，确认 MC 且低延迟绿灯，默认 ≥300ms 黄灯，连接失败／无有效 MC 状态红灯；未配置、探测中、归档及探测服务错误灰灯，悬停显示时延或原因。SERVER_READ 逐请求及返回前校验范围，只连接 DNS 固定后的公网 IP，SRV／超时／缓存／并发保护保留；每分钟前端刷新，不改变目录上架、发布或签名，详见 [docs/server-probe.md](docs/server-probe.md)。
 
 - 产品需求和启动器代码观察记录见 [docs/mua-backend-requirements.md](docs/mua-backend-requirements.md)。后续设计或实现前先阅读该文档，区分确定需求、设计建议和待确定事项。

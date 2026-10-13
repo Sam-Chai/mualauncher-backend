@@ -24,11 +24,11 @@ export async function prepareMottoImage(bytes: Buffer, rawCrop: unknown, existin
     if (error instanceof AppError) throw error;
     throw new AppError(422, "图片无法解码或像素总量超过限制，请换一张静态图片");
   }
-  invariant(validMottoCrop(crop, width, height), 400, "选区须在图片内，且保持 61:23 比例");
+  invariant(validMottoCrop(crop, width, height), 400, "选区须在图片内，且保持 2.35:1 比例");
   const left = Math.min(width - 1, Math.round(crop.left * width)), top = Math.min(height - 1, Math.round(crop.top * height));
   const extractWidth = Math.max(1, Math.min(width - left, Math.round(crop.width * width)));
   const extractHeight = Math.max(1, Math.min(height - top, Math.round(crop.height * height)));
-  const image = await sharp(source).extract({ left, top, width: extractWidth, height: extractHeight }).resize(1220, 460, { fit: "fill" }).webp({ quality: 88 }).toBuffer();
+  const image = await sharp(source).extract({ left, top, width: extractWidth, height: extractHeight }).resize(1410, 600, { fit: "fill" }).webp({ quality: 88 }).toBuffer();
   const metadata: MottoMetadata = { version: 1, width, height, crop, sourceSha256: digest(source), imageSha256: digest(image) };
   return { source, image, metadata };
 }

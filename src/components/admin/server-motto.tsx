@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api, RequestError, useAdmin, type Server } from "./provider";
-import { MAX_MOTTO_UPLOAD_BYTES, MAX_MOTTO_PIXELS, SERVER_MOTTO_RATIO, SERVER_MOTTO_RATIO_LABEL, SERVER_MOTTO_FADE, mottoCrop, type MottoCrop, type MottoMetadata } from "@/lib/server-motto-contract";
+import { MAX_MOTTO_UPLOAD_BYTES, MAX_MOTTO_PIXELS, SERVER_MOTTO_RATIO, SERVER_MOTTO_RATIO_LABEL, SERVER_MOTTO_FADE, mottoCrop, currentMottoCrop, type MottoCrop, type MottoMetadata } from "@/lib/server-motto-contract";
 
 export type MottoDraft = { file: File; crop: MottoCrop; width: number; height: number; previewUrl: string };
 type Source = { url: string; width: number; height: number; file?: File };
@@ -22,14 +22,15 @@ export async function uploadMotto(serverId: string, expectedIconObjectKey: strin
   return result;
 }
 
-export function MottoPreview({ src, alt, draft, className = "w-48" }: { src: string | null; alt: string; draft?: MottoDraft | null; className?: string }) {
+export function MottoPreview({ src, alt, draft, table = false, className = "w-48" }: { src: string | null; alt: string; draft?: MottoDraft | null; table?: boolean; className?: string }) {
   const { t } = useI18n();
-  return <div className={`relative overflow-hidden rounded-md bg-white ${className}`} style={{ aspectRatio: SERVER_MOTTO_RATIO }}>
+  return <div data-server-motto={table ? "table" : "preview"} className={`${table ? "" : "relative overflow-hidden rounded-md"} ${className}`} style={{ aspectRatio: SERVER_MOTTO_RATIO }}>
+    <div className="absolute inset-0 overflow-hidden" style={table && (src || draft) ? { maskImage: SERVER_MOTTO_FADE } : undefined}>
     {draft ? <svg className="size-full" viewBox={`${draft.crop.left * draft.width} ${draft.crop.top * draft.height} ${draft.crop.width * draft.width} ${draft.crop.height * draft.height}`} role="img" aria-label={alt}>
       <image href={draft.previewUrl} width={draft.width} height={draft.height} />
-    </svg> : src ? <Image unoptimized src={src} alt={alt} width={244} height={92} className="size-full object-cover" />
-      : <span className="flex size-full items-center justify-center text-xs text-neutral-500">{t("未上传箴言")}</span>}
-    {(src || draft) && <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ backgroundImage: SERVER_MOTTO_FADE }} />}
+    </svg> : src ? <Image unoptimized src={src} alt={alt} fill sizes={table ? "240px" : "384px"} className={table ? "object-cover" : "object-contain"} />
+      : <span className="flex size-full items-center justify-center text-xs text-muted-foreground">{t("未上传箴言")}</span>}
+    </div>
   </div>;
 }
 
@@ -105,14 +106,14 @@ export function ServerMottoField({ server, editable, pending, onPrepare }: { ser
       const response = await fetch(`${server.mottoImageUrl}&variant=source`, { cache: "no-store" });
       if (!response.ok) throw new Error(t("原图读取失败，请刷新后重试。"));
       const url = URL.createObjectURL(await response.blob());
-      setSource({ url, width: metadata.width, height: metadata.height }); setCrop(metadata.crop);
+      setSource({ url, width: metadata.width, height: metadata.height }); setCrop(currentMottoCrop(metadata.crop, metadata.width, metadata.height));
     } catch (error) { setError(error instanceof Error ? error.message : t("无法读取原图")); }
     finally { setLoading(false); }
   }
   const scale = source && crop ? crop.width / mottoCrop(source.width, source.height).width : 1;
   return <section className="space-y-3" aria-label={t("服务器箴言")}>
     <div><h3 className="text-sm font-medium">{t("服务器箴言")}</h3><p className="text-xs text-muted-foreground">{t("推荐宽高比") + " "}{SERVER_MOTTO_RATIO_LABEL}{t("，上传后可移动、缩放裁剪选区。")}</p></div>
-    <MottoPreview src={server?.mottoImageUrl ?? null} draft={pending} alt={t("{0}箴言", { "0": server?.displayName ?? t("服务器") })} className="w-full max-w-sm border" />
+    <MottoPreview src={server?.mottoImageUrl ?? null} draft={pending} alt={t("{0}箴言", { "0": server?.displayName ?? t("服务器") })} className="w-full max-w-sm" />
     {editable && <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" variant="outline" disabled={busy || loading} onClick={() => void start(false)}><ImagePlus className="size-4" />{t("上传图片")}</Button>
       {(server?.mottoImageUrl || pending) && <><Button type="button" size="sm" variant="outline" disabled={busy || loading} onClick={() => void start(true)}><Crop className="size-4" />{t("重新裁剪")}</Button>

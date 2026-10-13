@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "The complete panel reference includes Launcher, client automation, administration and authentication. Documentation access grants no business permissions. Each request still checks scope, RBAC, revisions and lifecycle. Follow upload, review, build and publication stages using actual progress."
   },
   "servers": [
@@ -30241,7 +30241,7 @@
           "Administration"
         ],
         "summary": "Upload or recrop the server motto image",
-        "description": "Requires SERVER_EDIT. multipart/form-data crop and expectedIconObjectKey are JSON-encoded text, not nested form objects; an empty key is the text null. Omit source to recrop the retained source. New source supports static PNG/JPEG/WebP, at most 8 MiB and 16 million pixels; recommended ratio 61:23. Rechecks crop, identity, session, scope and revision after storage.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
+        "description": "Requires SERVER_EDIT. multipart/form-data crop and expectedIconObjectKey are JSON-encoded text, not nested form objects; an empty key is the text null. Omit source to recrop the retained source. New source supports static PNG/JPEG/WebP, at most 8 MiB and 16 million pixels; required crop ratio 2.35:1. Rechecks crop, identity, session, scope and revision after storage.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
         "security": [
           {
             "SessionCookie": []
@@ -30286,7 +30286,7 @@
                   "crop": {
                     "type": "string",
                     "description": "JSON-encoded crop text: left, top, width and height are ratios from 0 to 1; width and height must be positive.",
-                    "example": "{\"left\":0,\"top\":0,\"width\":1,\"height\":0.575}"
+                    "example": "{\"left\":0,\"top\":0,\"width\":1,\"height\":0.648936170212766}"
                   },
                   "expectedIconObjectKey": {
                     "type": "string",

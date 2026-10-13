@@ -14,8 +14,8 @@ import { AppError } from "../src/lib/errors";
 import { locked, tokenDigest, COOKIE_NAME, type Actor } from "../src/lib/auth";
 import { prisma } from "../src/lib/prisma";
 import * as m from "../src/lib/management";
-import { storageClient, packagesBucket, readObject } from "../src/lib/storage";
-import { mottoCrop, validMottoCrop, MAX_MOTTO_UPLOAD_BYTES, SERVER_MOTTO_RATIO } from "../src/lib/server-motto-contract";
+import { storageClient, packagesBucket, readObject, digest } from "../src/lib/storage";
+import { mottoCrop, currentMottoCrop, validMottoCrop, MAX_MOTTO_UPLOAD_BYTES, SERVER_MOTTO_RATIO } from "../src/lib/server-motto-contract";
 import { prepareMottoImage, readServerMotto, saveServerMotto, storeMottoImage } from "../src/lib/server-motto";
 import { assertApiRequest, assertApiResponse, contractOperation } from "./openapi-validation";
 
@@ -80,7 +80,7 @@ test("default and resized selections retain the reference ratio and stay inside 
 test("server decodes and crops images, strips metadata and rejects invalid content or selections", async () => {
   const prepared = await prepareMottoImage(bytes, mottoCrop(610, 400));
   const output = await sharp(prepared.image).metadata();
-  assert.equal(output.width, 1220); assert.equal(output.height, 460); assert.equal(output.format, "webp");
+  assert.equal(output.width, 1410); assert.equal(output.height, 600); assert.equal(output.width! / output.height!, 2.35); assert.equal(output.format, "webp");
   assert.equal((await sharp(prepared.source).metadata()).exif, undefined);
   const oriented = await sharp(bytes).jpeg().withMetadata({ orientation: 6 }).toBuffer();
   const rotated = await prepareMottoImage(oriented, mottoCrop(400, 610));
@@ -90,6 +90,18 @@ test("server decodes and crops images, strips metadata and rejects invalid conte
   await assert.rejects(prepareMottoImage(Buffer.alloc(MAX_MOTTO_UPLOAD_BYTES + 1), mottoCrop(610, 400)), denied(413));
   await assert.rejects(prepareMottoImage(bytes, { left: 0, top: 0, width: 1, height: 1 }), denied(400));
   await assert.rejects(prepareMottoImage(bytes, { ...mottoCrop(610, 400), left: 0.9 }), denied(400));
+  const legacy = { left: 0, top: 0.2125, width: 1, height: 0.575 };
+  await assert.rejects(prepareMottoImage(bytes, legacy), denied(400));
+  const selected = currentMottoCrop(legacy, 610, 400);
+  assert(validMottoCrop(selected, 610, 400));
+  assert(Math.abs(selected.left + selected.width / 2 - 0.5) < 1e-8);
+  assert(Math.abs(selected.top + selected.height / 2 - 0.5) < 1e-8);
+  assert.deepEqual(legacy, { left: 0, top: 0.2125, width: 1, height: 0.575 });
+  const retained = { source: prepared.source, image: await sharp(prepared.source).resize(1220, 460).webp().toBuffer(), metadata: { ...prepared.metadata, crop: legacy } };
+  retained.metadata.imageSha256 = digest(retained.image);
+  const stored = await storeMottoImage(organizationId, "NPA", retained);
+  const original = await readServerMotto(stored.key, organizationId, "NPA", "image");
+  assert.deepEqual(original.bytes, retained.image); assert.deepEqual(original.metadata.crop, legacy);
 });
 
 test("private storage retains source and crop; scoped save and re-crop enforce revision and resource guards", async () => {

@@ -82,7 +82,7 @@ admin("patch", "/servers/{serverId}/drafts/{draftId}", "updateLegacyMetadataDraf
 admin("post", "/servers/{serverId}/drafts/{draftId}/archive", "archiveLegacyMetadataDraft", "归档或恢复兼容元数据草稿", s.ok, "DRAFT_ARCHIVE；仅 DRAFT／REJECTED 且属于当前绑定客户端。与独立客户端的带双修订撤回操作不同。", s.archive, ["DRAFT_ARCHIVE"]);
 admin("get", "/servers/{serverId}/probe", "probeServer", "读取真实 Minecraft 连接探测", s.probe, "SERVER_READ，在探测前及返回前再次检查范围。仅探测已保存地址，固定公网 DNS、SRV、超时、缓存和并发保护保留。ONLINE 为确认 MC 且低延迟，默认 ≥300ms 为 HIGH_LATENCY；无配置、归档或服务错误为 UNKNOWN。", undefined, ["SERVER_READ"]);
 admin("get", "/servers/{serverId}/motto-image", "getServerMotto", "读取服务器箴言图片、原图或选区", s.motto, "SERVER_READ；variant=image／source 返回 image/webp 二进制，metadata 返回 JSON。version 可选，为当前图片对象目录中的 UUID，变化返回 409。原图已归一化为 WebP，可重裁剪。私有读取 Cache-Control: private, no-store。", undefined, ["SERVER_READ"], false, 200, z.object({ variant: z.enum(["image", "source", "metadata"]).default("image").optional(), version: s.uuid.optional() }));
-admin("post", "/servers/{serverId}/motto-image", "uploadServerMotto", "上传或重新裁剪服务器箴言图片", s.mottoSaved, "SERVER_EDIT；multipart/form-data 字段 crop 和 expectedIconObjectKey 均为 JSON 编码文本（空对象键必须填 null 文本），不是嵌套表单对象。source 可省略以使用保留原图重裁剪；新 source 为静态 PNG／JPEG／WebP，最多 8 MiB／1600 万像素。推荐 61:23，服务器复核选区和归属，存储完成后再次检查会话、范围和修订。", z.object({ source: z.string().optional(), crop: z.string(), expectedIconObjectKey: z.string() }).strict(), ["SERVER_EDIT"]);
+admin("post", "/servers/{serverId}/motto-image", "uploadServerMotto", "上传或重新裁剪服务器箴言图片", s.mottoSaved, "SERVER_EDIT；multipart/form-data 字段 crop 和 expectedIconObjectKey 均为 JSON 编码文本（空对象键必须填 null 文本），不是嵌套表单对象。source 可省略以使用保留原图重裁剪；新 source 为静态 PNG／JPEG／WebP，最多 8 MiB／1600 万像素。固定 2.35:1，服务器复核选区和归属，存储完成后再次检查会话、范围和修订。", z.object({ source: z.string().optional(), crop: z.string(), expectedIconObjectKey: z.string() }).strict(), ["SERVER_EDIT"]);
 ops[ops.length - 1].multipart = true;
 admin("delete", "/servers/{serverId}/motto-image", "removeServerMotto", "移除当前服务器箴言图片", s.mottoSaved, "SERVER_EDIT；expectedIconObjectKey 必须匹配当前对象键，变化返回 409。移除绑定后旧 OSS 图片保留，本操作不改发布签名。", z.object({ expectedIconObjectKey: z.string().max(500).nullable() }).strict(), ["SERVER_EDIT"]);
 for (const [action, id, summary, body, auth, description] of [
@@ -107,7 +107,7 @@ export function adminOpenApi(locale: Locale = "zh-CN") {
     let body = op.body;
     if (body instanceof z.ZodObject) body = body.extend(Object.fromEntries(Object.entries(body.shape).filter(([name]) => /^(password|currentPassword|newPassword)$/.test(name)).map(([name, value]) => [name, (value as z.ZodTypeAny).openapi({ format: "password", writeOnly: true })])));
     if (op.multipart) body = z.object({ source: z.string().openapi({ format: "binary" }).optional(),
-      crop: z.string().openapi({ description: t("JSON 编码选区文本：left、top、width、height 为 0–1 的比例，宽高必须大于 0。"), example: '{"left":0,"top":0,"width":1,"height":0.575}' }),
+      crop: z.string().openapi({ description: t("JSON 编码选区文本：left、top、width、height 为 0–1 的比例，宽高必须大于 0。"), example: '{"left":0,"top":0,"width":1,"height":0.648936170212766}' }),
       expectedIconObjectKey: z.string().openapi({ description: t("JSON 编码的当前对象键，首次上传填写文本 null。"), example: "null" }) }).strict();
     const errors = Object.fromEntries([400, 401, 403, 404, 409, 413, 415, 422, 429, 500, 503].map(code => [code, { description: t("HTTP {0}：参数、会话、权限、资源状态或基础设施错误。", { "0": code }), content: { "application/json": { schema: error } }, headers: cacheHeaders }]));
     const jsonResponse = { "application/json": { schema: schemas.get(op.response) ?? op.response } };

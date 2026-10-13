@@ -93,6 +93,7 @@ jobs:
           done
           test "$ready" = true
           npm run test:openapi:browser
+          npm run test:server-motto:browser
       - name: Publish verified public specification artifacts
         uses: actions/upload-artifact@v4
         with:
