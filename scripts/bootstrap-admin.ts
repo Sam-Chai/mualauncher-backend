@@ -6,6 +6,7 @@ import { locked } from "../src/lib/auth";
 import { hashPassword } from "../src/lib/password";
 import { password, username } from "../src/lib/input";
 import { getPrisma } from "../src/lib/prisma";
+import { PROJECT_NAME } from "../src/lib/branding";
 const prisma = getPrisma("migration");
 
 async function main() {
@@ -23,7 +24,7 @@ async function main() {
       const directory = resolve(".local");
       await mkdir(directory, { recursive: true });
       const path = resolve(directory, `initial-admin-${Date.now()}.txt`);
-      await writeFile(path, `MUA Prism initial administrator\nUsername: ${name}\nPassword: ${secret}\n\nChange this password after login, then delete this file.\n`, { flag: "wx", mode: 0o600 });
+      await writeFile(path, `${PROJECT_NAME} initial administrator\nUsername: ${name}\nPassword: ${secret}\n\nChange this password after login, then delete this file.\n`, { flag: "wx", mode: 0o600 });
       credentialPath = path;
     }
     return account;

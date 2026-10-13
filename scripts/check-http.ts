@@ -46,7 +46,7 @@ async function main() {
     assert.equal(root.status, 307); assert.equal(root.headers.get("location"), "/admin");
     const panel = await fetch(base + "/admin", { headers: { Cookie: cookie } });
     const panelHtml = await panel.text();
-    assert.equal(panel.status, 200); assert(panelHtml.includes("MUA Platform")); assert(panelHtml.includes("服务器目录"));
+    assert.equal(panel.status, 200); assert(panelHtml.includes("Union Link")); assert(panelHtml.includes("服务器目录"));
     assert(panelHtml.includes('tremor-id="tremor-raw"'), "Dashboard must render the Tremor chart");
     assert(/<div width="[1-9]\d*" height="[1-9]\d*" class="recharts-wrapper"/.test(panelHtml), "Chart must have positive initial dimensions");
     assert(!/:E\{[^\n]*digest/.test(panelHtml), "Panel rendered a React server error");
@@ -59,7 +59,7 @@ async function main() {
       "/admin/system/audit", "/admin/system/settings"]) {
       const response = await fetch(base + path, { headers: { Cookie: cookie } });
       const html = await response.text();
-      assert.equal(response.status, 200, path); assert(html.includes("MUA Platform"), path);
+      assert.equal(response.status, 200, path); assert(html.includes("Union Link"), path);
       if (path === "/admin/servers") { assert(html.includes("服务器箴言")); assert(!html.includes("图标对象键")); assert(html.includes("悬停查看延迟与原因")); assert(html.includes("data-probe-state")); }
       assert(!/:E\{[^\n]*digest/.test(html), `React server error at ${path}`);
     }

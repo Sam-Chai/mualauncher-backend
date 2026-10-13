@@ -6,12 +6,26 @@ import { rolePermissions } from "./roles";
 export type DatabasePurpose = "web" | "auth" | "public" | "worker" | "migration";
 const urls: Record<DatabasePurpose, string> = { web: "DATABASE_URL", auth: "DATABASE_AUTH_URL", public: "DATABASE_PUBLIC_URL", worker: "DATABASE_WORKER_URL", migration: "DATABASE_MIGRATION_URL" };
 const roles = { web: "mua_web", auth: "mua_auth", public: "mua_public", worker: "mua_worker", migration: "mua_migrator" };
-const globalDb = globalThis as unknown as { muaClients?: Map<DatabasePurpose, PrismaClient>; muaChecked?: WeakSet<PrismaClient> };
+const globalDb = globalThis as unknown as { muaClients?: Map<DatabasePurpose, PrismaClient>; muaChecked?: WeakSet<PrismaClient>; muaClientSchemas?: Map<DatabasePurpose, string> };
 const clients: Map<DatabasePurpose, PrismaClient> = globalDb.muaClients ??= new Map<DatabasePurpose, PrismaClient>();
+const clientSchemas = globalDb.muaClientSchemas ??= new Map<DatabasePurpose, string>();
+// Next dev preserves global pools across hot reloads, including after prisma generate.
+// Invalidate pools when generated models/scalar fields change. Prisma 7's
+// prisma-client generator exposes field enums rather than runtime DMMF.
+const currentSchema = JSON.stringify(Object.entries(Prisma)
+  .filter(([name]) => name === "ModelName" || name === "prismaVersion" || name.endsWith("ScalarFieldEnum"))
+  .sort(([a], [b]) => a.localeCompare(b)));
 const checked = globalDb.muaChecked ??= new WeakSet();
 const pending = new WeakMap<PrismaClient, Promise<void>>();
 export function getPrisma(purpose: DatabasePurpose): PrismaClient {
   let client = clients.get(purpose);
+  if (client && clientSchemas.get(purpose) !== currentSchema) {
+    const stale = client;
+    clients.delete(purpose);
+    clientSchemas.delete(purpose);
+    void stale.$disconnect().catch(() => console.error("Failed to close stale Prisma pool", { purpose }));
+    client = undefined;
+  }
   if (!client) {
     const connectionString = process.env[urls[purpose]];
     if (!connectionString) throw new Error(`${urls[purpose]} is required for ${purpose}; privileged fallback is disabled`);
@@ -19,6 +33,7 @@ export function getPrisma(purpose: DatabasePurpose): PrismaClient {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(schema)) throw new Error("Invalid DATABASE_SCHEMA");
     client = new PrismaClient({ adapter: new PrismaPg({ connectionString, options: `-c search_path=${schema},pg_catalog`, connectionTimeoutMillis: 5000, pipeline: true }, { schema }) });
     clients.set(purpose, client);
+    clientSchemas.set(purpose, currentSchema);
   }
   return client;
 }
@@ -65,4 +80,4 @@ export async function validateDatabase(purpose: Exclude<DatabasePurpose, "migrat
   pending.set(client, validation);
   try { await validation; } finally { pending.delete(client); }
 }
-export async function disconnectDatabases() { await Promise.all([...clients.values()].map(client => client.$disconnect())); clients.clear(); }
+export async function disconnectDatabases() { await Promise.all([...clients.values()].map(client => client.$disconnect())); clients.clear(); clientSchemas.clear(); }

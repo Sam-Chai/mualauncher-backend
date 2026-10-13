@@ -2,6 +2,7 @@
 import { useI18n } from "@/components/preferences";
 import { PreferenceControls } from "@/components/preferences";
 import Link from "next/link";
+import { PROJECT_NAME } from "@/lib/branding";
 import { usePathname } from "next/navigation";
 import { ChevronsUpDown, LogOut, Settings, Hexagon, RefreshCw } from "lucide-react";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
@@ -26,7 +27,7 @@ function AppSidebar() {
   return <Sidebar variant="inset" collapsible="icon">
     <SidebarHeader><SidebarMenu><SidebarMenuItem><SidebarMenuButton size="lg" asChild>
       <Link href="/admin" onClick={() => setOpenMobile(false)}><div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Hexagon className="size-5" /></div>
-        <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">MUA Platform</span><span className="truncate text-xs text-muted-foreground">{t("高校联盟管理平台")}</span></div></Link>
+        <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">{PROJECT_NAME}</span><span className="truncate text-xs text-muted-foreground">{t("高校联盟管理平台")}</span></div></Link>
     </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarHeader>
     <SidebarContent>{visibleNavigation(navigation, state).map(group => <SidebarGroup key={group.title || "overview"}>
       {group.title && <SidebarGroupLabel>{t(group.title)}</SidebarGroupLabel>}
@@ -56,7 +57,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <AppSidebar /><SidebarInset className="min-w-0">
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur lg:px-6">
         <SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
-        <Breadcrumb className="hidden min-w-0 sm:block"><BreadcrumbList><BreadcrumbItem className="hidden sm:block"><BreadcrumbLink asChild><Link href="/admin">{t(current.group || "MUA Platform")}</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator className="hidden sm:block" /><BreadcrumbItem><BreadcrumbPage>{t(current.title)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
+        <Breadcrumb className="hidden min-w-0 sm:block"><BreadcrumbList><BreadcrumbItem className="hidden sm:block"><BreadcrumbLink asChild><Link href="/admin">{current.group ? t(current.group) : PROJECT_NAME}</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator className="hidden sm:block" /><BreadcrumbItem><BreadcrumbPage>{t(current.title)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
         <div className="ml-auto flex items-center gap-2">
           <PreferenceControls />
           <Select value={organizationId} onValueChange={setOrganizationId}><SelectTrigger className="w-32 sm:w-44" aria-label={t("筛选组织")}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{t("全部可访问组织")}</SelectItem>{state.organizations.map(org => <SelectItem key={org.id} value={org.id}>{org.displayName}{org.archivedAt ? t(" · 已归档") : ""}</SelectItem>)}</SelectContent></Select>

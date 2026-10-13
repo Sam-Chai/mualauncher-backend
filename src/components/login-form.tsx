@@ -9,13 +9,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SchemaForm } from "@/components/admin/form";
 import { api } from "@/components/admin/provider";
 import { navigateAfterAuthChange } from "@/lib/auth-navigation";
+import { PROJECT_NAME } from "@/lib/branding";
 const schema = z.object({ username: z.string().trim().min(3, "请输入用户名").max(64), password: z.string().min(1, "请输入密码").max(128) });
 export default function LoginForm() {
   const { t } = useI18n();
   const [error, setError] = useState("");
   return <div className="w-full max-w-md space-y-6">
     <div className="flex justify-end"><PreferenceControls /></div>
-    <div className="flex items-center justify-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Hexagon /></div><div><p className="text-lg font-semibold">MUA Platform</p><p className="text-xs text-muted-foreground">{t("高校联盟管理平台")}</p></div></div>
+    <div className="flex items-center justify-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Hexagon /></div><div><p className="text-lg font-semibold">{PROJECT_NAME}</p><p className="text-xs text-muted-foreground">{t("高校联盟管理平台")}</p></div></div>
     <Card><CardHeader><CardTitle className="text-xl">{t("登录管理平台")}</CardTitle><CardDescription>{t("使用 MUA 管理员分配的白名单账号。")}</CardDescription></CardHeader><CardContent className="space-y-5">
       {error && <Alert variant="destructive" role="alert"><AlertDescription>{t(error)}</AlertDescription></Alert>}
       <SchemaForm schema={schema} defaults={{ username: "", password: "" }} label={t("登录")}
