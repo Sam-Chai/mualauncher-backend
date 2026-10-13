@@ -55,7 +55,7 @@ test("pipelined Prisma transactions preserve dependency order, abort and rollbac
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions", "202610120004_v2_platform_independent", "202610120005_server_display_schedule"]) {
+  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions", "202610120004_v2_platform_independent", "202610120005_server_display_schedule", "202610130001_server_display_editor_permissions"]) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -129,6 +129,27 @@ test("RBAC isolates organizations and single servers; new servers inherit organi
   assert.equal(state.accounts.length, 0); assert.equal(state.events.length, 0); assert.equal(state.organizations[0].members.length, 0);
   assert.deepEqual(state.auditActivity, []);
   await db.$executeRawUnsafe("SET CONSTRAINTS ALL IMMEDIATE");
+}));
+
+test("registration saves valid display windows, defaults legacy requests and preserves superadmin-only writes", () => isolated(async db => {
+  const f = await fixture(db);
+  const input = { organizationId: f.org.id, displayName: "Scheduled registration" };
+  await m.createServer(db, f.root, { ...input, serverId: "SCH", displayMode: "RANGE", displayStartsAt: "2026-10-13T00:00:00Z", displayEndsAt: "2026-10-14T00:00:00Z" });
+  const saved = await db.server.findUniqueOrThrow({ where: { serverId: "SCH" } });
+  assert.equal(saved.displayMode, "RANGE"); assert.equal(saved.displayStartsAt?.toISOString(), "2026-10-13T00:00:00.000Z");
+  await m.createServer(db, f.root, { ...input, serverId: "PER" });
+  const permanent = await db.server.findUniqueOrThrow({ where: { serverId: "PER" } });
+  assert.equal(permanent.displayMode, "PERMANENT"); assert.equal(permanent.displayStartsAt, null); assert.equal(permanent.displayEndsAt, null);
+  for (const schedule of [ { displayMode: "RANGE" }, { displayMode: null }, { displayMode: "RANGE", displayStartsAt: "2026-10-14T00:00:00Z", displayEndsAt: "2026-10-13T00:00:00Z" }, { displayMode: "PERMANENT", displayStartsAt: "2026-10-13T00:00:00Z" } ]) {
+    await assert.rejects(m.createServer(db, f.root, { ...input, serverId: "BAD", ...schedule }), denied(400));
+  }
+  assert.equal(await db.server.count({ where: { serverId: "BAD" } }), 0);
+  await assert.rejects(m.createServer(db, f.admin, { ...input, serverId: "ADM" }), denied(403));
+  const state = await m.getState(db, f.admin);
+  assert.equal(state.organizations[0].servers.find(server => server.serverId === "SCH")?.displayMode, "RANGE");
+  await m.updateServer(db, f.admin, "SCH", { displayMode: "PERMANENT", themeColor: "#123456" });
+  await assert.rejects(m.updateServer(db, f.admin, "SCH", { sortOrder: 1 }), denied(403));
+  await assert.rejects(m.updateServer(db, f.admin, "SCH", { isListed: true }), denied(403));
 }));
 
 test("sidebar reflects organization, server and platform permissions after grants change", () => isolated(async db => {
@@ -325,7 +346,7 @@ test("display settings reject invalid windows and unauthorized edits", () => iso
     { displayMode: "RANGE", displayStartsAt: "2026-01-01T00:00:00+99:99", displayEndsAt: "2026-01-02T00:00:00Z" },
     { displayMode: "PERMANENT", displayStartsAt: "2026-01-01T00:00:00Z" },
   ]) await assert.rejects(m.updateServer(db, f.root, "NPR", patch), denied(400));
-  await assert.rejects(m.updateServer(db, f.admin, "NPR", { displayMode: "PERMANENT" }), denied(403));
+  await assert.rejects(m.updateServer(db, f.reviewer, "NPR", { displayMode: "PERMANENT" }), denied(403));
   await sqlDenied(db, () => db.server.update({ where: { serverId: "NPR" }, data: { displayMode: "RANGE" } }));
   await m.updateServer(db, f.root, "NPR", { displayMode: "RANGE", displayStartsAt: "2026-01-01T08:00:00+08:00", displayEndsAt: "2026-01-02T00:00:00Z" });
   await m.updateServer(db, f.root, "NPR", { displayEndsAt: "2026-01-03T00:00:00Z" });

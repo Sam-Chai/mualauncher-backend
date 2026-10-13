@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.3.0",
+    "version": "0.3.2",
     "description": "The complete panel reference includes Launcher, client automation, administration and authentication. Documentation access grants no business permissions. Each request still checks scope, RBAC, revisions and lifecycle. Follow upload, review, build and publication stages using actual progress."
   },
   "servers": [
@@ -25863,7 +25863,7 @@
           "Administration"
         ],
         "summary": "Register an existing MUA server ID",
-        "description": "Superadmin plus ORG_EDIT. Uses the existing 3-5-letter server ID, not a new identity system. server-mottos/ image keys must be set via the image upload endpoint.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
+        "description": "Superadmin only with ORG_EDIT. Register an existing 3–5 letter MUA ID. Choose displayMode PERMANENT or RANGE during registration; omission defaults to permanent. Range requires timezone-qualified start and end timestamps with start before end. Permanent timestamps must be null or omitted. Managed server-mottos/ keys must be set through the image endpoint.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
         "security": [
           {
             "SessionCookie": []
@@ -25951,6 +25951,27 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "displayMode": {
+                    "type": "string",
+                    "enum": [
+                      "PERMANENT",
+                      "RANGE"
+                    ]
+                  },
+                  "displayStartsAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "displayEndsAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
                   }
                 },
                 "required": [
@@ -26200,7 +26221,7 @@
           "Administration"
         ],
         "summary": "Edit server details and display settings",
-        "description": "SERVER_EDIT edits details. sortOrder/themeColor/isListed/displayMode/displayStartsAt/displayEndsAt additionally require superadmin. RANGE needs valid ordered times; PERMANENT clears the range. API times include a timezone; the panel uses Beijing time. server-mottos/ image replacement must use its dedicated endpoint.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
+        "description": "Scoped SERVER_EDIT allows profile, color and permanent/range display settings. Sort order and listing still require a superadmin panel session. A range needs valid timezone-qualified start and end with start before end; changing to PERMANENT clears the range. Display settings affect directory visibility only, not client activation, binding or download. Managed server-mottos/ references must use the image endpoint.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
         "security": [
           {
             "SessionCookie": []

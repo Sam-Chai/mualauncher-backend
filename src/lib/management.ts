@@ -110,12 +110,15 @@ export async function updateOrganization(db: Db, actor: Actor, id: string, raw: 
 
 export async function createServer(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
-  const data = input.fields(raw, ["organizationId", "serverId", "displayName", "description", "gameAddress", "iconObjectKey"]);
+  const data = input.fields(raw, ["organizationId", "serverId", "displayName", "description", "gameAddress", "iconObjectKey", "displayMode", "displayStartsAt", "displayEndsAt"]);
   const organizationId = input.uuid(input.text(data, "organizationId"));
   await requireOrganization(db, actor, organizationId, "ORG_EDIT");
   const id = input.serverId(input.text(data, "serverId"));
   invariant(typeof data.iconObjectKey !== "string" || !data.iconObjectKey.startsWith("server-mottos/"), 400, "服务器箴言请通过图片上传接口设置");
+  const schedule = displayScheduleSchema.safeParse({ displayMode: "displayMode" in data ? data.displayMode : "PERMANENT", displayStartsAt: data.displayStartsAt ?? null, displayEndsAt: data.displayEndsAt ?? null });
+  invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? "展示配置无效");
   await db.server.create({ data: { serverId: id, organizationId, displayName: input.text(data, "displayName"),
+    ...schedule.data,
     description: data.description === undefined ? "" : input.text(data, "description", 5000, false),
     gameAddress: data.gameAddress === undefined ? null : input.optionalText(data, "gameAddress", 255),
     iconObjectKey: data.iconObjectKey === undefined ? null : input.optionalText(data, "iconObjectKey") } });
@@ -127,7 +130,7 @@ export async function createServer(db: Db, actor: Actor, raw: unknown) {
 export async function updateServer(db: Db, actor: Actor, id: string, raw: unknown) {
   const { server } = await requireServer(db, actor, id, "SERVER_EDIT");
   const data = input.fields(raw, ["displayName", "description", "gameAddress", "iconObjectKey", "sortOrder", "themeColor", "isListed", "displayMode", "displayStartsAt", "displayEndsAt"]);
-  if (["sortOrder", "themeColor", "isListed", "displayMode", "displayStartsAt", "displayEndsAt"].some(key => key in data)) superOnly(actor);
+  if (["sortOrder", "isListed"].some(key => key in data)) superOnly(actor);
   const update: Prisma.ServerUpdateInput = {};
   if ("displayName" in data) update.displayName = input.text(data, "displayName");
   if ("description" in data) update.description = input.text(data, "description", 5000, false);

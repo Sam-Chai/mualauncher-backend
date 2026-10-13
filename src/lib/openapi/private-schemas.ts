@@ -96,7 +96,8 @@ const text = (max = 200, minimum = 1) => z.string().trim().min(minimum).max(max)
 const nullableInput = (max = 500) => z.union([text(max), z.literal(""), z.null()]);
 export const organizationCreate = z.object({ displayName: text(), description: text(5000, 0).optional(), avatarObjectKey: nullableInput().optional() }).strict();
 export const organizationUpdate = organizationCreate.partial();
-export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(), iconObjectKey: nullableInput().optional() }).strict();
+export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(), iconObjectKey: nullableInput().optional(),
+  displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: date.nullable().optional(), displayEndsAt: date.nullable().optional() }).strict();
 export const serverUpdate = z.object({ displayName: text().optional(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(), iconObjectKey: nullableInput().optional(),
   sortOrder: z.number().int().min(-2147483647).max(2147483647).optional(), themeColor: z.union([z.string().regex(/^#[0-9a-f]{6}$/i), z.literal(""), z.null()]).optional(),
   isListed: z.boolean().optional(), displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: nullableDate.optional(), displayEndsAt: nullableDate.optional() }).strict();

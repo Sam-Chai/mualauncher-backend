@@ -4,7 +4,7 @@
 
 ## 后台
 
-MUA 超管在 `/admin/servers` 编辑服务器：选择“永久展示”或“区间展示”，区间填写开始和结束时间，均按北京时间（Asia/Shanghai，UTC+08:00）。默认永久展示，既有记录不改变目录行为。只有超管面板会话可以修改展示配置，普通 SERVER_EDIT 仍只能修改服务器资料。
+MUA 超管可在 `/admin/servers` 登记服务器，具备 SERVER_EDIT 的账号可编辑服务器：选择“永久展示”或“区间展示”，区间填写开始和结束时间，均按北京时间（Asia/Shanghai，UTC+08:00）。默认永久展示，既有记录不改变目录行为。具备服务器范围内 SERVER_EDIT 的组织管理员、服务器管理员、服务器编辑可修改展示颜色、永久／区间模式和时间。服务器登记、排序、上架及归档／恢复仍限超管。
 
 保留原有“标记上架”开关 `isListed`。要按区间展示，需启用该开关并具备有效发布、绑定及未归档资源。展示开始时自动进入目录，结束时自动从目录隐藏；查询时计算，无需 Worker 或定时写数据库。
 
@@ -12,7 +12,9 @@ MUA 超管在 `/admin/servers` 编辑服务器：选择“永久展示”或“�
 
 ## 管理 API
 
-`PATCH /api/admin/servers/:serverId` 沿用 Cookie 面板会话、同源校验、SERVER_EDIT 范围校验、超管限制和 SERVER_EDIT 审计。
+登记 `POST /api/admin/servers` 接受可选 displayMode／displayStartsAt／displayEndsAt，与编辑使用同一配置校验；旧请求省略时仍默认永久展示。
+
+`PATCH /api/admin/servers/:serverId` 沿用 Cookie 面板会话、同源校验、SERVER_EDIT 范围校验和审计。
 
 新增字段：
 
@@ -43,7 +45,7 @@ MUA 超管在 `/admin/servers` 编辑服务器：选择“永久展示”或“�
 
 ## 数据库与验证
 
-迁移 `202610120005_server_display_schedule` 增加字段、有效区间 CHECK、超管展示配置触发器，并替换 RLS 的 public_servers 投影。public_snapshot 保持原有下载条件。必须使用独立 mua_migrator 执行迁移。
+迁移 `202610130001_server_display_editor_permissions` 将展示时间更新触发器改为 SERVER_EDIT 范围检查，登记区间仍限超管，不改既有数据。原迁移 `202610130001_server_display_editor_permissions` 将展示时间更新触发器改为 SERVER_EDIT 范围检查，登记区间仍限超管，不改既有数据。原迁移 `202610120005_server_display_schedule` 增加字段、有效区间 CHECK、超管展示配置触发器，并替换 RLS 的 public_servers 投影。public_snapshot 保持原有下载条件。必须使用独立 mua_migrator 执行迁移。
 
 测试覆盖应用／数据库权限、无效和部分更新、开始包含／结束排除、区间前后目录过滤、到期下载快照继续可用、绑定与发布不变、手动下架、北京时间转换和中英文界面。
 

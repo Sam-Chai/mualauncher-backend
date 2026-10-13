@@ -79,13 +79,33 @@ test("all runtime roles are restricted and every business table forces RLS", asy
   for (const db of [web, auth, worker, pub]) await assert.rejects(db.$executeRawUnsafe("SET ROLE mua_owner"));
 });
 
-test("display schedules require a superadmin panel in both application and database writes", async () => {
+test("scoped SERVER_EDIT changes color and schedules in application and RLS writes; readers and other scopes are denied", async () => {
   const schedule = { displayMode: "RANGE", displayStartsAt: "2026-01-01T00:00:00Z", displayEndsAt: "2026-01-02T00:00:00Z" };
-  await as(f.admin, async db => {
-    await assert.rejects(m.updateServer(db, f.admin, "AAA", schedule));
-    await rejected(db, () => db.server.update({ where: { serverId: "AAA" }, data: schedule }));
+  const editor = await owner.$transaction(async db => {
+    const actor = await db.account.create({ data: { displayName: "server editor" } });
+    await m.setMember(db, f.root, f.org.id, actor.id, { roles: [], status: "ACTIVE" });
+    await m.setGrant(db, f.root, f.org.id, actor.id, "AAA", { roles: ["SERVER_EDITOR"] });
+    return actor;
   });
-  await as(f.root, db => m.updateServer(db, f.root, "AAA", schedule));
+  for (const actor of [f.admin, f.single, editor]) await as(actor, async db => {
+    await m.updateServer(db, actor, "AAA", { displayMode: "PERMANENT", themeColor: "#123456" });
+    await m.updateServer(db, actor, "AAA", schedule);
+    await db.server.update({ where: { serverId: "AAA" }, data: { displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null } });
+    await db.server.update({ where: { serverId: "AAA" }, data: schedule });
+    await assert.rejects(m.updateServer(db, actor, "AAA", { sortOrder: 1 }));
+    await assert.rejects(m.updateServer(db, actor, "AAA", { isListed: true }));
+    await assert.rejects(m.updateServer(db, actor, "BBB", schedule));
+    assert.equal((await db.server.updateMany({ where: { serverId: "BBB" }, data: { themeColor: "#654321" } })).count, 0);
+  });
+  await as(editor, async db => {
+    await assert.rejects(m.updateServer(db, editor, "AAB", schedule));
+    assert.equal((await db.server.updateMany({ where: { serverId: "AAB" }, data: { themeColor: "#654321" } })).count, 0);
+  });
+  await as(f.reader, async db => {
+    await assert.rejects(m.updateServer(db, f.reader, "AAA", schedule));
+    await rejected(db, () => db.server.update({ where: { serverId: "AAA" }, data: { displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null } }));
+    await rejected(db, () => db.server.update({ where: { serverId: "AAA" }, data: { themeColor: "#654321" } }));
+  });
   assert.equal((await as(f.reader, db => m.getState(db, f.reader))).organizations[0].servers.find(server => server.serverId === "AAA")?.displayMode, "RANGE");
   await as(f.root, db => m.updateServer(db, f.root, "AAA", { displayMode: "PERMANENT" }));
 });
@@ -105,7 +125,7 @@ test("unfiltered queries isolate organizations, current bindings, fallback scope
     assert.equal(await db.clientDraft.count(), 2);
     assert.equal(await db.server.updateMany({ where: { serverId: "BBB" }, data: { displayName: "forbidden" } }).then(r => r.count), 0);
     await rejected(db, () => db.client.create({ data: { id: "cross-org", organizationId: f.other.id, name: "cross", nameKey: "cross" } }));
-    const state = await m.getState(db, f.admin); assert.equal(state.organizations.length, 1); assert.equal(state.organizations[0].members.length, 6);
+    const state = await m.getState(db, f.admin); assert.equal(state.organizations.length, 1); assert.equal(state.organizations[0].members.length, 7); // Includes the scoped editor created by the permission regression.
   });
   await as(f.single, async db => { assert.deepEqual((await db.client.findMany()).map(c => c.id), ["AAA"]); assert.equal(await db.client.findUnique({ where: { id: "pending" } }), null); });
   await owner.serverPublication.update({ where: { serverId: "AAA" }, data: { clientId: null } });

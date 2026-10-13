@@ -158,6 +158,23 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     assert(ready, "isolated Next instance must start");
+    const patchDisplay = (actor: Actor, value: unknown, serverId = "NPA") => fetch(origin + `/api/admin/servers/${serverId}`, {
+      method: "PATCH", headers: { Cookie: cookies.get(actor.id)!, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(value),
+    });
+    assert.equal((await patchDisplay(editor, { themeColor: "#123456", displayMode: "RANGE", displayStartsAt: "2026-10-13T00:00:00Z", displayEndsAt: "2026-10-14T00:00:00Z" })).status, 200);
+    const displayState = await (await fetch(origin + "/api/admin/state", { headers: { Cookie: cookies.get(editor.id)! } })).json();
+    const displayServer = displayState.organizations.find((value: { id: string }) => value.id === organizationId).servers.find((value: { serverId: string }) => value.serverId === "NPA");
+    assert.equal(displayServer.themeColor, "#123456"); assert.equal(displayServer.displayMode, "RANGE");
+    assert.equal(displayServer.displayStartsAt, "2026-10-13T00:00:00.000Z");
+    assert.equal((await patchDisplay(reader, { themeColor: "#654321" })).status, 403);
+    assert.equal((await patchDisplay(other, { themeColor: "#654321" })).status, 404);
+    assert.equal((await patchDisplay(editor, { sortOrder: 1 })).status, 403);
+    assert.equal((await patchDisplay(editor, { isListed: true })).status, 403);
+    assert.equal((await patchDisplay(editor, { displayMode: "RANGE", displayEndsAt: "2026-10-12T00:00:00Z" })).status, 400);
+    assert.equal((await patchDisplay(editor, { themeColor: "invalid" })).status, 400);
+    assert.equal((await patchDisplay(editor, { displayMode: "PERMANENT", themeColor: "" })).status, 200);
+    const permanent = await client.server.findUniqueOrThrow({ where: { serverId: "NPA" } });
+    assert.equal(permanent.displayStartsAt, null); assert.equal(permanent.displayEndsAt, null); assert.equal(permanent.themeColor, null);
     const settingsPath = origin + "/api/admin/upload-size-settings";
     const patchSettings = (actor: Actor, value: unknown, requestOrigin = origin) => fetch(settingsPath, {
       method: "PATCH", headers: { Cookie: cookies.get(actor.id)!, Origin: requestOrigin, "Content-Type": "application/json" }, body: JSON.stringify(value),
@@ -221,7 +238,11 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     };
     const org = await adminWrite("POST", "/api/admin/organizations", { displayName: "Contract organization" }, 201);
     await adminWrite("PATCH", `/api/admin/organizations/${org.id}`, { description: "Contract description" });
-    await adminWrite("POST", "/api/admin/servers", { organizationId: org.id, serverId: "API", displayName: "Contract server" }, 201);
+    await adminWrite("POST", "/api/admin/servers", { organizationId: org.id, serverId: "API", displayName: "Contract server", displayMode: "RANGE", displayStartsAt: "2026-10-13T00:00:00Z", displayEndsAt: "2026-10-14T00:00:00Z" }, 201);
+    const registeredState = await (await fetch(origin + "/api/admin/state", { headers: panelHeaders })).json();
+    const registered = registeredState.organizations.find((value: { id: string }) => value.id === org.id).servers.find((value: { serverId: string }) => value.serverId === "API");
+    assert.equal(registered.displayMode, "RANGE"); assert.equal(registered.displayStartsAt, "2026-10-13T00:00:00.000Z");
+    await adminWrite("POST", "/api/admin/servers", { organizationId: org.id, serverId: "BAD", displayName: "Invalid range", displayMode: "RANGE" }, 400);
     await adminWrite("PATCH", "/api/admin/servers/API", { gameAddress: "example.invalid:25565", isListed: false, displayMode: "PERMANENT" });
     const password = "contract-original-password", nextPassword = "contract-changed-password", username = "contract-user";
     const account = await adminWrite("POST", "/api/admin/accounts", { displayName: "Contract user", username, password }, 201);

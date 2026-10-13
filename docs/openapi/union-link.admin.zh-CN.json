@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "0.3.0",
+    "version": "0.3.2",
     "description": "后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。"
   },
   "servers": [
@@ -25863,7 +25863,7 @@
           "Administration"
         ],
         "summary": "登记已有 MUA server ID",
-        "description": "仅超管且检查 ORG_EDIT。使用已有 3–5 位字母 ID，不另造 ID。server-mottos/ 对象键须通过真实图片接口设置。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
+        "description": "仅超管且检查 ORG_EDIT。使用已有 3–5 位字母 ID，不另造 ID。登记时可选 displayMode=PERMANENT 或 RANGE，省略默认永久；区间须提供带时区的开始与结束时间且开始早于结束，永久模式时间须为空。server-mottos/ 对象键须通过真实图片接口设置。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
         "security": [
           {
             "SessionCookie": []
@@ -25951,6 +25951,27 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "displayMode": {
+                    "type": "string",
+                    "enum": [
+                      "PERMANENT",
+                      "RANGE"
+                    ]
+                  },
+                  "displayStartsAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "displayEndsAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
                   }
                 },
                 "required": [
@@ -26200,7 +26221,7 @@
           "Administration"
         ],
         "summary": "编辑服务器资料和展示配置",
-        "description": "SERVER_EDIT 可改资料；sortOrder、themeColor、isListed、displayMode、displayStartsAt、displayEndsAt 仅超管。RANGE 要求有效起止时间且开始早于结束；PERMANENT 清空区间。时间字段为 UTC／带时区 ISO 8601，网页以北京时间编辑。不能用此接口替换 server-mottos/ 图片对象。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
+        "description": "SERVER_EDIT 可修改范围内资料、themeColor、displayMode、displayStartsAt、displayEndsAt；sortOrder、isListed 仍仅超管。RANGE 要求有效起止时间且开始早于结束；PERMANENT 清空区间。时间字段为 UTC／带时区 ISO 8601，网页以北京时间编辑。不能用此接口替换 server-mottos/ 图片对象。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
         "security": [
           {
             "SessionCookie": []

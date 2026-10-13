@@ -50,7 +50,7 @@ test("scheduled display uses Beijing time, validates calendar dates and shows tr
   assert.equal(renderToStaticMarkup(<DisplayScheduleNote schedule={{ ...server, displayMode: "PERMANENT" }} />), "");
   state.actor.isSuperAdmin = false; server.permissions = ["SERVER_READ", "SERVER_EDIT"];
   const limited = editor(state, server);
-  assert(limited.includes("区间展示：")); assert(!limited.includes('name="displayStartsAt"'));
+  assert(limited.includes("区间展示：")); assert(limited.includes('name="displayStartsAt"'));
 });
 
 test("upload size setting is shown only to the MUA superadmin with MB units and the 1024 default", () => {
@@ -87,7 +87,23 @@ test("organization and server editors see detail controls without global listing
     const { state, server } = fixture([...rolePermissions[role]]);
     const html = editor(state, server);
     assert(html.includes('name="displayName"'), role); assert(html.includes('name="gameAddress"'), role);
-    for (const forbidden of ['name="sortOrder"', 'name="themeColor"', ">标记上架<", 'aria-label="归档管理"']) assert(!html.includes(forbidden), `${role}: ${forbidden}`);
+    assert(html.includes("展示颜色")); assert(html.includes("#123456")); assert(html.includes("展示模式")); assert(html.includes("永久展示"));
+    assert(html.includes('name="themeColor"'));
+    for (const forbidden of ['name="sortOrder"', ">标记上架<", 'aria-label="归档管理"']) assert(!html.includes(forbidden), `${role}: ${forbidden}`);
+  }
+});
+
+test("superadmin registration chooses a display mode and scoped editors can change color and display windows", () => {
+  const { state, server } = fixture([], true);
+  const registration = renderToStaticMarkup(<AdminProvider initial={state}><ServerEditorContent onSaved={() => {}} /></AdminProvider>);
+  assert(registration.includes("展示模式")); assert(registration.includes("区间仅控制目录展示"));
+  assert(!registration.includes('name="displayStartsAt"')); assert(!registration.includes('name="themeColor"'));
+  server.displayMode = "RANGE"; server.displayStartsAt = new Date("2026-10-13T00:00:00Z"); server.displayEndsAt = new Date("2026-10-14T00:00:00Z");
+  for (const role of ["ORG_ADMIN", "SERVER_ADMIN", "SERVER_EDITOR"] as const) {
+    state.actor.isSuperAdmin = false; server.permissions = [...rolePermissions[role]];
+    const html = editor(state, server);
+    assert(html.includes("区间展示")); assert(html.includes("#123456")); assert(html.includes("2026"));
+    assert(html.includes('name="displayStartsAt"')); assert(html.includes('name="themeColor"'));
   }
 });
 

@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { readFile, readdir } from "node:fs/promises";
 import sharp from "sharp";
 import type { State, Server } from "../../src/components/admin/provider";
+import { rolePermissions } from "../../src/lib/roles";
 
 async function credentials() {
   if (process.env.SMOKE_USERNAME && process.env.SMOKE_PASSWORD) return { username: process.env.SMOKE_USERNAME, password: process.env.SMOKE_PASSWORD };
@@ -22,7 +23,7 @@ test("motto fills the table cell in both themes, editor shows the whole image an
     const state: State = await (await page.request.get("/api/admin/state")).json();
     const server: Server = {
       serverId: "MOV", organizationId: "00000000-0000-4000-8000-000000000001", displayName: "Cinema fixture", description: "Browser-only fixture",
-      gameAddress: "", iconObjectKey: "fixture", mottoImageUrl: "/api/admin/servers/MOV/motto-image?version=fixture", sortOrder: 0, themeColor: null,
+      gameAddress: "", iconObjectKey: "fixture", mottoImageUrl: "/api/admin/servers/MOV/motto-image?version=fixture", sortOrder: 0, themeColor: "#123456",
       isListed: false, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null, archivedAt: null, clientArchivedAt: null,
       currentReleaseId: null, currentReleaseActive: false, publicationRevision: 0, boundClientId: null, boundClientName: null, permissions: ["SERVER_READ", "SERVER_EDIT"],
     };
@@ -88,7 +89,48 @@ test("motto fills the table cell in both themes, editor shows the whole image an
     await page.getByRole("button", { name: "重置选区", exact: true }).click();
     expect(Number(await selection.getAttribute("width")) / Number(await selection.getAttribute("height"))).toBeCloseTo(2.35, 6);
     await grid.screenshot({ path: ".local/motto-crop.png" });
-    await page.keyboard.press("Escape"); await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape"); await expect(grid).toHaveCount(0);
+    await page.keyboard.press("Escape"); await expect(editor).toHaveCount(0);
+    let registration: Record<string, unknown> | undefined;
+    await page.route("**/api/admin/servers", async route => { registration = route.request().postDataJSON(); await route.fulfill({ json: { serverId: "REG" }, status: 201 }); });
+    await page.getByRole("button", { name: "登记服务器", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("MUA server ID", { exact: true }).fill("REG");
+    await dialog.getByLabel("显示别名", { exact: true }).fill("Registration fixture");
+    await dialog.getByRole("combobox", { name: "展示模式", exact: true }).click();
+    await page.getByRole("option", { name: "区间展示", exact: true }).click();
+    await dialog.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(dialog.getByText("请选择有效展示区间，结束时间须晚于开始时间", { exact: true })).toBeVisible();
+    expect(registration).toBeUndefined();
+    await dialog.getByLabel("展示开始时间（北京时间）", { exact: true }).fill("2026-10-13T08:00");
+    await dialog.getByLabel("展示结束时间（北京时间）", { exact: true }).fill("2026-10-14T08:00");
+    await dialog.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(registration).toMatchObject({ displayMode: "RANGE", displayStartsAt: "2026-10-13T00:00:00.000Z", displayEndsAt: "2026-10-14T00:00:00.000Z" });
+    let edited: Record<string, unknown> | undefined;
+    await page.route("**/api/admin/servers/MOV", async route => { edited = route.request().postDataJSON(); await route.fulfill({ json: { ok: true } }); });
+    for (const role of ["ORG_ADMIN", "SERVER_ADMIN", "SERVER_EDITOR"] as const) {
+      state.actor.isSuperAdmin = false; server.permissions = [...rolePermissions[role]];
+      await page.getByRole("button", { name: "刷新数据", exact: true }).click();
+      await page.getByRole("button", { name: "编辑", exact: true }).click();
+      await expect(dialog.getByText("展示模式", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("永久展示", { exact: true }).first()).toBeVisible();
+      await expect(dialog.getByText("#123456", { exact: true })).toBeVisible();
+      await expect(dialog.getByRole("combobox", { name: "展示模式", exact: true })).toBeVisible();
+      await dialog.getByLabel("展示颜色", { exact: true }).fill("#654321");
+      await dialog.getByRole("combobox", { name: "展示模式", exact: true }).click();
+      await page.getByRole("option", { name: "区间展示", exact: true }).click();
+      await dialog.getByLabel("展示开始时间（北京时间）", { exact: true }).fill("2026-10-13T08:00");
+      await dialog.getByLabel("展示结束时间（北京时间）", { exact: true }).fill("2026-10-14T08:00");
+      await expect(dialog.locator('input[name="sortOrder"]')).toHaveCount(0);
+      edited = undefined;
+      await dialog.getByRole("button", { name: "保存", exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(edited).toMatchObject({ themeColor: "#654321", displayMode: "RANGE", displayStartsAt: "2026-10-13T00:00:00.000Z", displayEndsAt: "2026-10-14T00:00:00.000Z" });
+      expect(edited).not.toHaveProperty("sortOrder"); expect(edited).not.toHaveProperty("isListed");
+    }
+    state.actor.isSuperAdmin = true;
+    await page.getByRole("button", { name: "刷新数据", exact: true }).click();
     await page.goto("/admin/system/settings");
     await expect(page.getByText("已接入 · 保留应用层 RBAC", { exact: true })).toBeVisible();
     await page.goto("/admin/permissions");

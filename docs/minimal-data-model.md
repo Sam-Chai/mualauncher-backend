@@ -1,6 +1,6 @@
 # 最小数据库模型
 
-2026-10-12：Server 新增 displayMode（默认 PERMANENT）、displayStartsAt、displayEndsAt，独立控制目录展示区间，保留 isListed 原有公开分发开关语义。数据库检查 RANGE 起止有效且有序，展示设置仅超管面板会话可写。见 [服务器展示时间](server-display-schedule.md)。
+2026-10-12：Server 新增 displayMode（默认 PERMANENT）、displayStartsAt、displayEndsAt，独立控制目录展示区间，保留 isListed 原有公开分发开关语义。数据库检查 RANGE 起止有效且有序，展示颜色与模式／时间由范围内 SERVER_EDIT 面板账号可写，排序和上架仍限超管。见 [服务器展示时间](server-display-schedule.md)。
 
 2026-10-12 平台无关修订：新 muapack v2 的 target-manifest 与 mua-pack.json 均使用 protocolRevision:2，不含 supportedPlatforms／platformsChanged，不按平台限制完整包或更新包；环境兼容性由 Launcher 判断。universal 仅是后台任务标识。旧数据库平台列保留历史兼容，新草稿为空；历史非空草稿、清单、READY 字节和签名不改写，旧目标仍按原规则读取。数据库迁移为 202610120004_v2_platform_independent，v1 平台机制保留。此说明优先于下文历史六平台／平台修改描述。
 
@@ -105,7 +105,7 @@ ClientDraft 增加不可变 versionSequence、同客户端 replacesDraftId、arc
 
 账号／成员停用，授权撤销保留行与审计；组织、服务器、草稿和发布归档。已归档下架且无实际／待服务器绑定、无活动 Worker 任务的客户端可删除，无论是否曾发布，保留不可恢复标记、不可变发布／签名历史和审计，文件由 Worker 回收。客户端 lifecycleStatus 以归档优先，currentReleaseId 仅保留最近版本选择，不代替公开分发的绑定与状态检查。解绑保留当前版本和历史；归档客户端清除绑定，恢复不自动重新分发。归档组织／服务器也清除绑定并下架。归档自身不移动文件；删除与回收见[回收站规则](client-recycle.md)。
 
-审核、签名发布、版本切换、绑定分别检查权限。组织管理员默认管理和绑定本组织资源，不默认获得审核／发布／切换能力。全局排序、颜色、上架和全局审计仅超管。RLS 已实现，以独立受限角色和事务局部身份上下文做第二层行级保护；现有服务端校验继续保留，见[部署说明](postgresql-rls.md)。
+审核、签名发布、版本切换、绑定分别检查权限。组织管理员默认管理和绑定本组织资源，不默认获得审核／发布／切换能力。全局排序、上架和全局审计仅超管，颜色与展示模式／时间由 SERVER_EDIT 授权。RLS 已实现，以独立受限角色和事务局部身份上下文做第二层行级保护；现有服务端校验继续保留，见[部署说明](postgresql-rls.md)。
 
 迁移 202610090001_independent_clients 保留旧客户端 ID、草稿、Release、上传和签名对象；同组织旧名称重复时增加 ID 后缀以保留所有历史。旧容器的当前发布和授权来源迁移到 Client。
 

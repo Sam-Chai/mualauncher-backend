@@ -47,29 +47,34 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
   const canEdit = !archived && (superAdmin || !!server?.permissions.includes("SERVER_EDIT"));
   const listing = !!server && superAdmin;
   const base = { displayName: nameSchema, description: textSchema(), gameAddress: textSchema(255) };
+  const scheduleFields = { displayMode: z.enum(["PERMANENT", "RANGE"]), displayStartsAt: z.string(), displayEndsAt: z.string() };
+  const colorField = { themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, t("请输入 #RRGGBB 或留空")) };
   const listingFields = {
-    displayMode: z.enum(["PERMANENT", "RANGE"]), displayStartsAt: z.string(), displayEndsAt: z.string(),
     sortOrder: z.string().refine(value => value.trim() !== "" && Number.isSafeInteger(Number(value)) && Math.abs(Number(value)) <= 2147483647, t("请输入有效排序整数")),
-    themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, t("请输入 #RRGGBB 或留空")), isListed: z.boolean(),
+    isListed: z.boolean(),
   };
-  const schema = server ? listing ? z.object(base).extend(listingFields).superRefine((value, ctx) => {
+  const profileSchema = z.object(base).extend(scheduleFields);
+  const validateSchedule = (value: z.infer<typeof profileSchema>, ctx: z.RefinementCtx) => {
     if (value.displayMode === "RANGE") {
       const start = displayTimeIso(value.displayStartsAt), end = displayTimeIso(value.displayEndsAt);
       if (!start || !end || start >= end) ctx.addIssue({ code: "custom", path: ["displayEndsAt"], message: t("请选择有效展示区间，结束时间须晚于开始时间") });
     }
-  }) : z.object(base)
-    : z.object(base).extend({ organizationId: z.string().uuid(t("请选择组织")), serverId: z.string().regex(/^[A-Za-z]{3,5}$/, t("ID 须为已有的 3–5 位英文字母")) });
+  };
+  const schema = server ? listing ? profileSchema.extend({ ...colorField, ...listingFields }).superRefine(validateSchedule) : profileSchema.extend(colorField).superRefine(validateSchedule)
+    : profileSchema.extend({ organizationId: z.string().uuid(t("请选择组织")), serverId: z.string().regex(/^[A-Za-z]{3,5}$/, t("ID 须为已有的 3–5 位英文字母")) }).superRefine(validateSchedule);
   const fields: Field[] = [
     ...(!server ? [{ name: "organizationId", label: t("所属组织"), type: "select" as const, options: organizations.filter(org => !org.archivedAt).map(org => ({ value: org.id, label: org.displayName, translate: false })) }, { name: "serverId", label: "MUA server ID", hint: t("使用已有 MUA ID，创建后不可更改。"), placeholder: "NPUR" }] : []),
     { name: "displayName", label: t("显示别名"), placeholder: "NPU RELEASE" },
     { name: "description", label: t("简介"), type: "textarea" },
     { name: "gameAddress", label: t("连接地址"), placeholder: "play.example.edu:25565" },
-    ...(listing ? [
+    ...(canEdit ? [
       { name: "displayMode", label: t("展示模式"), type: "select" as const, options: [{ value: "PERMANENT", label: t("永久展示") }, { value: "RANGE", label: t("区间展示") }], hint: t("区间仅控制目录展示，到期不会下架客户端或停止下载。") },
       { name: "displayStartsAt", label: t("展示开始时间（北京时间）"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" } },
       { name: "displayEndsAt", label: t("展示结束时间（北京时间）"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" }, hint: t("包含开始时间，不包含结束时间。") },
+    ] : []),
+    ...(server && canEdit ? [{ name: "themeColor", label: t("展示颜色"), placeholder: "#3b82f6" }] : []),
+    ...(listing ? [
       { name: "sortOrder", label: t("排序"), type: "number" as const, hint: t("数字越小，在 Launcher 中越靠前。") },
-      { name: "themeColor", label: t("展示颜色"), placeholder: "#3b82f6" },
       { name: "isListed", label: t("标记上架"), type: "checkbox" as const, hint: t("只有存在有效当前发布且组织、服务器、客户端均启用时，才会出现在公开列表。") },
     ] : []),
   ];
@@ -83,6 +88,8 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
         <dt className="text-muted-foreground">{t("资源状态")}</dt><dd>{organization?.archivedAt ? t("组织已归档") : server.archivedAt ? t("服务器已归档") : t("启用中")}</dd>
         <dt className="text-muted-foreground">{t("上架标记")}</dt><dd>{server.isListed ? t("已标记上架") : t("未上架")}</dd>
         <dt className="text-muted-foreground">{t("目录状态")}</dt><dd>{t(directoryStatus(server, !!organization?.archivedAt))}</dd>
+        <dt className="text-muted-foreground">{t("展示模式")}</dt><dd>{t(server.displayMode === "RANGE" ? "区间展示" : "永久展示")}</dd>
+        <dt className="text-muted-foreground">{t("展示颜色")}</dt><dd><code>{server.themeColor || t("默认")}</code></dd>
         <dt className="text-muted-foreground">{t("连接探测")}</dt><dd><ServerStatusLight serverId={server.serverId} address={server.gameAddress} archived={archived} showLabel /></dd>
         <dt className="text-muted-foreground">{t("当前客户端")}</dt><dd className="break-words">{server.boundClientName || t("未绑定")} · {t(releaseStatus(server))}<DisplayScheduleNote schedule={server} /></dd>
       </dl>
@@ -91,10 +98,11 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
     <ServerMottoField server={server} editable={canEdit} pending={pendingMotto} onPrepare={setPendingMotto} />
     {canEdit ? <SchemaForm key={server?.serverId ?? "new"} schema={schema} fields={fields} disabled={busy} defaults={{
       displayName: server?.displayName ?? "", description: server?.description ?? "", gameAddress: server?.gameAddress ?? "",
-      ...(server ? listing ? { displayMode: server.displayMode, displayStartsAt: displayTimeInput(server.displayStartsAt), displayEndsAt: displayTimeInput(server.displayEndsAt), sortOrder: String(server.sortOrder), themeColor: server.themeColor ?? "", isListed: server.isListed } : {}
+      ...(canEdit ? { displayMode: server?.displayMode ?? "PERMANENT", displayStartsAt: displayTimeInput(server?.displayStartsAt ?? null), displayEndsAt: displayTimeInput(server?.displayEndsAt ?? null) } : {}),
+      ...(server ? { themeColor: server.themeColor ?? "", ...(listing ? { sortOrder: String(server.sortOrder), isListed: server.isListed } : {}) }
         : { serverId: "", organizationId: organizations.find(org => !org.archivedAt)?.id ?? "" }),
     }} onSubmit={async values => {
-      const payload = { ...values, ...(listing ? { sortOrder: Number(values.sortOrder), displayStartsAt: values.displayMode === "RANGE" ? displayTimeIso(String(values.displayStartsAt)) : null, displayEndsAt: values.displayMode === "RANGE" ? displayTimeIso(String(values.displayEndsAt)) : null } : {}) };
+      const payload = { ...values, ...(listing ? { sortOrder: Number(values.sortOrder) } : {}), ...(canEdit ? { displayStartsAt: values.displayMode === "RANGE" ? displayTimeIso(String(values.displayStartsAt)) : null, displayEndsAt: values.displayMode === "RANGE" ? displayTimeIso(String(values.displayEndsAt)) : null } : {}) };
       const ok = await run(async () => {
         let serverId = server?.serverId ?? createdServerId;
         if (!serverId) {
@@ -114,7 +122,6 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
       <dt className="text-muted-foreground">{t("简介")}</dt><dd className="whitespace-pre-wrap break-words">{server.description || t("未设置")}</dd>
       <dt className="text-muted-foreground">{t("连接地址")}</dt><dd className="break-all">{server.gameAddress || t("未设置")}</dd>
       <dt className="text-muted-foreground">{t("排序")}</dt><dd>{server.sortOrder}</dd>
-      <dt className="text-muted-foreground">{t("展示颜色")}</dt><dd>{server.themeColor || t("默认")}</dd>
     </dl>}
     {server && superAdmin && <section className="flex items-center justify-between gap-4 border-t pt-4" aria-label={t("归档管理")}>
       <div><h3 className="text-sm font-medium">{server.archivedAt ? t("恢复服务器") : t("归档服务器")}</h3><p className="text-xs text-muted-foreground">{server.archivedAt ? t("恢复后需重新绑定客户端并确认上架。") : t("停止分发，保留服务器记录与历史。")}</p></div>

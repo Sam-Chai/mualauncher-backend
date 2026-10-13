@@ -137,11 +137,11 @@
   ],
   "createServer": [
     "Register an existing MUA server ID",
-    "Superadmin plus ORG_EDIT. Uses the existing 3-5-letter server ID, not a new identity system. server-mottos/ image keys must be set via the image upload endpoint."
+    "Superadmin only with ORG_EDIT. Register an existing 3–5 letter MUA ID. Choose displayMode PERMANENT or RANGE during registration; omission defaults to permanent. Range requires timezone-qualified start and end timestamps with start before end. Permanent timestamps must be null or omitted. Managed server-mottos/ keys must be set through the image endpoint."
   ],
   "updateServer": [
     "Edit server details and display settings",
-    "SERVER_EDIT edits details. sortOrder/themeColor/isListed/displayMode/displayStartsAt/displayEndsAt additionally require superadmin. RANGE needs valid ordered times; PERMANENT clears the range. API times include a timezone; the panel uses Beijing time. server-mottos/ image replacement must use its dedicated endpoint."
+    "Scoped SERVER_EDIT allows profile, color and permanent/range display settings. Sort order and listing still require a superadmin panel session. A range needs valid timezone-qualified start and end with start before end; changing to PERMANENT clears the range. Display settings affect directory visibility only, not client activation, binding or download. Managed server-mottos/ references must use the image endpoint."
   ],
   "archiveOrganization": [
     "Archive or restore an organization",

@@ -1,4 +1,5 @@
 {
+  "prisma/migrations/202610130001_server_display_editor_permissions/migration.sql": "b3be29bbb700f793cc8e99e72f19bbed4653c13fd7d9fead58da09459e538f96",
   "prisma/schema.prisma": "bebbf1705cf1ccb0e9a14b814fe49771ab6c791b9b32ce545d80f15ea27a5b9f",
   "src/app/api/admin/[...path]/route.ts": "59ee8d1aef86630fe586a3254506ef0d285b98d3faaa140ba5084188a81b1c2d",
   "src/app/api/admin/servers/[serverId]/motto-image/route.ts": "4539e1cb8817f7033363f85b40151a6d41b0148fdafcc0a7331cadcc8cd2c894",
@@ -18,7 +19,7 @@
   "src/lib/http.ts": "a4804bd3328d99223acdbc87b44cc744359714344baf04bd9a12a0b5fe429d23",
   "src/lib/infrastructure.ts": "2991c9cda75108ec9ca8963e51fdb2377a1042b0e0c89afa8a8cf3ab506d688a",
   "src/lib/input.ts": "75363a37c50046700a08d1004cd4097ad6d296e6265575abe824a3e4ddd9c9e0",
-  "src/lib/management.ts": "9eb75b8f03302fc8e41f50c3214d73edc8fe85910f30828774356c885e254e7c",
+  "src/lib/management.ts": "328784ecbeb95fd79b2d9ff0ce27ae2876056530990ad3762d58656e9a02881c",
   "src/lib/muapack-contract.ts": "a4f142a6d163886ce63b5cbc28e724e295ad31a4ae5efa92cdbda8d8cce9219e",
   "src/lib/muapack-v2-contract.ts": "73e3c9d32eb88a212c81f5a745443edef1848aca6a4f9370fee9e6b1f9a8ca1c",
   "src/lib/package-build-service.ts": "dfff93de4e2085ec349284d381fe407e55bd01d6b1f57882ec66db9ce82a36c6",
