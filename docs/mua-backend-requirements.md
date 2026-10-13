@@ -2,6 +2,8 @@
 
 2026-10-13 项目命名：网站和项目统一使用唯一名称“Union Link”，中英文界面保持相同名称；浏览器标题、登录页、管理侧栏及项目说明同步使用。项目名称由 `src/lib/branding.ts` 统一定义。
 
+2026-10-13 API 文档第 1–7 步：用户已授权并接入 66 个实际操作的 OpenAPI 3.1 中英文完整契约、后台内嵌 Scalar 与左侧 `API`。覆盖客户端上传到发布、后台与认证、权限／修订／状态、图片表单与二进制，新增路由／规范／兼容性及真实契约校验和 CI。完整 JSON 逐请求检查后台 Cookie；公开规范仅五个 Launcher GET，CI 只上传公开产物。云端 Registry／站点未接入，远端 CI 尚须提交触发。见 [接入与验证](openapi.md)、[完整操作顺序](api-workflows.md)。
+
 2026-10-12：最新展示时间需求已实现：扩展服务器配置和目录 API，支持永久／区间展示，由网页后台设定时间；展示结束只隐藏目录，不自动下架客户端，不改变绑定／当前发布／下载。后台客户端状态下方显示“区间展示：开始时间-结束时间”。Launcher UI 布局暂不实现。见 [服务器展示时间](server-display-schedule.md)。
 
 2026-10-12 平台无关修订：新 muapack v2 的 target-manifest 与 mua-pack.json 均使用 protocolRevision:2，不含 supportedPlatforms／platformsChanged，不按平台限制完整包或更新包；环境兼容性由 Launcher 判断。universal 仅是后台任务标识。旧数据库平台列保留历史兼容，新草稿为空；历史非空草稿、清单、READY 字节和签名不改写，旧目标仍按原规则读取。数据库迁移为 202610120004_v2_platform_independent，v1 平台机制保留。此说明优先于下文历史六平台／平台修改描述。

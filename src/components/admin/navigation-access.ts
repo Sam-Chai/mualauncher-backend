@@ -11,6 +11,7 @@ export function visiblePaths(state: NavigationState) {
     state.organizations.some(organization => organization.permissions.includes(permission) || organization.servers.some(server => server.permissions.includes(permission)));
   const canSee = {
     "/admin": true,
+    "/admin/api": true,
     "/admin/organizations": organizationPermission("ORG_EDIT"),
     "/admin/members": organizationPermission("ORG_MEMBERS_READ"),
     "/admin/permissions": organizationPermission("ORG_MEMBERS_READ"),

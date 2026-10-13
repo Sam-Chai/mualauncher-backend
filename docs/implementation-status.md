@@ -1,5 +1,7 @@
 # 实施进度
 
+2026-10-13：OpenAPI 第 1–7 步已接入，66 个实际操作完整覆盖客户端自动化、后台、认证及 Launcher，中英文规范与后台内嵌 Scalar 默认完整文档，可切换公开规范。公开入口仍仅五个 Launcher GET，完整 JSON 逐请求校验 Cookie，业务 RBAC／RLS 保留。新增真实 HTTP 请求／响应契约、路由覆盖／源码／兼容性检查、构建与浏览器回归和 CI 公开 JSON artifact 流程；工作流远端执行须提交后触发。Registry／云端站点未接入。见 [接入与验证](openapi.md)、[完整客户端流程](api-workflows.md)、[兼容性](openapi-changelog.md)。
+
 2026-10-12：服务器永久／区间展示已接入：超管网页配置北京时间、数据库约束及权限、公开目录按当前时间过滤、客户端状态区间小字。过期保留上架开关、绑定和下载；Launcher UI 布局未改。迁移 202610120005_server_display_schedule，见 [服务器展示时间](server-display-schedule.md)。
 
 更新时间：2026-10-12。当前阶段已完成 .minecraft ZIP、Modrinth mrpack 和 PCL 封装的上传／更新，及审核发布、muapack 组包、环境镜像下载与 PostgreSQL RLS。本文区分实际运行功能与后续工作；详细协议见[客户端上传文档](client-upload-api.md)、[Modrinth 导入](modrinth-import.md)、[环境下载源](environment-download-sources.md)、[Launcher 下载与刷新](launcher-download-api.md)。

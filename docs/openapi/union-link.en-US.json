@@ -1,0 +1,4824 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Union Link API",
+    "version": "0.2.0",
+    "description": "Phase one documents five public Launcher read endpoints. Client automation, administration and authentication endpoints are outside this specification. API route v1, muapack formatVersion and the document version are separate concepts. Examples, code generation and test requests are limited to the declared scope."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current site. Local, preview and production deployments use their own same-origin API."
+    }
+  ],
+  "tags": [
+    {
+      "name": "Launcher",
+      "description": "Server discovery, release manifests and download links. No login is required; the backend checks public resource eligibility on every request."
+    }
+  ],
+  "security": [],
+  "components": {
+    "securitySchemes": {
+      "SessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "mua_session",
+        "description": "Administration uses an HttpOnly session cookie; writes also require a same-origin Origin header. Establish browser sessions through login rather than manually entering cookies."
+      },
+      "ApiToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "mua_<64 lowercase hex characters>",
+        "description": "Client automation uses Bearer mua_... tokens, not JWTs. Tokens are restricted by server scope, permissions, expiry and the account's current RBAC. They do not authenticate administration endpoints."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "ServerDirectory": {
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "serverId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z]{3,5}$"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "gameAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "themeColor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sortOrder": {
+                      "type": "integer"
+                    },
+                    "organization": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "displayName"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "publicationRevision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "currentRelease": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "clientId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "versionLabel": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "manifestSha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "packageFormatVersion": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            }
+                          ]
+                        },
+                        "manifestUrl": {
+                          "type": "string"
+                        },
+                        "packagesUrl": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "clientId",
+                        "versionLabel",
+                        "name",
+                        "manifestSha256",
+                        "packageFormatVersion",
+                        "manifestUrl",
+                        "packagesUrl"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "displayMode": {
+                      "type": "string",
+                      "enum": [
+                        "PERMANENT"
+                      ]
+                    },
+                    "displayStartsAt": {
+                      "type": "null"
+                    },
+                    "displayEndsAt": {
+                      "type": "null"
+                    }
+                  },
+                  "required": [
+                    "serverId",
+                    "displayName",
+                    "description",
+                    "gameAddress",
+                    "themeColor",
+                    "sortOrder",
+                    "organization",
+                    "publicationRevision",
+                    "currentRelease",
+                    "displayMode",
+                    "displayStartsAt",
+                    "displayEndsAt"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "serverId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z]{3,5}$"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "gameAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "themeColor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sortOrder": {
+                      "type": "integer"
+                    },
+                    "organization": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "displayName"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "publicationRevision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "currentRelease": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "clientId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "versionLabel": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "manifestSha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "packageFormatVersion": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            }
+                          ]
+                        },
+                        "manifestUrl": {
+                          "type": "string"
+                        },
+                        "packagesUrl": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "clientId",
+                        "versionLabel",
+                        "name",
+                        "manifestSha256",
+                        "packageFormatVersion",
+                        "manifestUrl",
+                        "packagesUrl"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "displayMode": {
+                      "type": "string",
+                      "enum": [
+                        "RANGE"
+                      ]
+                    },
+                    "displayStartsAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "displayEndsAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "serverId",
+                    "displayName",
+                    "description",
+                    "gameAddress",
+                    "themeColor",
+                    "sortOrder",
+                    "organization",
+                    "publicationRevision",
+                    "currentRelease",
+                    "displayMode",
+                    "displayStartsAt",
+                    "displayEndsAt"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "servers"
+        ],
+        "additionalProperties": false
+      },
+      "LegacyClientManifest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mua-client-manifest"
+                ]
+              },
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string"
+                  },
+                  "java": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "java"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "modDetails": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "optional"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "summary": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "sourceSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "policy": {
+                      "type": "string",
+                      "enum": [
+                        "managed",
+                        "preserve"
+                      ]
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256",
+                    "size",
+                    "policy"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "update": {
+                "type": "object",
+                "properties": {
+                  "previousVersion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "addedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "modifiedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "deletedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "fullSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "newDataSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "estimatedDownloadSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "casReusePercent": {
+                    "type": "number"
+                  },
+                  "fileCount": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sourceSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "previousVersion",
+                  "addedFiles",
+                  "modifiedFiles",
+                  "deletedFiles",
+                  "fullSize",
+                  "newDataSize",
+                  "estimatedDownloadSize",
+                  "casReusePercent",
+                  "fileCount",
+                  "sourceSize"
+                ],
+                "additionalProperties": false
+              },
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "serverId": {
+                "type": "string",
+                "pattern": "^[A-Za-z]{3,5}$"
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "format",
+              "organizationId",
+              "version",
+              "name",
+              "runtime",
+              "mods",
+              "summary",
+              "description",
+              "sourceSha256",
+              "files",
+              "update",
+              "schemaVersion",
+              "serverId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mua-client-manifest"
+                ]
+              },
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string"
+                  },
+                  "java": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "java"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "modDetails": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "optional"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "summary": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "sourceSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "policy": {
+                      "type": "string",
+                      "enum": [
+                        "managed",
+                        "preserve"
+                      ]
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256",
+                    "size",
+                    "policy"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "update": {
+                "type": "object",
+                "properties": {
+                  "previousVersion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "addedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "modifiedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "deletedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "fullSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "newDataSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "estimatedDownloadSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "casReusePercent": {
+                    "type": "number"
+                  },
+                  "fileCount": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sourceSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "previousVersion",
+                  "addedFiles",
+                  "modifiedFiles",
+                  "deletedFiles",
+                  "fullSize",
+                  "newDataSize",
+                  "estimatedDownloadSize",
+                  "casReusePercent",
+                  "fileCount",
+                  "sourceSize"
+                ],
+                "additionalProperties": false
+              },
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "serverId": {
+                "type": "string",
+                "pattern": "^[A-Za-z]{3,5}$"
+              }
+            },
+            "required": [
+              "format",
+              "organizationId",
+              "version",
+              "name",
+              "runtime",
+              "mods",
+              "summary",
+              "description",
+              "sourceSha256",
+              "files",
+              "update",
+              "schemaVersion",
+              "clientId"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "RecipeManifest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mua-recipe-manifest"
+                ]
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "release": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "releaseId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  "sourceSha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "contentRevision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "organizationId",
+                  "clientId",
+                  "releaseId",
+                  "version",
+                  "name",
+                  "summary",
+                  "description",
+                  "sourceSha256",
+                  "contentRevision"
+                ],
+                "additionalProperties": false
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "loader": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "fabric",
+                          "quilt",
+                          "forge",
+                          "neoforge"
+                        ]
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "java": {
+                    "type": "object",
+                    "properties": {
+                      "major": {
+                        "type": "integer",
+                        "minimum": 7,
+                        "maximum": 25
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "enum": [
+                          "adoptium"
+                        ]
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "enum": [
+                          "jre",
+                          "jdk"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "major",
+                      "vendor",
+                      "imageType"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "resolverVersion": {
+                    "type": "string",
+                    "enum": [
+                      "mua-runtime-resolver-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "loader",
+                  "java",
+                  "resolverVersion"
+                ],
+                "additionalProperties": false
+              },
+              "launch": {
+                "type": "object",
+                "properties": {
+                  "jvmArgs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "maxItems": 256
+                  },
+                  "gameArgs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "maxItems": 256
+                  },
+                  "memory": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "auto"
+                        ]
+                      },
+                      "minimumMiB": {
+                        "type": "integer",
+                        "minimum": 256,
+                        "maximum": 1048576
+                      },
+                      "recommendedMiB": {
+                        "type": "integer",
+                        "minimum": 256,
+                        "maximum": 1048576
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "minimumMiB",
+                      "recommendedMiB"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "preLaunch": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "mkdir"
+                              ]
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "path"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "copy"
+                              ]
+                            },
+                            "from": {
+                              "type": "object",
+                              "properties": {
+                                "root": {
+                                  "type": "string",
+                                  "enum": [
+                                    "instance"
+                                  ]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "path"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "ifMissing": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "from",
+                            "to",
+                            "ifMissing"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exec"
+                              ]
+                            },
+                            "executable": {
+                              "type": "object",
+                              "properties": {
+                                "root": {
+                                  "type": "string",
+                                  "enum": [
+                                    "instance"
+                                  ]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "path"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "args": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "maxItems": 256
+                            },
+                            "workingDirectory": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "requiresConsent": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "timeoutSeconds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 300
+                            },
+                            "onFailure": {
+                              "type": "string",
+                              "enum": [
+                                "abort",
+                                "continue"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "executable",
+                            "args",
+                            "workingDirectory",
+                            "requiresConsent",
+                            "timeoutSeconds",
+                            "onFailure"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "maxItems": 32
+                  }
+                },
+                "required": [
+                  "jvmArgs",
+                  "gameArgs",
+                  "memory",
+                  "preLaunch"
+                ],
+                "additionalProperties": false
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 2147483648
+                        },
+                        "policy": {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "preserve"
+                          ]
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "executable": {
+                          "type": "boolean"
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "local"
+                              ]
+                            },
+                            "entry": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "entry"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "size",
+                        "policy",
+                        "optional",
+                        "executable",
+                        "hashes",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 2147483648
+                        },
+                        "policy": {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "preserve"
+                          ]
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "executable": {
+                          "type": "boolean"
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha1": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{40}$"
+                            },
+                            "sha512": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{128}$"
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha1",
+                            "sha512"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "remote"
+                              ]
+                            },
+                            "downloads": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "minItems": 1,
+                              "maxItems": 10
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "downloads"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "size",
+                        "policy",
+                        "optional",
+                        "executable",
+                        "hashes",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 100000
+              },
+              "protocolRevision": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              }
+            },
+            "required": [
+              "format",
+              "formatVersion",
+              "release",
+              "runtime",
+              "launch",
+              "files",
+              "protocolRevision"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mua-recipe-manifest"
+                ]
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "release": {
+                "type": "object",
+                "properties": {
+                  "organizationId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "releaseId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "summary": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  "sourceSha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "contentRevision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "organizationId",
+                  "clientId",
+                  "releaseId",
+                  "version",
+                  "name",
+                  "summary",
+                  "description",
+                  "sourceSha256",
+                  "contentRevision"
+                ],
+                "additionalProperties": false
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "loader": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "fabric",
+                          "quilt",
+                          "forge",
+                          "neoforge"
+                        ]
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "java": {
+                    "type": "object",
+                    "properties": {
+                      "major": {
+                        "type": "integer",
+                        "minimum": 7,
+                        "maximum": 25
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "enum": [
+                          "adoptium"
+                        ]
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "enum": [
+                          "jre",
+                          "jdk"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "major",
+                      "vendor",
+                      "imageType"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "resolverVersion": {
+                    "type": "string",
+                    "enum": [
+                      "mua-runtime-resolver-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "loader",
+                  "java",
+                  "resolverVersion"
+                ],
+                "additionalProperties": false
+              },
+              "launch": {
+                "type": "object",
+                "properties": {
+                  "jvmArgs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "maxItems": 256
+                  },
+                  "gameArgs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 4000
+                    },
+                    "maxItems": 256
+                  },
+                  "memory": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "auto"
+                        ]
+                      },
+                      "minimumMiB": {
+                        "type": "integer",
+                        "minimum": 256,
+                        "maximum": 1048576
+                      },
+                      "recommendedMiB": {
+                        "type": "integer",
+                        "minimum": 256,
+                        "maximum": 1048576
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "minimumMiB",
+                      "recommendedMiB"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "preLaunch": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "mkdir"
+                              ]
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "path"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "copy"
+                              ]
+                            },
+                            "from": {
+                              "type": "object",
+                              "properties": {
+                                "root": {
+                                  "type": "string",
+                                  "enum": [
+                                    "instance"
+                                  ]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "path"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "ifMissing": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "from",
+                            "to",
+                            "ifMissing"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "exec"
+                              ]
+                            },
+                            "executable": {
+                              "type": "object",
+                              "properties": {
+                                "root": {
+                                  "type": "string",
+                                  "enum": [
+                                    "instance"
+                                  ]
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "root",
+                                "path"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "args": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "maxItems": 256
+                            },
+                            "workingDirectory": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            "requiresConsent": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            },
+                            "timeoutSeconds": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 300
+                            },
+                            "onFailure": {
+                              "type": "string",
+                              "enum": [
+                                "abort",
+                                "continue"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "executable",
+                            "args",
+                            "workingDirectory",
+                            "requiresConsent",
+                            "timeoutSeconds",
+                            "onFailure"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "maxItems": 32
+                  }
+                },
+                "required": [
+                  "jvmArgs",
+                  "gameArgs",
+                  "memory",
+                  "preLaunch"
+                ],
+                "additionalProperties": false
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 2147483648
+                        },
+                        "policy": {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "preserve"
+                          ]
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "executable": {
+                          "type": "boolean"
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "local"
+                              ]
+                            },
+                            "entry": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "entry"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "size",
+                        "policy",
+                        "optional",
+                        "executable",
+                        "hashes",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 2147483648
+                        },
+                        "policy": {
+                          "type": "string",
+                          "enum": [
+                            "managed",
+                            "preserve"
+                          ]
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "executable": {
+                          "type": "boolean"
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha1": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{40}$"
+                            },
+                            "sha512": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{128}$"
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha1",
+                            "sha512"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "source": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "remote"
+                              ]
+                            },
+                            "downloads": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 4000
+                              },
+                              "minItems": 1,
+                              "maxItems": 10
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "downloads"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "size",
+                        "policy",
+                        "optional",
+                        "executable",
+                        "hashes",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 100000
+              },
+              "supportedPlatforms": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "windows-amd64",
+                    "windows-aarch64",
+                    "linux-amd64",
+                    "linux-aarch64",
+                    "macos-amd64",
+                    "macos-aarch64"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 6
+              }
+            },
+            "required": [
+              "format",
+              "formatVersion",
+              "release",
+              "runtime",
+              "launch",
+              "files",
+              "supportedPlatforms"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "PublicManifest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mua-client-manifest"
+                ]
+              },
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string"
+                  },
+                  "java": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "java"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "modDetails": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "optional"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "summary": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "sourceSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "policy": {
+                      "type": "string",
+                      "enum": [
+                        "managed",
+                        "preserve"
+                      ]
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256",
+                    "size",
+                    "policy"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "update": {
+                "type": "object",
+                "properties": {
+                  "previousVersion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "addedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "modifiedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "deletedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "fullSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "newDataSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "estimatedDownloadSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "casReusePercent": {
+                    "type": "number"
+                  },
+                  "fileCount": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sourceSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "previousVersion",
+                  "addedFiles",
+                  "modifiedFiles",
+                  "deletedFiles",
+                  "fullSize",
+                  "newDataSize",
+                  "estimatedDownloadSize",
+                  "casReusePercent",
+                  "fileCount",
+                  "sourceSize"
+                ],
+                "additionalProperties": false
+              },
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "serverId": {
+                "type": "string",
+                "pattern": "^[A-Za-z]{3,5}$"
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "format",
+              "organizationId",
+              "version",
+              "name",
+              "runtime",
+              "mods",
+              "summary",
+              "description",
+              "sourceSha256",
+              "files",
+              "update",
+              "schemaVersion",
+              "serverId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mua-client-manifest"
+                ]
+              },
+              "organizationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string"
+                  },
+                  "java": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "java"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "modDetails": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "optional"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "summary": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "sourceSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "policy": {
+                      "type": "string",
+                      "enum": [
+                        "managed",
+                        "preserve"
+                      ]
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "sha256",
+                    "size",
+                    "policy"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "update": {
+                "type": "object",
+                "properties": {
+                  "previousVersion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "addedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "modifiedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "deletedFiles": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "fullSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "newDataSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "estimatedDownloadSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "casReusePercent": {
+                    "type": "number"
+                  },
+                  "fileCount": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sourceSize": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "previousVersion",
+                  "addedFiles",
+                  "modifiedFiles",
+                  "deletedFiles",
+                  "fullSize",
+                  "newDataSize",
+                  "estimatedDownloadSize",
+                  "casReusePercent",
+                  "fileCount",
+                  "sourceSize"
+                ],
+                "additionalProperties": false
+              },
+              "schemaVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "clientId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "serverId": {
+                "type": "string",
+                "pattern": "^[A-Za-z]{3,5}$"
+              }
+            },
+            "required": [
+              "format",
+              "organizationId",
+              "version",
+              "name",
+              "runtime",
+              "mods",
+              "summary",
+              "description",
+              "sourceSha256",
+              "files",
+              "update",
+              "schemaVersion",
+              "clientId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "#/components/schemas/RecipeManifest"
+          }
+        ]
+      },
+      "PackageDownload": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresIn": {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "etag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refreshUrl": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "muapack"
+                ]
+              },
+              "releaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "targetManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "signingKeyId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              },
+              "full": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "expiresIn": {
+                    "type": "number",
+                    "enum": [
+                      300
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etag": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "refreshUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "expiresIn",
+                  "expiresAt",
+                  "etag",
+                  "sha256",
+                  "size",
+                  "refreshUrl"
+                ],
+                "additionalProperties": false
+              },
+              "packageType": {
+                "type": "string",
+                "enum": [
+                  "full"
+                ]
+              },
+              "baseReleaseId": {
+                "type": "null"
+              },
+              "baseManifestSha256": {
+                "type": "null"
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "platform": {
+                "type": "string",
+                "enum": [
+                  "windows-amd64",
+                  "windows-aarch64",
+                  "linux-amd64",
+                  "linux-aarch64",
+                  "macos-amd64",
+                  "macos-aarch64"
+                ]
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "version": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "name",
+                    "version",
+                    "optional"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "url",
+              "expiresIn",
+              "expiresAt",
+              "etag",
+              "sha256",
+              "size",
+              "refreshUrl",
+              "format",
+              "releaseId",
+              "version",
+              "targetManifestSha256",
+              "signingKeyId",
+              "full",
+              "packageType",
+              "baseReleaseId",
+              "baseManifestSha256",
+              "formatVersion",
+              "platform",
+              "mods"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresIn": {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "etag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refreshUrl": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "muapack"
+                ]
+              },
+              "releaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "targetManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "signingKeyId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              },
+              "full": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "expiresIn": {
+                    "type": "number",
+                    "enum": [
+                      300
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etag": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "refreshUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "expiresIn",
+                  "expiresAt",
+                  "etag",
+                  "sha256",
+                  "size",
+                  "refreshUrl"
+                ],
+                "additionalProperties": false
+              },
+              "packageType": {
+                "type": "string",
+                "enum": [
+                  "full"
+                ]
+              },
+              "baseReleaseId": {
+                "type": "null"
+              },
+              "baseManifestSha256": {
+                "type": "null"
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "minimumLauncherProtocol": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "protocolRevision": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "loader": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "fabric",
+                          "quilt",
+                          "forge",
+                          "neoforge"
+                        ]
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "java": {
+                    "type": "object",
+                    "properties": {
+                      "major": {
+                        "type": "integer",
+                        "minimum": 7,
+                        "maximum": 25
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "enum": [
+                          "adoptium"
+                        ]
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "enum": [
+                          "jre",
+                          "jdk"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "major",
+                      "vendor",
+                      "imageType"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "resolverVersion": {
+                    "type": "string",
+                    "enum": [
+                      "mua-runtime-resolver-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "loader",
+                  "java",
+                  "resolverVersion"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "local"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "remote"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha1": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{40}$"
+                            },
+                            "sha512": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{128}$"
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha1",
+                            "sha512"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "url",
+              "expiresIn",
+              "expiresAt",
+              "etag",
+              "sha256",
+              "size",
+              "refreshUrl",
+              "format",
+              "releaseId",
+              "version",
+              "targetManifestSha256",
+              "signingKeyId",
+              "full",
+              "packageType",
+              "baseReleaseId",
+              "baseManifestSha256",
+              "formatVersion",
+              "minimumLauncherProtocol",
+              "protocolRevision",
+              "runtime",
+              "mods"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresIn": {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "etag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refreshUrl": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "muapack"
+                ]
+              },
+              "releaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "targetManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "signingKeyId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              },
+              "full": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "expiresIn": {
+                    "type": "number",
+                    "enum": [
+                      300
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etag": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "refreshUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "expiresIn",
+                  "expiresAt",
+                  "etag",
+                  "sha256",
+                  "size",
+                  "refreshUrl"
+                ],
+                "additionalProperties": false
+              },
+              "packageType": {
+                "type": "string",
+                "enum": [
+                  "full"
+                ]
+              },
+              "baseReleaseId": {
+                "type": "null"
+              },
+              "baseManifestSha256": {
+                "type": "null"
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "minimumLauncherProtocol": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "platform": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "windows-amd64",
+                      "windows-aarch64",
+                      "linux-amd64",
+                      "linux-aarch64",
+                      "macos-amd64",
+                      "macos-aarch64"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "universal"
+                    ]
+                  }
+                ]
+              },
+              "supportedPlatforms": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "windows-amd64",
+                    "windows-aarch64",
+                    "linux-amd64",
+                    "linux-aarch64",
+                    "macos-amd64",
+                    "macos-aarch64"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 6
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "loader": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "fabric",
+                          "quilt",
+                          "forge",
+                          "neoforge"
+                        ]
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "java": {
+                    "type": "object",
+                    "properties": {
+                      "major": {
+                        "type": "integer",
+                        "minimum": 7,
+                        "maximum": 25
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "enum": [
+                          "adoptium"
+                        ]
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "enum": [
+                          "jre",
+                          "jdk"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "major",
+                      "vendor",
+                      "imageType"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "resolverVersion": {
+                    "type": "string",
+                    "enum": [
+                      "mua-runtime-resolver-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "loader",
+                  "java",
+                  "resolverVersion"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "local"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "remote"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha1": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{40}$"
+                            },
+                            "sha512": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{128}$"
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha1",
+                            "sha512"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "url",
+              "expiresIn",
+              "expiresAt",
+              "etag",
+              "sha256",
+              "size",
+              "refreshUrl",
+              "format",
+              "releaseId",
+              "version",
+              "targetManifestSha256",
+              "signingKeyId",
+              "full",
+              "packageType",
+              "baseReleaseId",
+              "baseManifestSha256",
+              "formatVersion",
+              "minimumLauncherProtocol",
+              "platform",
+              "supportedPlatforms",
+              "runtime",
+              "mods"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresIn": {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "etag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refreshUrl": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "muapack"
+                ]
+              },
+              "releaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "targetManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "signingKeyId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              },
+              "full": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "expiresIn": {
+                    "type": "number",
+                    "enum": [
+                      300
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etag": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "refreshUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "expiresIn",
+                  "expiresAt",
+                  "etag",
+                  "sha256",
+                  "size",
+                  "refreshUrl"
+                ],
+                "additionalProperties": false
+              },
+              "packageType": {
+                "type": "string",
+                "enum": [
+                  "update"
+                ]
+              },
+              "baseReleaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "baseManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              "platform": {
+                "type": "string",
+                "enum": [
+                  "windows-amd64",
+                  "windows-aarch64",
+                  "linux-amd64",
+                  "linux-aarch64",
+                  "macos-amd64",
+                  "macos-aarch64"
+                ]
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "version": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "optional": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "name",
+                    "version",
+                    "optional"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "url",
+              "expiresIn",
+              "expiresAt",
+              "etag",
+              "sha256",
+              "size",
+              "refreshUrl",
+              "format",
+              "releaseId",
+              "version",
+              "targetManifestSha256",
+              "signingKeyId",
+              "full",
+              "packageType",
+              "baseReleaseId",
+              "baseManifestSha256",
+              "formatVersion",
+              "platform",
+              "mods"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresIn": {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "etag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refreshUrl": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "muapack"
+                ]
+              },
+              "releaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "targetManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "signingKeyId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              },
+              "full": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "expiresIn": {
+                    "type": "number",
+                    "enum": [
+                      300
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etag": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "refreshUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "expiresIn",
+                  "expiresAt",
+                  "etag",
+                  "sha256",
+                  "size",
+                  "refreshUrl"
+                ],
+                "additionalProperties": false
+              },
+              "packageType": {
+                "type": "string",
+                "enum": [
+                  "update"
+                ]
+              },
+              "baseReleaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "baseManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "minimumLauncherProtocol": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "protocolRevision": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "loader": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "fabric",
+                          "quilt",
+                          "forge",
+                          "neoforge"
+                        ]
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "java": {
+                    "type": "object",
+                    "properties": {
+                      "major": {
+                        "type": "integer",
+                        "minimum": 7,
+                        "maximum": 25
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "enum": [
+                          "adoptium"
+                        ]
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "enum": [
+                          "jre",
+                          "jdk"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "major",
+                      "vendor",
+                      "imageType"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "resolverVersion": {
+                    "type": "string",
+                    "enum": [
+                      "mua-runtime-resolver-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "loader",
+                  "java",
+                  "resolverVersion"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "local"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "remote"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha1": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{40}$"
+                            },
+                            "sha512": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{128}$"
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha1",
+                            "sha512"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "url",
+              "expiresIn",
+              "expiresAt",
+              "etag",
+              "sha256",
+              "size",
+              "refreshUrl",
+              "format",
+              "releaseId",
+              "version",
+              "targetManifestSha256",
+              "signingKeyId",
+              "full",
+              "packageType",
+              "baseReleaseId",
+              "baseManifestSha256",
+              "formatVersion",
+              "minimumLauncherProtocol",
+              "protocolRevision",
+              "runtime",
+              "mods"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "expiresIn": {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "etag": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refreshUrl": {
+                "type": "string"
+              },
+              "format": {
+                "type": "string",
+                "enum": [
+                  "muapack"
+                ]
+              },
+              "releaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "version": {
+                "type": "string"
+              },
+              "targetManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "signingKeyId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{24}$"
+              },
+              "full": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "expiresIn": {
+                    "type": "number",
+                    "enum": [
+                      300
+                    ]
+                  },
+                  "expiresAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "etag": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "refreshUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url",
+                  "expiresIn",
+                  "expiresAt",
+                  "etag",
+                  "sha256",
+                  "size",
+                  "refreshUrl"
+                ],
+                "additionalProperties": false
+              },
+              "packageType": {
+                "type": "string",
+                "enum": [
+                  "update"
+                ]
+              },
+              "baseReleaseId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "baseManifestSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "formatVersion": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "minimumLauncherProtocol": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "platform": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "windows-amd64",
+                      "windows-aarch64",
+                      "linux-amd64",
+                      "linux-aarch64",
+                      "macos-amd64",
+                      "macos-aarch64"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "universal"
+                    ]
+                  }
+                ]
+              },
+              "supportedPlatforms": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "windows-amd64",
+                    "windows-aarch64",
+                    "linux-amd64",
+                    "linux-aarch64",
+                    "macos-amd64",
+                    "macos-aarch64"
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 6
+              },
+              "runtime": {
+                "type": "object",
+                "properties": {
+                  "minecraft": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "loader": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "fabric",
+                          "quilt",
+                          "forge",
+                          "neoforge"
+                        ]
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "version"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "java": {
+                    "type": "object",
+                    "properties": {
+                      "major": {
+                        "type": "integer",
+                        "minimum": 7,
+                        "maximum": 25
+                      },
+                      "vendor": {
+                        "type": "string",
+                        "enum": [
+                          "adoptium"
+                        ]
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "enum": [
+                          "jre",
+                          "jdk"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "major",
+                      "vendor",
+                      "imageType"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "resolverVersion": {
+                    "type": "string",
+                    "enum": [
+                      "mua-runtime-resolver-1"
+                    ]
+                  }
+                },
+                "required": [
+                  "minecraft",
+                  "loader",
+                  "java",
+                  "resolverVersion"
+                ],
+                "additionalProperties": false
+              },
+              "mods": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "local"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha256"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "null"
+                        },
+                        "version": {
+                          "type": "null"
+                        },
+                        "optional": {
+                          "type": "boolean"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "remote"
+                          ]
+                        },
+                        "hashes": {
+                          "type": "object",
+                          "properties": {
+                            "sha1": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{40}$"
+                            },
+                            "sha512": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{128}$"
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{64}$"
+                            }
+                          },
+                          "required": [
+                            "sha1",
+                            "sha512"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "name",
+                        "version",
+                        "optional",
+                        "source",
+                        "hashes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "url",
+              "expiresIn",
+              "expiresAt",
+              "etag",
+              "sha256",
+              "size",
+              "refreshUrl",
+              "format",
+              "releaseId",
+              "version",
+              "targetManifestSha256",
+              "signingKeyId",
+              "full",
+              "packageType",
+              "baseReleaseId",
+              "baseManifestSha256",
+              "formatVersion",
+              "minimumLauncherProtocol",
+              "platform",
+              "supportedPlatforms",
+              "runtime",
+              "mods"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "FileDownload": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresIn": {
+            "type": "number",
+            "enum": [
+              300
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "expiresIn"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/v1/servers": {
+      "get": {
+        "operationId": "listServers",
+        "tags": [
+          "Launcher"
+        ],
+        "security": [],
+        "summary": "List public servers",
+        "description": "Returns listed, unarchived servers with a valid bound release, ordered by sortOrder and serverId. Display windows include their start and exclude their end. Expiry hides directory entries only; manifests, downloads and refreshes for otherwise online resources remain available. Times are ISO 8601 strings with a timezone.",
+        "responses": {
+          "200": {
+            "description": "Public server directory. When no servers are visible, servers is [].",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerDirectory"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The service or database is temporarily unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/servers/{serverId}/manifest": {
+      "get": {
+        "operationId": "getServerManifest",
+        "tags": [
+          "Launcher"
+        ],
+        "security": [],
+        "summary": "Get the original current release manifest",
+        "description": "Returns sealed original JSON bytes in their signed encoding; do not reserialize before signature verification. v1 returns the legacy mua-client-manifest, whose digest is not the package's platform manifest digest. v2 returns mua-recipe-manifest. Obtain the public key through a trusted channel; a response key ID does not establish trust.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{3,5}$"
+            },
+            "required": true,
+            "name": "serverId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "1,2",
+                "2,1"
+              ],
+              "default": "1"
+            },
+            "required": false,
+            "name": "acceptedFormatVersions",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original release manifest with Ed25519 signature headers.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-MUA-Manifest-Sha256": {
+                "description": "SHA-256 of the original response bytes.",
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "X-MUA-Signing-Key": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{24}$"
+                }
+              },
+              "X-MUA-Signature": {
+                "description": "Release manifest signature, distinct from the independent signature of mua-pack.json inside the archive.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-MUA-Signature-Algorithm": {
+                "schema": {
+                  "type": "string",
+                  "const": "Ed25519"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManifest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter format, or a base manifest digest without a base release ID.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource is not public, has been archived, deleted or unbound, or the required file/platform artifact is unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The current release format is not accepted by acceptedFormatVersions. No historical release is selected automatically.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The service or database is temporarily unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The published manifest, base or storage artifact is unreadable, or identity, size or digest validation failed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/servers/{serverId}/files/{sha256}": {
+      "get": {
+        "operationId": "getServerFile",
+        "tags": [
+          "Launcher"
+        ],
+        "security": [],
+        "summary": "Get a file link from a legacy v1 manifest",
+        "description": "Only supports CAS files in the current v1 release. This endpoint reads the manifest with the default accepted format v1 and returns 415 for a current v2 release; acceptedFormatVersions cannot override this. Invalid file digests and files outside the current release return 404. Returns a JSON link, not file bytes; links normally expire after 300 seconds.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{3,5}$"
+            },
+            "required": true,
+            "name": "serverId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": true,
+            "name": "sha256",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Temporary file download link.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileDownload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter format, or a base manifest digest without a base release ID.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource is not public, has been archived, deleted or unbound, or the required file/platform artifact is unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The current release format is not accepted by acceptedFormatVersions. No historical release is selected automatically.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The service or database is temporarily unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The published manifest, base or storage artifact is unreadable, or identity, size or digest validation failed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/servers/{serverId}/packages": {
+      "get": {
+        "operationId": "getServerPackages",
+        "tags": [
+          "Launcher"
+        ],
+        "security": [],
+        "summary": "Discover a full or update package for the current release",
+        "description": "v1 requires one of the six canonical platforms. New v2 protocolRevision:2 needs no platform and ignores any supplied platform value. Historical v2 accepts an omitted platform, universal, or a canonical platform in its original declaration. These rules do not certify game launch compatibility.\n\nOmitting acceptedFormatVersions accepts only v1. Supported values are 1, 2, 1,2 and 2,1. baseReleaseId must match the published base fixed at upload time; providing baseManifestSha256 is recommended. A mismatch falls back to full for the same target. The v1 base digest is the package's platform manifest digest; v2 uses the original recipe manifest digest. Corrupt bases fail explicitly.\n\nReturns a JSON download descriptor, not ZIP bytes. full always points to the complete package for the same target. Links normally expire after 300 seconds. etag is the original S3 value, including quotes, or null; it is not SHA-256. Use the relative refreshUrl to renew links. Storage GET supports a single Range and If-Match; browsers still require storage CORS. Verify size, SHA-256 and archive signatures after download. Do not modify signed URLs or use a GET URL for HEAD.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{3,5}$"
+            },
+            "required": true,
+            "name": "serverId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "platform",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "1,2",
+                "2,1"
+              ],
+              "default": "1"
+            },
+            "required": false,
+            "name": "acceptedFormatVersions",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "baseReleaseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": false,
+            "name": "baseManifestSha256",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A full/update download descriptor for v1, new v2 or historical v2.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageDownload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter format, or a base manifest digest without a base release ID.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource is not public, has been archived, deleted or unbound, or the required file/platform artifact is unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The current release format is not accepted by acceptedFormatVersions. No historical release is selected automatically.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The service or database is temporarily unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The published manifest, base or storage artifact is unreadable, or identity, size or digest validation failed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/servers/{serverId}/releases/{releaseId}/packages": {
+      "get": {
+        "operationId": "refreshReleasePackages",
+        "tags": [
+          "Launcher"
+        ],
+        "security": [],
+        "summary": "Refresh download links for a fixed release",
+        "description": "v1 requires one of the six canonical platforms. New v2 protocolRevision:2 needs no platform and ignores any supplied platform value. Historical v2 accepts an omitted platform, universal, or a canonical platform in its original declaration. These rules do not certify game launch compatibility.\n\nOmitting acceptedFormatVersions accepts only v1. Supported values are 1, 2, 1,2 and 2,1. baseReleaseId must match the published base fixed at upload time; providing baseManifestSha256 is recommended. A mismatch falls back to full for the same target. The v1 base digest is the package's platform manifest digest; v2 uses the original recipe manifest digest. Corrupt bases fail explicitly.\n\nReturns a JSON download descriptor, not ZIP bytes. full always points to the complete package for the same target. Links normally expire after 300 seconds. etag is the original S3 value, including quotes, or null; it is not SHA-256. Use the relative refreshUrl to renew links. Storage GET supports a single Range and If-Match; browsers still require storage CORS. Verify size, SHA-256 and archive signatures after download. Do not modify signed URLs or use a GET URL for HEAD.\n\nreleaseId identifies an unarchived release of the currently online bound client. Historical releases of that client can be refreshed without selecting the latest release. packageSha256 is optional but is always included in generated refreshUrl values; a mismatch returns 409. Archival or unbinding blocks new refreshes, but previously signed links may remain usable until expiry.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{3,5}$"
+            },
+            "required": true,
+            "name": "serverId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "releaseId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "platform",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "1,2",
+                "2,1"
+              ],
+              "default": "1"
+            },
+            "required": false,
+            "name": "acceptedFormatVersions",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "baseReleaseId",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": false,
+            "name": "baseManifestSha256",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "required": false,
+            "name": "packageSha256",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A full/update download descriptor for v1, new v2 or historical v2.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageDownload"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameter format, or a base manifest digest without a base release ID.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The resource is not public, has been archived, deleted or unbound, or the required file/platform artifact is unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The fixed package digest no longer matches. Start a new download task; do not resume with different bytes.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The current release format is not accepted by acceptedFormatVersions. No historical release is selected automatically.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The service or database is temporarily unavailable.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The published manifest, base or storage artifact is unreadable, or identity, size or digest validation failed.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

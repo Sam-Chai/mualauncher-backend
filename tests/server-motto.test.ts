@@ -17,6 +17,7 @@ import * as m from "../src/lib/management";
 import { storageClient, packagesBucket, readObject } from "../src/lib/storage";
 import { mottoCrop, validMottoCrop, MAX_MOTTO_UPLOAD_BYTES, SERVER_MOTTO_RATIO } from "../src/lib/server-motto-contract";
 import { prepareMottoImage, readServerMotto, saveServerMotto, storeMottoImage } from "../src/lib/server-motto";
+import { assertApiRequest, assertApiResponse, contractOperation } from "./openapi-validation";
 
 const suffix = randomBytes(8).toString("hex"), schema = `mua_motto_test_${suffix}`, bucket = `mua-motto-test-${suffix}`;
 process.env.DATABASE_SCHEMA = schema;
@@ -119,6 +120,20 @@ test("private storage retains source and crop; scoped save and re-crop enforce r
 test("actual multipart HTTP upload, authenticated image reads, re-crop and removal preserve scope and origin checks", async () => {
   const port = await new Promise<number>(resolve => { const probe = netServer(); probe.listen(0, "127.0.0.1", () => { const address = probe.address(); assert(address && typeof address !== "string"); probe.close(() => resolve(address.port)); }); });
   const origin = `http://127.0.0.1:${port}`;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const response = await globalThis.fetch(input, init), url = String(input), method = init?.method ?? "GET";
+    if (url.startsWith(origin + "/api/")) {
+      if (response.headers.get("content-type")?.includes("application/json")) assertApiResponse(method, url, response.status, await response.clone().json());
+      else if (response.ok) {
+        const entry = contractOperation(method, url).operation.responses?.[200];
+        assert(entry && "content" in entry && entry.content?.["image/webp"]);
+        assert.equal(response.headers.get("content-type"), "image/webp");
+        assert((await response.clone().arrayBuffer()).byteLength > 0);
+      }
+      if (response.ok && typeof init?.body === "string") assertApiRequest(method, url, JSON.parse(init.body));
+    }
+    return response;
+  };
   const instance = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
     windowsHide: true, stdio: "ignore", env: { ...process.env, APP_ORIGIN: origin, DATABASE_SCHEMA: schema, NEXT_DIST_DIR: ".next/server-motto-test", NEXT_TELEMETRY_DISABLED: "1" },
   });
@@ -163,6 +178,7 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     assert.equal((await send(editor, null, true, "https://outside.invalid")).status, 403);
     const uploaded = await send(editor, null); assert.equal(uploaded.status, 200, await uploaded.text());
     const firstKey = (await client.server.findUniqueOrThrow({ where: { serverId: "NPA" } })).iconObjectKey!;
+    assert.equal((await fetch(path + "?variant=metadata", { headers: { Cookie: cookies.get(reader.id)! } })).status, 200);
     const image = await fetch(path, { headers: { Cookie: cookies.get(reader.id)! } }); assert.equal(image.status, 200); assert.equal(image.headers.get("content-type"), "image/webp");
     const info = await sharp(Buffer.from(await image.arrayBuffer())).metadata(); assert.equal(info.width! / info.height!, SERVER_MOTTO_RATIO);
     assert.equal((await fetch(path, { headers: { Cookie: cookies.get(other.id)! } })).status, 404);
@@ -185,6 +201,44 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     assert.equal(archived.status, 200); const archivedData = await archived.json(); assert.equal(archivedData.state, "UNKNOWN"); assert(archivedData.message.includes("已归档"));
     await locked(db => m.setMember(db, root, organizationId, reader.id, { roles: [], status: "ACTIVE" }), client);
     assert.equal((await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } })).status, 404);
+    // Exercise administrative and authentication contracts against this disposable schema.
+    const panelHeaders = { Cookie: cookies.get(root.id)!, Origin: origin, "Content-Type": "application/json" };
+    const adminWrite = async (method: string, path: string, body: unknown, status = 200) => {
+      const response = await fetch(origin + path, { method, headers: panelHeaders, body: JSON.stringify(body) });
+      assert.equal(response.status, status, await response.clone().text()); return response.json();
+    };
+    const org = await adminWrite("POST", "/api/admin/organizations", { displayName: "Contract organization" }, 201);
+    await adminWrite("PATCH", `/api/admin/organizations/${org.id}`, { description: "Contract description" });
+    await adminWrite("POST", "/api/admin/servers", { organizationId: org.id, serverId: "API", displayName: "Contract server" }, 201);
+    await adminWrite("PATCH", "/api/admin/servers/API", { gameAddress: "example.invalid:25565", isListed: false, displayMode: "PERMANENT" });
+    const password = "contract-original-password", nextPassword = "contract-changed-password", username = "contract-user";
+    const account = await adminWrite("POST", "/api/admin/accounts", { displayName: "Contract user", username, password }, 201);
+    await adminWrite("PATCH", `/api/admin/accounts/${account.id}`, { displayName: "Contract updated" });
+    await adminWrite("PUT", `/api/admin/organizations/${org.id}/members/${account.id}`, { roles: ["READ_ONLY"], status: "ACTIVE" });
+    await adminWrite("PUT", `/api/admin/organizations/${org.id}/members/${account.id}/servers/API`, { roles: ["SERVER_EDITOR"] });
+    for (const path of [`/api/admin/organizations/${org.id}/account-search?q=contract`, "/api/admin/servers/API/clients", "/api/admin/state", "/api/admin/pipeline"]) {
+      assert.equal((await fetch(origin + path, { headers: panelHeaders })).status, 200);
+    }
+    const token = await adminWrite("POST", "/api/admin/tokens", { name: "Contract token", serverIds: ["API"], permissions: ["SERVER_READ", "DRAFT_READ"], expiresInDays: 1 }, 201);
+    assert.equal((await fetch(origin + "/api/admin/tokens", { headers: panelHeaders })).status, 200);
+    assert.equal((await fetch(origin + "/api/admin/state", { headers: { Authorization: "Bearer " + token.token } })).status, 401);
+    await adminWrite("POST", `/api/admin/tokens/${token.id}/revoke`, {});
+    const auth = (action: string, body: unknown, cookie?: string, requestOrigin = origin) => fetch(origin + `/api/auth/${action}`, {
+      method: "POST", headers: { Origin: requestOrigin, "Content-Type": "application/json", ...(cookie ? { Cookie: cookie } : {}) }, body: JSON.stringify(body),
+    });
+    assert.equal((await auth("login", { username, password }, undefined, "https://outside.invalid")).status, 403);
+    const loggedIn = await auth("login", { username, password }); assert.equal(loggedIn.status, 200);
+    const session = loggedIn.headers.get("set-cookie")!.split(";")[0];
+    assert.match(loggedIn.headers.get("set-cookie")!, /HttpOnly/i); assert.match(loggedIn.headers.get("set-cookie")!, /SameSite=strict/i);
+    assert.equal((await fetch(origin + "/api/admin/state", { headers: { Cookie: session } })).status, 200);
+    const changedPassword = await auth("password", { currentPassword: password, newPassword: nextPassword }, session);
+    assert.equal(changedPassword.status, 200); assert.match(changedPassword.headers.get("set-cookie")!, /Max-Age=0/i);
+    assert.equal((await fetch(origin + "/api/admin/state", { headers: { Cookie: session } })).status, 401);
+    assert.equal((await auth("login", { username, password })).status, 401);
+    const relogin = await auth("login", { username, password: nextPassword }); assert.equal(relogin.status, 200);
+    const nextSession = relogin.headers.get("set-cookie")!.split(";")[0];
+    assert.equal((await auth("logout", {}, nextSession)).status, 200);
+    assert.equal((await fetch(origin + "/api/admin/state", { headers: { Cookie: nextSession } })).status, 401);
   } finally { await stop(instance); }
 });
 

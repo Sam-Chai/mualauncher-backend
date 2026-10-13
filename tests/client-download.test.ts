@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { assertPublicResponse } from "./openapi-validation";
 import { test, type TestContext } from "node:test";
 import { Readable } from "node:stream";
 import { readFileSync } from "node:fs";
@@ -30,7 +31,14 @@ function fixture(t: TestContext, format: 1 | 2, protocolRevision: 1 | 2 = 2) {
     return value;
   });
   const releases = manifests.map((manifest, index) => {
-    const bytes = format === 2 ? encodeMuaJson(manifest) : Buffer.from(JSON.stringify({ schemaVersion: 2, clientId: manifest.release.clientId, organizationId: manifest.release.organizationId, version: manifest.release.version }));
+    const bytes = format === 2 ? encodeMuaJson(manifest) : Buffer.from(JSON.stringify({
+      schemaVersion: 2, format: "mua-client-manifest", clientId: manifest.release.clientId, organizationId: manifest.release.organizationId,
+      version: manifest.release.version, name: manifest.release.name, summary: manifest.release.summary, description: manifest.release.description,
+      sourceSha256: manifest.release.sourceSha256, runtime: { minecraft: manifest.runtime.minecraft, java: manifest.runtime.java.major },
+      mods: manifest.mods.map((mod: { path: string }) => mod.path),
+      files: manifest.files.filter((file: { root: string }) => file.root === "instance").map((file: { path: string; sha256: string; size: number; policy: string }) => ({ path: file.path, sha256: file.sha256, size: file.size, policy: file.policy })),
+      update: { previousVersion: null, addedFiles: 0, modifiedFiles: 0, deletedFiles: 0, fullSize: 0, newDataSize: 0, estimatedDownloadSize: 0, casReusePercent: 0, fileCount: 0, sourceSize: 0 },
+    }));
     return { id: manifest.release.releaseId, sourceDraftId: manifest.release.releaseId, clientId: manifest.release.clientId, packageFormatVersion: format,
       versionLabel: manifest.release.version, archivedAt: null as Date | null, manifestObjectKey: `release-${index}`, manifestSha256: put(`release-${index}`, bytes).sha256 };
   });
@@ -73,6 +81,9 @@ function fixture(t: TestContext, format: 1 | 2, protocolRevision: 1 | 2 = 2) {
 for (const format of [1, 2] as const) {
   test(`v${format} fixed release uses S3 GET signing, exact object identity and bounded expiry`, async t => {
     const f = fixture(t, format), selected = await f.request();
+    assertPublicResponse("PackageDownload", selected);
+    assertPublicResponse("PackageDownload", { ...selected, etag: null, full: { ...selected.full, etag: null } });
+    for (const release of f.releases) assertPublicResponse("PublicManifest", JSON.parse(f.objects.get(release.manifestObjectKey)!.bytes.toString("utf8")));
     const query = new URL(selected.url).searchParams;
     assert.equal(query.get("X-Amz-Algorithm"), "AWS4-HMAC-SHA256"); assert.equal(query.get("X-Amz-Expires"), "300");
     assert(!query.get("X-Amz-SignedHeaders")?.includes("range"));
@@ -93,6 +104,7 @@ for (const format of [1, 2] as const) {
   test(`v${format} update pins baseline digest; wrong player digest falls back and refresh never swaps packages`, async t => {
     const f = fixture(t, format), baseSha = f.builds[1].artifacts.update!.baseManifestSha256;
     const update = await f.request(f.releases[0].id, baseSha);
+    assertPublicResponse("PackageDownload", update);
     assert.equal(update.packageType, "update"); assert.equal(update.baseManifestSha256, baseSha);
     assert.equal((await f.request(f.releases[0].id, "0".repeat(64))).packageType, "full");
     f.releases[0].archivedAt = new Date();
@@ -168,6 +180,9 @@ test("v2 negotiation is explicit and no platform is required; legacy restriction
   const f = fixture(t, 2, 1);
   await assert.rejects(publicPackage(f.db, "NPU", null, null), denied(415));
   const universal = await f.request(); assert("platform" in universal); assert.equal(universal.platform, "universal");
+  assertPublicResponse("PackageDownload", universal);
+  assertPublicResponse("PackageDownload", await f.request(f.releases[0].id));
+  assertPublicResponse("PublicManifest", JSON.parse(f.objects.get(f.releases[1].manifestObjectKey)!.bytes.toString("utf8")));
   for (const platform of MUA_PLATFORMS) assert.equal((await publicPackage(f.db, "NPU", platform, null, "2")).sha256, universal.sha256);
   const object = f.objects.get(f.releases[1].manifestObjectKey)!;
   const document = JSON.parse(object.bytes.toString()); document.supportedPlatforms = ["windows-amd64"];

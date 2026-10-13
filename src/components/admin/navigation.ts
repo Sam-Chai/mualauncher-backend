@@ -1,6 +1,6 @@
-import { LayoutDashboard, Building2, Users, ShieldCheck, Server, Boxes, Newspaper, CalendarDays, PanelsTopLeft, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ShieldCheck, Server, Boxes, Newspaper, CalendarDays, PanelsTopLeft, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings, Braces } from "lucide-react";
 export const navigation = [
-  { title: "", items: [{ title: "总览", href: "/admin", icon: LayoutDashboard }] },
+  { title: "", items: [{ title: "总览", href: "/admin", icon: LayoutDashboard }, { title: "API", href: "/admin/api", icon: Braces }] },
   { title: "联盟管理", items: [
     { title: "组织", href: "/admin/organizations", icon: Building2 },
     { title: "成员", href: "/admin/members", icon: Users },

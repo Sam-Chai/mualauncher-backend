@@ -43,6 +43,7 @@ import { readRecipeManifest, createRecipePackMetadata } from "../src/lib/muapack
 import { packageFormatSettings, updatePackageFormatSettings } from "../src/lib/package-format-settings";
 import { maxUploadSizeMb, uploadSizeSettings, updateUploadSizeSettings } from "../src/lib/upload-size-settings";
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "../src/lib/upload-size-policy";
+import { assertApiRequest, assertApiResponse } from "./openapi-validation";
 
 const suffix = randomBytes(8).toString("hex"); const schema = "mua_upload_test_" + suffix;
 process.env.DATABASE_SCHEMA = schema;
@@ -402,7 +403,7 @@ test("deflate, ZIP64 and Unicode paths are parsed; a crashed Worker lease can be
   await assert.rejects(client.clientUpload.update({ where: { id: upload.id }, data: { status: "QUEUED" } }));
   await assert.rejects(client.clientUpload.update({ where: { id: upload.id }, data: { sourceObjectKey: "other.zip" } }));
 });
-test("the standard HTTP API and Actions upload script share the reviewed release pipeline", { skip: !process.env.MUA_HTTP_TEST_DIST, timeout: 45000 }, async () => {
+test("the standard HTTP API and Actions upload script share the reviewed release pipeline", { skip: !process.env.MUA_HTTP_TEST_DIST, timeout: 90000 }, async () => {
   // This integration test must also run independently of preceding release tests.
   if (!await client.clientRelease.findFirst({ where: { clientId: "NPA" } })) {
     const initial = await submitted(await prepare(v1), "1.0.0"); await approved(initial.draftId);
@@ -411,6 +412,15 @@ test("the standard HTTP API and Actions upload script share the reviewed release
   const probe = createServer(); await new Promise<void>(resolve => probe.listen(0, "127.0.0.1", resolve));
   const port = (probe.address() as { port: number }).port; await new Promise<void>(resolve => probe.close(() => resolve()));
   const origin = "http://127.0.0.1:" + port;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const response = await globalThis.fetch(input, init);
+    const url = String(input), method = init?.method ?? "GET";
+    if (url.startsWith(origin + "/api/")) {
+      if (response.headers.get("content-type")?.includes("application/json")) assertApiResponse(method, url, response.status, await response.clone().json());
+      if (response.ok && typeof init?.body === "string") assertApiRequest(method, url, JSON.parse(init.body));
+    }
+    return response;
+  };
   const databaseUrl = new URL(process.env.DATABASE_URL!); databaseUrl.searchParams.set("options", "-c search_path=" + schema + ",pg_catalog");
   const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port), "-H", "127.0.0.1"], {
     windowsHide: true, env: { ...process.env, NODE_ENV: "production", DATABASE_URL: databaseUrl.toString(), DATABASE_SCHEMA: schema,
@@ -432,6 +442,10 @@ test("the standard HTTP API and Actions upload script share the reviewed release
       return { Cookie: COOKIE_NAME + "=" + secret, Origin: origin, "Content-Type": "application/json" };
     };
     const rootHeaders = await httpSession(root), adminHeaders = await httpSession(admin);
+    assert.equal((await fetch(origin + "/api/admin/state", { headers: rootHeaders })).status, 200);
+    assert.equal((await fetch(origin + "/api/admin/pipeline", { headers: rootHeaders })).status, 200);
+    const cookieClients = await fetch(origin + "/api/v1/clients", { headers: adminHeaders }); assert.equal(cookieClients.status, 200);
+    assert.equal((await fetch(origin + "/api/v1/clients", { headers: { ...adminHeaders, Authorization: "Bearer invalid" } })).status, 401);
     assert.equal((await fetch(origin + "/api/admin/download-settings", { headers: adminHeaders })).status, 403);
     const settingsResponse = await fetch(origin + "/api/admin/download-settings", { headers: rootHeaders }); assert.equal(settingsResponse.status, 200);
     const initialSettings = await settingsResponse.json(); assert.equal(initialSettings.javaImageType, "jre"); assert.equal(initialSettings.mirrorProxyEnabled, false);
@@ -517,6 +531,8 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     if (!done) cli.kill(); assert.equal(await cliFinished, 0, cliErrors);
     const result = JSON.parse(cliOutput.split("\n").find(line => line.startsWith("{"))!);
     assert.equal(result.status, "SUBMITTED");
+    assert.equal((await fetch(origin + "/api/v1/clients/OTH", { headers: authorization })).status, 200);
+    assert.equal((await fetch(origin + "/api/v1/clients", { headers: authorization })).status, 200);
     const post = async (path: string, body: unknown) => {
       const response = await fetch(origin + path, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await response.json(); assert.equal(response.status, 200, JSON.stringify(json)); return json;
@@ -621,7 +637,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const refreshedV2 = await fetch(origin + delta.refreshUrl); assert.equal(refreshedV2.status, 200);
     assert.equal((await refreshedV2.json()).sha256, delta.sha256);
     const noPlatform = await fetch(origin + `/api/v1/servers/OTH/packages?acceptedFormatVersions=2&baseReleaseId=${deltaBase.id}&baseManifestSha256=${deltaBase.manifestSha256}`);
-    assert.equal(noPlatform.status, 200); const universalDelta = await noPlatform.json(); assert.equal(universalDelta.platform, "universal"); assert.equal(universalDelta.sha256, delta.sha256);
+    assert.equal(noPlatform.status, 200); const universalDelta = await noPlatform.json(); assert.equal("platform" in universalDelta, false); assert.equal(universalDelta.sha256, delta.sha256);
     const deltaBytes = Buffer.from(await (await fetch(delta.url)).arrayBuffer()); assert.equal(digest(deltaBytes), delta.sha256);
     await writeFile(v2Path, deltaBytes); assert.equal((await validateRecipePackArchive(v2Path, createPublicKey((await signingIdentity()).privateKey))).objectCount, 0);
     const fallback = await (await fetch(origin + query + `&baseManifestSha256=${"0".repeat(64)}`)).json(); assert.equal(fallback.packageType, "full"); assert.equal(fallback.sha256, delta.full.sha256);

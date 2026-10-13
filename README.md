@@ -1,5 +1,7 @@
 # Union Link
 
+后台左侧 `API` 打开内嵌 Scalar，OpenAPI 3.1 中英文完整覆盖 66 个操作，可切换 5 个 Launcher 公开接口。[接入与 CI 校验](docs/openapi.md)、[客户端完整流程](docs/api-workflows.md)、[兼容性记录](docs/openapi-changelog.md)；`/openapi.json` 只公开 Launcher，完整 JSON 逐请求检查后台 Cookie。
+
 Union Link 是 MUA 高校联盟启动器后端，使用 Next.js 16、Prisma 7 与 PostgreSQL。后台采用 shadcn/ui dashboard-01、Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod；图表仅使用 Tremor Raw。
 
 已实现白名单登录、组织／单服 RBAC、PostgreSQL RLS、组织和服务器管理、成员授权、归档、审计，以及 .minecraft ZIP／Modrinth mrpack／PCL 封装上传、MinIO、Worker、SHA-256 CAS、版本差异统计、审核和 Ed25519 签名发布。Modrinth 远程下载、optional 全量打包与超管来源／代理设置见 [导入说明](docs/modrinth-import.md)。Launcher 增量安装／optional 选择尚未接入。RLS 角色、连接、部署与恢复见[数据库行级保护](docs/postgresql-rls.md)。

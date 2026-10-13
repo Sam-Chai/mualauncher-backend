@@ -76,7 +76,11 @@
     ".next/i18n-build/types/**/*.ts",
     ".next/i18n-build/dev/types/**/*.ts",
     ".next/rls-build/types/**/*.ts",
-    ".next/rls-build/dev/types/**/*.ts"
+    ".next/rls-build/dev/types/**/*.ts",
+    ".next/union-link-api/types/**/*.ts",
+    ".next/union-link-api/dev/types/**/*.ts",
+    ".next/union-link-api-complete/types/**/*.ts",
+    ".next/union-link-api-complete/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

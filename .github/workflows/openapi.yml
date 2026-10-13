@@ -1,0 +1,105 @@
+name: API contracts
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: isolated-ci-admin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      # These credentials are only for disposable runner services, never production.
+      DATABASE_URL: postgresql://mua_web:isolated-ci-web@127.0.0.1:5432/postgres
+      DATABASE_AUTH_URL: postgresql://mua_auth:isolated-ci-auth@127.0.0.1:5432/postgres
+      DATABASE_PUBLIC_URL: postgresql://mua_public:isolated-ci-public@127.0.0.1:5432/postgres
+      DATABASE_WORKER_URL: postgresql://mua_worker:isolated-ci-worker@127.0.0.1:5432/postgres
+      DATABASE_MIGRATION_URL: postgresql://mua_migrator:isolated-ci-migrator@127.0.0.1:5432/postgres?options=-c%20role%3Dmua_owner
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: isolated-ci-minio
+      APP_ORIGIN: http://localhost:3001
+      NEXT_DIST_DIR: .next/openapi-ci
+      NEXT_TELEMETRY_DISABLED: '1'
+      MUA_HTTP_TEST_DIST: .next/openapi-ci
+      SMOKE_ORIGIN: http://localhost:3001
+      SMOKE_BROWSER: chromium
+      SMOKE_USERNAME: api-ci-admin
+      SMOKE_PASSWORD: isolated-ci-panel-password
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Provision isolated database roles
+        run: npm run db:provision
+        env:
+          DATABASE_ADMIN_URL: postgresql://postgres:isolated-ci-admin@127.0.0.1:5432/postgres
+      - name: Start isolated object storage
+        run: |
+          docker run --detach --name api-contract-minio --publish 9000:9000 \
+            --env MINIO_ROOT_USER=minioadmin --env MINIO_ROOT_PASSWORD=isolated-ci-minio \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/ready; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - run: npm run db:deploy
+      - run: npm run storage:init
+      - run: npm run auth:bootstrap
+        env:
+          BOOTSTRAP_USERNAME: api-ci-admin
+          BOOTSTRAP_PASSWORD: isolated-ci-panel-password
+      - name: Validate spec, route coverage, source drift and compatibility
+        run: npm run openapi:check
+      - run: npm run test:openapi
+      - run: npm run test:downloads
+      - run: npm run test:admin-ui
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - name: Test actual Bearer, Cookie, admin, auth and binary image contracts
+        run: npm run test:openapi:contracts
+      - run: npx playwright install --with-deps chromium
+      - name: Test embedded Scalar in a browser
+        run: |
+          mkdir -p .local
+          npm run start -- --hostname 127.0.0.1 --port 3001 > .local/openapi-preview.log 2>&1 &
+          ready=false
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:3001/login > /dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          npm run test:openapi:browser
+      - name: Publish verified public specification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: union-link-public-openapi-${{ github.sha }}
+          path: |
+            docs/openapi/union-link.zh-CN.json
+            docs/openapi/union-link.en-US.json
+          if-no-files-found: error
+          retention-days: 14
+          # Internal documents, tokens, logs and screenshots are never public artifacts.

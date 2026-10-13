@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 项目及网站唯一名称为 Union Link。OpenAPI 第 1–7 步已接入：左侧 `API` 内嵌 Scalar，继承后台登录、语言与主题，默认 66 操作完整规范，可切换 5 个 Launcher GET；`/openapi.json` 只公开 Launcher，`/api/admin/openapi` 逐请求检查 Cookie。客户端自动化支持 Cookie 或 Bearer，后台仅 Cookie，文档不授予权限。接口变更必须同步定义／生成产物，执行 openapi:check、关键契约与浏览器检查，记录兼容性后审查新基线；CI 仅发布公开 JSON artifact，不公开内部规范。见 [接入与校验](docs/openapi.md)、[完整流程](docs/api-workflows.md)、[兼容性](docs/openapi-changelog.md)。Scalar Registry／云端站点未接入。
+
 - 2026-10-12 平台无关修订：新 muapack v2 的 target-manifest 与 mua-pack.json 均使用 protocolRevision:2，不含 supportedPlatforms／platformsChanged，不按平台限制完整包或更新包；环境兼容性由 Launcher 判断。universal 仅是后台任务标识。旧数据库平台列保留历史兼容，新草稿为空；历史非空草稿、清单、READY 字节和签名不改写，旧目标仍按原规则读取。数据库迁移为 202610120004_v2_platform_independent，v1 平台机制保留。此说明优先于下文历史六平台／平台修改描述。
 
 - 管理界面与登录页支持 zh-CN／en-US 及白色／黑色主题，顶部切换、浏览器持久化，默认中文／白色。语言通过请求 Cookie 和 React Context，主题采用 next-themes／html.dark；保留 /admin 路由和原认证重定向。仅翻译界面文案及已知系统提示，不改业务名称、说明、地址、版本／权限标识。新文案加入 src/lib/locales，详见 [docs/interface-preferences.md](docs/interface-preferences.md)。
