@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { authorized, COOKIE_NAME } from "@/lib/auth";
 import { AppError } from "@/lib/errors";
 import { failure, json, readJson, sameOrigin } from "@/lib/http";
-import { serverId, uuid, clientId } from "@/lib/input";
+import { serverId, uuid } from "@/lib/input";
 import * as management from "@/lib/management";
 import { createApiToken, revokeApiToken, tokenSelect } from "@/lib/api-auth";
 import { infrastructureStatus } from "@/lib/infrastructure";
@@ -31,7 +31,6 @@ async function handle(request: Request, context: Context) {
         if (path.length === 1 && kind === "tokens") return db.apiToken.findMany({ where: { accountId: actor.id }, select: tokenSelect, orderBy: { createdAt: "desc" } });
         if (path.length === 1 && kind === "pipeline") return infrastructureStatus(db, actor);
         if (path.length === 1 && kind === "state") return management.getState(db, actor);
-        if (path.length === 3 && kind === "servers" && action === "clients") return management.getClients(db, actor, serverId(id));
         if (path.length === 3 && kind === "organizations" && action === "account-search") return management.searchAccounts(db, actor, uuid(id), new URL(request.url).searchParams.get("q") ?? "");
       }
       if (request.method === "POST") {
@@ -40,12 +39,8 @@ async function handle(request: Request, context: Context) {
         if (path.length === 1 && kind === "organizations") return management.createOrganization(db, actor, raw);
         if (path.length === 1 && kind === "servers") return management.createServer(db, actor, raw);
         if (path.length === 1 && kind === "accounts") return management.createAccount(db, actor, raw);
-        if (path.length === 3 && action === "archive" && ["organizations", "servers", "clients"].includes(kind))
-          return management.archiveResource(db, actor, kind as "organizations" | "servers" | "clients", kind === "organizations" ? uuid(id) : kind === "clients" ? clientId(id) : serverId(id), raw);
-        if (kind === "servers" && action === "drafts") {
-          if (path.length === 3) return management.saveDraft(db, actor, serverId(id), raw);
-          if (path.length === 5 && grant === "archive") return management.archiveDraft(db, actor, serverId(id), uuid(accountId), raw);
-        }
+        if (path.length === 3 && action === "archive" && ["organizations", "servers"].includes(kind))
+          return management.archiveResource(db, actor, kind as "organizations" | "servers", kind === "organizations" ? uuid(id) : serverId(id), raw);
       }
       if (request.method === "PATCH" && path.length === 1 && kind === "recycle-settings") return updateRecycleSettings(db, actor, raw);
       if (request.method === "PATCH" && path.length === 1 && kind === "download-settings") return updateDownloadSettings(db, actor, raw);
@@ -56,7 +51,6 @@ async function handle(request: Request, context: Context) {
         if (kind === "servers") return management.updateServer(db, actor, serverId(id), raw);
         if (kind === "accounts") return management.updateAccount(db, actor, uuid(id), raw);
       }
-      if (request.method === "PATCH" && path.length === 4 && kind === "servers" && action === "drafts") return management.saveDraft(db, actor, serverId(id), raw, uuid(accountId));
       if (request.method === "PUT" && kind === "organizations" && action === "members") {
         if (path.length === 4) return management.setMember(db, actor, uuid(id), uuid(accountId), raw);
         if (path.length === 6 && grant === "servers") return management.setGrant(db, actor, uuid(id), uuid(accountId), serverId(sid), raw);

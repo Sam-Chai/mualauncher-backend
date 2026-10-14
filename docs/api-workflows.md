@@ -18,9 +18,9 @@ Bearer：先通过 Cookie 调用 `POST /api/admin/tokens`，例如 `{"name":"Cli
 
 3. **分片 PUT 与完成。** 按返回 partSize（当前 64 MiB）切分文件，片号从 1 起。对每片 `POST /api/v1/clients/uploads/{uploadId}/parts`：`{"partNumber":1}`，获取有效 600 秒的 url；直接 PUT 该片二进制到 OSS url，不带后台 Cookie／Bearer，保留响应 ETag 的原始引号。非末片大小必须为 partSize。全部完成后 `POST .../{uploadId}/complete`：`{"parts":[{"partNumber":1,"etag":"\"OSS 返回值\""}]}`。不要用自行计算的 SHA-256 替代 ETag。complete 返回 QUEUED 或已有任务状态，不代表导入、组包或发布完成。上传会话有效期 24 小时，失效片链接可重新签发。
 
-4. **轮询并选择实例。** `GET /api/v1/clients/uploads/{uploadId}` 读取 status、processingPhase、progress、detectedInfo、warnings。当 QUEUED 且 processingPhase=SELECT_INSTANCE，向用户展示 detectedInfo.candidates，明确选择后 `POST .../select-instance`：`{"instanceId":"候选 instanceId"}`。不得自动选第一项。继续等待 READY；FAILED 查看 error，WAITING_PROCESSOR 表示处理器尚未就绪，不能提交。新 v2 远程文件的 DECLARED 只代表声明保留，Worker 不下载其字节或替 Launcher 验证环境。
+4. **轮询并选择实例。** `GET /api/v1/clients/uploads/{uploadId}` 读取 status、processingPhase、progress、detectedInfo、warnings。当 QUEUED 且 processingPhase=SELECT_INSTANCE，向用户展示 detectedInfo.candidates，明确选择后 `POST .../select-instance`：`{"instanceId":"候选 instanceId"}`。不得自动选第一项。继续等待 READY；FAILED 查看 error，成功 READY 后才可提交。新 v2 远程文件的 DECLARED 只代表声明保留，Worker 不下载其字节或替 Launcher 验证环境。
 
-5. **提交审核。** READY 后 `POST .../{uploadId}/submit`：`{"versionLabel":"1.0.0","name":"该客户端名称","minecraftVersion":"1.21.1","javaVersion":21,"summary":"版本摘要","description":"版本说明"}`。可省略 MC／Java 使用 Worker 识别值，缺失则需明确填写；mods／modDetails 不能覆盖 Worker 结果。已建立客户端名称不可改；首次无历史且唯一 READY 上传可确认识别名称。返回 draftId，重复相同提交返回原 ID。v1 可选 platforms，默认五项；新 v2 不按平台限制，不需传 platforms。
+5. **提交审核。** READY 后 `POST .../{uploadId}/submit`：`{"versionLabel":"1.0.0","name":"该客户端名称","minecraftVersion":"1.21.1","javaVersion":21,"summary":"版本摘要","description":"版本说明"}`。可省略 MC／Java 使用 Worker 识别值，缺失则需明确填写；请求不接受 mods／modDetails，模组信息由 Worker 产生。已建立客户端名称不可改；首次无历史且唯一 READY 上传可确认识别名称。返回 draftId，重复相同提交返回原 ID。v1 可选 platforms，默认五项；v2 不按平台限制，不接受 platforms。
 
 6. **审核。** 再查客户端详情，从对应 draft 读取 contentRevision、packageRevision。审核身份调用 `POST /api/v1/clients/{clientId}/drafts/{draftId}/review`：`{"decision":"approve","note":"已核对","contentRevision":1,"packageRevision":1}`，两修订必须取实际值；驳回使用 reject 且 note 非空。DRAFT_REVIEW 与发布权限分开。审核批准不代表组包 READY。v1 若需要调整平台，在审核前 POST .../platforms，变更提高 packageRevision、清除审核并回到 SUBMITTED；v2 不支持此操作。
 

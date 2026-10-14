@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validate } from "@scalar/openapi-parser";
@@ -14,7 +15,7 @@ import { currentNavigation } from "../src/components/admin/navigation";
 import { GET as publicDocument } from "../src/app/openapi.json/route";
 import translations from "../src/lib/locales/openapi-en.json";
 
-test("both locale documents are valid OpenAPI 3.1 with exactly five public operations", async () => {
+test("both locale documents are valid OpenAPI 3.1 with exactly four public operations", async () => {
   for (const locale of ["zh-CN", "en-US"] as const) {
     const document = publicOpenApi(locale), result = await validate(JSON.stringify(document));
     assert(result.valid, JSON.stringify(result.errors));
@@ -39,7 +40,7 @@ test("both locale documents are valid OpenAPI 3.1 with exactly five public opera
 
 test("all operations are documented while only Launcher operations are public; ordinary members see the API menu", () => {
   assert.equal(new Set(apiInventory.map(item => `${item.method} ${item.path}`)).size, apiInventory.length);
-  assert.equal(apiInventory.filter(item => item.documented).length, 69);
+  assert.equal(apiInventory.filter(item => item.documented).length, 63);
   const described = Object.entries(publicOpenApi().paths ?? {}).map(([path]) => `GET ${path}`).sort();
   assert.deepEqual(described, apiInventory.filter(item => item.group === "Launcher").map(item => `${item.method} ${item.path}`).sort());
   assert(apiInventory.some(item => item.path === "/api/v1/clients/uploads/{uploadId}/submit"));
@@ -63,7 +64,7 @@ test("full documents validate in both languages and document session/Bearer boun
       if (path.startsWith("/api/v1/clients")) assert.deepEqual(operation.security, [{ SessionCookie: [] }, { ApiToken: [] }]);
       if (path.startsWith("/api/admin")) assert.deepEqual(operation.security, [{ SessionCookie: [] }]);
     }
-    assert.equal(ids.length, 69); assert.equal(new Set(ids).size, 69);
+    assert.equal(ids.length, 63); assert.equal(new Set(ids).size, 63);
     if (locale === "en-US") assert(!/[\u3400-\u9fff]/.test(JSON.stringify(document)));
     const settings = document.paths!["/api/admin/upload-size-settings"]!;
     assert.equal(settings.get?.["x-superadmin-only"], true); assert.equal(settings.patch?.["x-superadmin-only"], true);
@@ -78,7 +79,7 @@ test("full documents validate in both languages and document session/Bearer boun
 });
 
 test("coverage reads actual catch-all branches, expands alternatives and detects missing operations", async () => {
-  assert.equal(await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]), 69);
+  assert.equal(await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]), 63);
   await assert.rejects(verifyCoverage(apiInventory.slice(1)), /coverage mismatch/);
   await assert.rejects(verifyCoverage([...apiInventory, { method: "GET", path: "/api/not-real" }]), /coverage mismatch/);
   const source = `const handler = (request, path) => { const [kind, id, action] = path;
@@ -125,11 +126,20 @@ test("key wire contracts reject request/response drift, revision types, missing 
   const id = "f70c7f37-29aa-4e3e-97d6-bc6d54da77c7";
   assertApiRequest("POST", "/api/v1/clients", { organizationId: id, name: "Example" });
   assert.throws(() => assertApiRequest("POST", "/api/v1/clients", { organizationId: id }));
-  assertApiResponse("POST", "/api/v1/clients", 201, { clientId: id, name: "Example", currentReleaseId: null, publicationRevision: 0 });
-  assert.throws(() => assertApiResponse("POST", "/api/v1/clients", 201, { clientId: id, name: "Example", publicationRevision: "0" }));
+  assertApiResponse("POST", "/api/v1/clients", 201, { clientId: fixtureClientId(id), name: "Example", currentReleaseId: null, publicationRevision: 0 });
+  assert.throws(() => assertApiResponse("POST", "/api/v1/clients", 201, { clientId: fixtureClientId(id), name: "Example", publicationRevision: "0" }));
   assert.throws(() => assertApiResponse("POST", "/api/v1/clients", 204, {}));
   assert.throws(() => assertApiRequest("POST", `/api/v1/clients/ABC/drafts/${id}/review`, { decision: "maybe", note: "", contentRevision: 1 }));
   assert.throws(() => assertApiRequest("POST", `/api/v1/clients/ABC/drafts/${id}/archive`, { contentRevision: "1", packageRevision: 1 }));
+  const upload = { clientId: id, fileName: "source.zip", size: 100, baseReleaseId: null, basePublicationRevision: 0 };
+  assert.throws(() => assertApiRequest("POST", "/api/v1/clients/uploads", upload));
+  assertApiRequest("POST", "/api/v1/clients/uploads", { ...upload, packageFormatVersion: 1 });
+  assert.throws(() => assertApiRequest("POST", "/api/v1/clients/uploads", { ...upload, clientId: "NPU", packageFormatVersion: 1 }));
+  assert.throws(() => assertApiRequest("POST", `/api/v1/clients/${id}/drafts/${id}/review`, { decision: "approve", note: "", contentRevision: 1 }));
+  assert.throws(() => assertApiRequest("POST", `/api/v1/clients/${id}/drafts/${id}/publish`, { activate: true }));
+  const metadata = { versionLabel: "1.0.0", name: "Example", summary: "Release", description: "" };
+  assert.throws(() => assertApiRequest("POST", `/api/v1/clients/uploads/${id}/submit`, { ...metadata, mods: [] }));
+  assert.throws(() => assertApiRequest("PATCH", "/api/admin/servers/NPU", { iconObjectKey: "arbitrary-key" }));
 });
 
 test("public JSON endpoint follows explicit locale and exposes no private routes", async () => {
@@ -143,8 +153,6 @@ test("public JSON endpoint follows explicit locale and exposes no private routes
 
 test("wire response contracts accept empty directories and reject malformed file/error payloads", () => {
   assertPublicResponse("ServerDirectory", { servers: [] });
-  assertPublicResponse("FileDownload", { url: "https://storage.example.invalid/file?signature=example", expiresIn: 300 });
   assertPublicResponse("Error", { error: "unavailable" });
-  assert.throws(() => assertPublicResponse("FileDownload", { url: "not-a-url", expiresIn: 300 }));
   assert.throws(() => assertPublicResponse("Error", { message: "wrong field" }));
 });

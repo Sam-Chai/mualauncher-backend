@@ -11,14 +11,14 @@ import { enabledPackageFormatsSchema } from "../package-format-policy";
 import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "../download-sources";
 
 // src/lib/client-service.ts:uploadInput
-export const CreateUpload = z.object({ clientId: z.string().min(1).max(100), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
+export const CreateUpload = z.object({ clientId: z.string().uuid(), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
   size: z.number().int().positive().max(MAX_UPLOAD_SIZE_MB * UPLOAD_MB), baseReleaseId: z.string().uuid().nullable(), basePublicationRevision: z.number().int().nonnegative(),
-  comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema.default(1) }).strict();
+  comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema }).strict();
 
 // src/lib/client-service.ts:createClient
 export const CreateClient = z.object({ organizationId: z.string().uuid(), name: z.string().trim().min(1).max(200),
     serverId: z.string().regex(/^[A-Za-z]{3,5}$/).nullable().optional(), publicationRevision: z.number().int().nonnegative().optional(),
-    expectedClientId: z.string().nullable().optional(), replaceConfirmed: z.boolean().optional() }).strict();
+    expectedClientId: z.string().uuid().nullable().optional(), replaceConfirmed: z.boolean().optional() }).strict();
 
 // src/lib/client-service.ts:uploadPartUrl
 export const UploadPart = z.object({ partNumber: z.number().int().min(1).max(320) }).strict();
@@ -30,11 +30,11 @@ export const CompleteUpload = z.object({ parts: z.array(z.object({ partNumber: z
 export const SelectInstance = z.object({ instanceId: z.string().min(1).max(100) }).strict();
 
 // src/lib/client-service.ts:reviewClient
-export const ReviewDraft = z.object({ decision: z.enum(["approve", "reject"]), note: z.string().max(5000), contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive().default(1) }).strict();
+export const ReviewDraft = z.object({ decision: z.enum(["approve", "reject"]), note: z.string().max(5000), contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive() }).strict();
 
 // src/lib/client-service.ts:publishClient
 export const PublishDraft = z.object({ activate: z.boolean(),
-    replacesDraftId: z.string().uuid().nullable().optional(), contentRevision: z.number().int().positive().optional(), packageRevision: z.number().int().positive().optional() }).strict();
+    replacesDraftId: z.string().uuid().nullable().optional(), contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive() }).strict();
 
 // src/lib/client-service.ts:archiveClientDraft
 export const ArchiveDraft = z.object({ contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive() }).strict();
@@ -44,7 +44,7 @@ export const ActivateRelease = z.object({ publicationRevision: z.number().int().
 
 // src/lib/client-service.ts:bindClient
 export const BindClient = z.object({ serverId: z.string().regex(/^[A-Za-z]{3,5}$/), publicationRevision: z.number().int().nonnegative(),
-    expectedClientId: z.string().nullable(), replaceConfirmed: z.boolean() }).strict();
+    expectedClientId: z.string().uuid().nullable(), replaceConfirmed: z.boolean() }).strict();
 
 // src/lib/client-service.ts:unbindClient
 export const UnbindClient = z.object({ serverId: z.string().nullable(), publicationRevision: z.number().int().nonnegative().nullable() }).strict();

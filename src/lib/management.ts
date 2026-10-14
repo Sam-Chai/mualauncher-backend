@@ -7,7 +7,7 @@ import * as input from "./input";
 import { hashPassword } from "./password";
 import { enabledPackageFormats } from "./package-format-settings";
 import { maxUploadSizeMb } from "./upload-size-settings";
-import { accountDirectory, credentialCreate, credentialUpdate, revokeAccountSessions, serverSummaries, releaseDetails, securityFunction } from "./database-security";
+import { accountDirectory, credentialCreate, credentialUpdate, revokeAccountSessions, serverSummaries, securityFunction } from "./database-security";
 import { serverMottoUrl } from "./server-motto-contract";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
@@ -110,18 +110,16 @@ export async function updateOrganization(db: Db, actor: Actor, id: string, raw: 
 
 export async function createServer(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
-  const data = input.fields(raw, ["organizationId", "serverId", "displayName", "description", "gameAddress", "iconObjectKey", "displayMode", "displayStartsAt", "displayEndsAt"]);
+  const data = input.fields(raw, ["organizationId", "serverId", "displayName", "description", "gameAddress", "displayMode", "displayStartsAt", "displayEndsAt"]);
   const organizationId = input.uuid(input.text(data, "organizationId"));
   await requireOrganization(db, actor, organizationId, "ORG_EDIT");
   const id = input.serverId(input.text(data, "serverId"));
-  invariant(typeof data.iconObjectKey !== "string" || !data.iconObjectKey.startsWith("server-mottos/"), 400, "服务器箴言请通过图片上传接口设置");
   const schedule = displayScheduleSchema.safeParse({ displayMode: "displayMode" in data ? data.displayMode : "PERMANENT", displayStartsAt: data.displayStartsAt ?? null, displayEndsAt: data.displayEndsAt ?? null });
   invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? "展示配置无效");
   await db.server.create({ data: { serverId: id, organizationId, displayName: input.text(data, "displayName"),
     ...schedule.data,
     description: data.description === undefined ? "" : input.text(data, "description", 5000, false),
-    gameAddress: data.gameAddress === undefined ? null : input.optionalText(data, "gameAddress", 255),
-    iconObjectKey: data.iconObjectKey === undefined ? null : input.optionalText(data, "iconObjectKey") } });
+    gameAddress: data.gameAddress === undefined ? null : input.optionalText(data, "gameAddress", 255) } });
   await db.serverPublication.create({ data: { serverId: id, changedById: actor.id } });
   await audit(db, actor, "SERVER_CREATE", "Server", id, organizationId, id);
   return { serverId: id };
@@ -129,17 +127,12 @@ export async function createServer(db: Db, actor: Actor, raw: unknown) {
 
 export async function updateServer(db: Db, actor: Actor, id: string, raw: unknown) {
   const { server } = await requireServer(db, actor, id, "SERVER_EDIT");
-  const data = input.fields(raw, ["displayName", "description", "gameAddress", "iconObjectKey", "sortOrder", "themeColor", "isListed", "displayMode", "displayStartsAt", "displayEndsAt"]);
+  const data = input.fields(raw, ["displayName", "description", "gameAddress", "sortOrder", "themeColor", "isListed", "displayMode", "displayStartsAt", "displayEndsAt"]);
   if (["sortOrder", "isListed"].some(key => key in data)) superOnly(actor);
   const update: Prisma.ServerUpdateInput = {};
   if ("displayName" in data) update.displayName = input.text(data, "displayName");
   if ("description" in data) update.description = input.text(data, "description", 5000, false);
   if ("gameAddress" in data) update.gameAddress = input.optionalText(data, "gameAddress", 255);
-  if ("iconObjectKey" in data) {
-    const key = input.optionalText(data, "iconObjectKey");
-    invariant(!(key?.startsWith("server-mottos/") || server.iconObjectKey?.startsWith("server-mottos/")) || key === server.iconObjectKey, 400, "服务器箴言请通过图片上传接口修改");
-    update.iconObjectKey = key;
-  }
   if ("sortOrder" in data) {
     invariant(Number.isSafeInteger(data.sortOrder) && Math.abs(data.sortOrder as number) <= 2147483647, 400, "排序须为有效整数");
     update.sortOrder = data.sortOrder as number;
@@ -275,55 +268,5 @@ export async function updateAccount(db: Db, actor: Actor, id: string, raw: unkno
   if (data.password !== undefined) await credentialUpdate(db, id, await hashPassword(input.password(data.password)));
   if (status === "DISABLED" || existing.isSuperAdmin !== isSuperAdmin || data.password !== undefined) await revokeAccountSessions(db, id);
   await audit(db, actor, "ACCOUNT_EDIT", "Account", id, undefined, undefined, { fields: Object.keys(data), status, isSuperAdmin });
-  return { ok: true };
-}
-
-export async function getClients(db: Db, actor: Actor, id: string) {
-  const scope = await requireServer(db, actor, id, "SERVER_READ", false);
-  const clientId = scope.server.publication?.clientId;
-  if (!clientId) return { drafts: [], releases: [] };
-  await requireClient(db, actor, clientId, "SERVER_READ", false);
-  const drafts = scope.permissions.includes("DRAFT_READ") ? await db.clientDraft.findMany({ where: { clientId }, orderBy: { createdAt: "desc" },
-    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true, reviewNote: true, status: true, contentRevision: true, archivedAt: true, createdAt: true, upload: { select: { id: true, statistics: true } } } }) : [];
-  const releases = scope.permissions.includes("RELEASE_READ") ? await db.clientRelease.findMany({ where: { clientId }, orderBy: { publishedAt: "desc" },
-    select: { id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true } }) : [];
-  return { drafts, releases: await Promise.all(releases.map(async release => ({ ...release, sourceDraft: await releaseDetails(db, release.id) }))) };
-}
-
-// Metadata drafts are useful before the upload Worker. Submission is not exposed until a verified artifact exists.
-export async function saveDraft(db: Db, actor: Actor, id: string, raw: unknown, draftId?: string) {
-  const scope = await requireServer(db, actor, id, draftId ? "DRAFT_EDIT" : "DRAFT_CREATE", true, true);
-  const clientId = scope.server.publication?.clientId;
-  invariant(clientId, 409, "服务器尚未绑定客户端，请先添加或绑定客户端");
-  await requireClient(db, actor, clientId, draftId ? "DRAFT_EDIT" : "DRAFT_CREATE");
-  const data = input.fields(raw, draftId ? ["versionLabel", "name", "description", "changelog", "contentRevision"] : ["versionLabel", "name", "description", "changelog"]);
-  const content = { versionLabel: input.text(data, "versionLabel", 100), name: input.text(data, "name"),
-    description: input.text(data, "description", 10000, false), changelog: input.text(data, "changelog", 10000, false) };
-  let result;
-  if (draftId) {
-    const draft = await db.clientDraft.findUnique({ where: { id: draftId }, include: { upload: true } });
-    invariant(draft?.clientId === clientId, 404, "草稿不存在");
-    invariant(!draft.upload, 409, "上传版本请通过完整整合包创建新版本，不能原地修改");
-    invariant(!draft.archivedAt && ["DRAFT", "REJECTED"].includes(draft.status), 409, "此草稿不能编辑");
-    invariant(Number.isInteger(data.contentRevision) && draft.contentRevision === data.contentRevision, 409, "草稿已被修改，请刷新后重试");
-    result = await db.clientDraft.update({ where: { id: draftId }, data: { ...content, contentRevision: { increment: 1 }, status: "DRAFT",
-      reviewedById: null, reviewedRevision: null, reviewedAt: null, reviewNote: null,
-      candidateManifestKey: null, candidateManifestSha256: null } });
-  } else result = await db.clientDraft.create({ data: { ...content, clientId, createdById: actor.id } });
-  await audit(db, actor, draftId ? "DRAFT_EDIT" : "DRAFT_CREATE", "ClientDraft", result.id, scope.server.organizationId, id, { contentRevision: result.contentRevision });
-  return { id: result.id };
-}
-
-export async function archiveDraft(db: Db, actor: Actor, id: string, draftId: string, raw: unknown) {
-  const scope = await requireServer(db, actor, id, "DRAFT_ARCHIVE", true, true);
-  const clientId = scope.server.publication?.clientId;
-  invariant(clientId, 404, "服务器没有绑定客户端");
-  await requireClient(db, actor, clientId, "DRAFT_ARCHIVE");
-  const archived = input.bool(input.fields(raw, ["archived"]), "archived");
-  const draft = await db.clientDraft.findUnique({ where: { id: draftId } });
-  invariant(draft?.clientId === clientId, 404, "草稿不存在");
-  invariant(["DRAFT", "REJECTED"].includes(draft.status), 409, "只有未提交的草稿可以归档或恢复");
-  await db.clientDraft.update({ where: { id: draftId }, data: { archivedAt: archived ? new Date() : null } });
-  await audit(db, actor, archived ? "DRAFT_ARCHIVE" : "DRAFT_RESTORE", "ClientDraft", draftId, scope.server.organizationId, id);
   return { ok: true };
 }

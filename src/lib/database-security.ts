@@ -26,7 +26,7 @@ export async function uploadOptions(db: Db) {
   const rows = await db.$queryRaw<{ value: { enabledPackageFormats: number[]; maxUploadSizeMb: number; javaImageType: string } | null }[]>`SELECT ${securityFunction("upload_options")}() AS value`;
   return rows[0]?.value;
 }
-export type ReleaseDetails = { supportedPlatforms: string[]; packageRevision: number; upload: { statistics: Prisma.JsonValue; comparisonStatistics: Prisma.JsonValue } | null; packageBuilds: { draftId: string; platform: string; revision: number; status: string; required: boolean; artifacts: Prisma.JsonValue }[] };
+export type ReleaseDetails = { packageRevision: number; upload: { statistics: Prisma.JsonValue; comparisonStatistics: Prisma.JsonValue } | null; packageBuilds: { draftId: string; platform: string; revision: number; status: string; required: boolean; artifacts: Prisma.JsonValue }[] };
 export async function releaseDetails(db: Db, id: string) {
   const rows = await db.$queryRaw<{ value: ReleaseDetails | null }[]>`SELECT ${securityFunction("release_details")}(${id}::uuid) AS value`;
   return rows[0]?.value ?? null;

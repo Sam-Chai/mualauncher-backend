@@ -1,5 +1,8 @@
 # muapack v2 协议基线
 
+2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。
+
+
 初始冻结日期：2026-10-10；平台无关修订日期：2026-10-12。已完成实施顺序第 1–5 步及完整／更新分发。Upload READY 表示导入完成；PackageBuild READY 表示审核后产物已验签，不能替代 Launcher 安装或游戏启动验收。
 
 需求来源：[v2 需求与实施顺序](muapack-v2-design.md)。[v1 协议](muapack-v1.md) 及既有字节／签名继续保留。muapack formatVersion 2、mrpack formatVersion 1、旧 Release Manifest schemaVersion 2 是三个不同版本体系。
@@ -35,7 +38,7 @@ NPUcraft-1.1.0.muapack
 
 发布为一个平台无关的配方包，每个目标路径只有一种内容，不支持按操作系统选择不同模组／配置。取消平台名单不改变文件自身兼容性；专属内容可另建客户端或用 v1。环境和原生库由 Launcher 按本机平台解析，不放入 overrides。
 
-历史 v2 没有 protocolRevision，仍按旧结构严格读取 supportedPlatforms 与 platformsChanged；清单、修订、READY 包和签名保持不变，旧下载保留平台检查。新修订严格拒绝这两个旧字段、未知修订号和字段混用，不通过删除字段或默认补值把旧签名投影成新版。数据库旧 supportedPlatforms 列仅用于历史兼容，新草稿为空；非空历史草稿继续生成原结构，避免改变已有审核目标。
+首发仅接受平台无关 protocolRevision:2，严格拒绝 supportedPlatforms、platformsChanged、未知修订号和字段混用。数据库不保存 v2 平台声明。
 
 ## 3. 目标完整清单
 
@@ -136,6 +139,6 @@ API 能力协商必须在返回包前完成：旧请求默认只接受 v1；当�
 
 样例与独立校验见 [examples/muapack-v2](examples/muapack-v2/README.md)。包括原始混合 mrpack、基准 full、目标 full、对应 update、外部测试公钥及远程合成字节。fixtures 使用 .invalid 地址，不进行网络访问，不是可启动游戏。
 
-最低验收：验签链与 ZIP CRC／摘要、本地／远程严格分离、同路径本地覆盖、基准与目标关系、完整索引、增量重算、optional／来源／环境／启动变化及历史平台兼容、本地载荷完备、更新修复与保留行为；拒绝篡改、未知版本、旧签名域、错误基准、非法路径、大小写／文件目录冲突、缺失／额外载荷、索引冲突、源声明缺少强哈希和未知字段。
+最低验收：验签链与 ZIP CRC／摘要、本地／远程严格分离、同路径本地覆盖、基准与目标关系、完整索引、增量重算、optional／来源／环境／启动变化及首发仅接受平台无关 protocolRevision:2。
 
 完整／增量组包、API 能力协商和发布门槛已接入；端侧环境解析器与安装记录仍是后续实现契约，本次离线工具只验证样例容器与声明，不安装、下载、执行命令、连接数据库／OSS或调用生产密钥。

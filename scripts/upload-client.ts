@@ -6,7 +6,7 @@ async function main() {
   const [fileName, metadataFile, clientId, instanceId] = process.argv.slice(2);
   const origin = process.env.MUA_API_URL; const token = process.env.MUA_API_TOKEN;
   if (!fileName || !metadataFile || !clientId || !origin || !token) throw new Error("Usage: MUA_API_URL=... MUA_API_TOKEN=... npm run client:upload -- client.zip metadata.json CLIENT_ID");
-  const { packageFormatVersion, ...metadata } = clientSubmissionSchema.extend({ packageFormatVersion: packageFormatVersionSchema.default(1) }).parse(JSON.parse(await readFile(metadataFile, "utf8")));
+  const { packageFormatVersion, ...metadata } = clientSubmissionSchema.extend({ packageFormatVersion: packageFormatVersionSchema }).parse(JSON.parse(await readFile(metadataFile, "utf8")));
   const size = (await stat(fileName)).size;
   if (!/\.(zip|mrpack)$/i.test(fileName) || size <= 0 || size > 20 * 1024 ** 3) throw new Error("A complete ZIP or mrpack up to 20 GiB is required");
   const api = async <T>(path: string, body?: unknown): Promise<T> => {
@@ -39,10 +39,6 @@ async function main() {
     const deadline = Date.now() + 2 * 60 * 60 * 1000; let ready: UploadView;
     for (;;) {
       ready = await api<UploadView>("/api/v1/clients/uploads/" + upload.id);
-      if (ready.status === "WAITING_PROCESSOR") {
-        console.log(JSON.stringify({ clientId, uploadId: ready.id, packageFormatVersion: ready.packageFormatVersion, status: ready.status,
-          message: "Legacy upload has not been requeued. Ask an administrator to check the account and client status, or cancel and upload again. Not submitted for review." })); return;
-      }
       if (ready.status === "READY") break;
       if (ready.processingPhase === "SELECT_INSTANCE") {
         if (!instanceId) throw new Error(`Upload ${ready.id} contains multiple instances; select one in the panel or pass INSTANCE_ID as the fourth argument`);

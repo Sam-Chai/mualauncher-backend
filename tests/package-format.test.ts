@@ -52,10 +52,10 @@ test("v2 review file table distinguishes verified local payloads from optional r
   assert(html.includes("optional · 玩家选择")); assert(html.includes("SHA-256")); assert(html.includes("SHA-512"));
 });
 
-test("format discriminator is independent of legacy Manifest versions and waiting is explicit", () => {
+test("format discriminator accepts only supported package formats and queued work is explicit", () => {
   assert.equal(packageFormatVersionSchema.parse(1), 1); assert.equal(packageFormatVersionSchema.parse(2), 2);
   assert.throws(() => packageFormatVersionSchema.parse("2")); assert.throws(() => packageFormatVersionSchema.parse(3));
-  assert.match(uploadProcessingLabel({ status: "WAITING_PROCESSOR", processingPhase: null, progress: 0 }), /等待 v2 处理器/);
+  assert.match(uploadProcessingLabel({ status: "QUEUED", processingPhase: null, progress: 0 }), /等待 Worker/);
 });
 
 test("v2 remote declarations have no fake download progress and import sizes are separated", () => {

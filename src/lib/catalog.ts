@@ -11,5 +11,5 @@ export async function publishedServers(db: Db, now = new Date()) {
         select: { id: true, clientId: true, versionLabel: true, name: true, manifestSha256: true, packageFormatVersion: true } } } } },
   });
   return servers.map(({ publication, ...server }) => ({ ...server, currentRelease: publication?.release ? { ...publication.release,
-    manifestUrl: `/api/v1/servers/${server.serverId}/manifest`, packagesUrl: `/api/v1/servers/${server.serverId}/packages` } : null, publicationRevision: publication?.revision }));
+    manifestUrl: `/api/v1/servers/${server.serverId}/manifest?acceptedFormatVersions=${publication.release.packageFormatVersion}`, packagesUrl: `/api/v1/servers/${server.serverId}/packages?acceptedFormatVersions=${publication.release.packageFormatVersion}` } : null, publicationRevision: publication?.revision }));
 }

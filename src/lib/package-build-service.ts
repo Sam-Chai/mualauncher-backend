@@ -67,7 +67,6 @@ export async function draftPlatformManifest(db: Db, actor: Actor, clientId: stri
   await requireClient(db, actor, clientId, "DRAFT_READ", false);
   const draft = await db.clientDraft.findUnique({ where: { id: draftId } }); invariant(draft?.clientId === clientId, 404, "草稿不存在");
   if (draft.packageFormatVersion === 2) {
-    invariant(!draft.supportedPlatforms.length || platformInput === null || platformInput === "universal" || draft.supportedPlatforms.includes(platformInput), 400, "此 v2 配方不支持该平台");
     const build = await db.packageBuild.findUnique({ where: { draftId_platform_revision: { draftId, platform: "universal", revision: draft.packageRevision } } });
     invariant(build?.required && build.targetObjectKey && build.targetSha256, 404, "v2 清单尚未准备完成");
     const bytes = await readObject(build.targetObjectKey); invariant(digest(bytes) === build.targetSha256, 422, "v2 清单摘要不匹配");
@@ -89,7 +88,7 @@ export async function managementFullPackage(db: Db, actor: Actor, clientId: stri
   const draft = kind === "drafts" ? await db.clientDraft.findUniqueOrThrow({ where: { id: draftId } }) : published;
   invariant(draft, 404, "版本组包信息不存在");
   const parsedPlatform = muaPlatformSchema.safeParse(platformInput);
-  invariant(version.packageFormatVersion === 2 ? !draft.supportedPlatforms.length || platformInput === null || platformInput === "universal" || draft.supportedPlatforms.includes(platformInput) : parsedPlatform.success, 400, "平台参数无效");
+  invariant(version.packageFormatVersion === 2 || parsedPlatform.success, 400, "平台参数无效");
   const platform = version.packageFormatVersion === 2 ? "universal" : parsedPlatform.data!;
   const revision = version.packageFormatVersion === 2 ? draft.packageRevision : 1;
   const build = kind === "releases" ? published?.packageBuilds.find(build => build.platform === platform && build.revision === revision) : await db.packageBuild.findUnique({ where: { draftId_platform_revision: { draftId, platform, revision } } });

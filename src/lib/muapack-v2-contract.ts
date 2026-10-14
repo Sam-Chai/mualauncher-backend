@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { recipeFileSchema, parseRecipeInventory, recipePath } from "./recipe-inventory";
-import { MUA_PLATFORMS, selectedPlatformsSchema, sha256Schema, muaPathSchema } from "./muapack-contract";
+import { sha256Schema, muaPathSchema } from "./muapack-contract";
 
 const text = z.string().min(1).max(200).refine(value => !/[\x00-\x1f\x7f]/.test(value));
 const argument = z.string().max(4000).refine(value => !/[\x00\r\n]|\$\{/.test(value));
@@ -15,7 +15,7 @@ const launch = z.object({ jvmArgs: z.array(argument).max(256).refine(args => arg
     z.object({ type: z.literal("exec"), executable: location, args: z.array(argument).max(256), workingDirectory: muaPathSchema.nullable(),
       requiresConsent: z.literal(true), timeoutSeconds: z.number().int().min(1).max(300), onFailure: z.enum(["abort", "continue"]) }).strict(),
   ])).max(32) }).strict();
-const contentShape = { release: z.object({ organizationId: z.string().uuid(), clientId: text, releaseId: z.string().uuid(), version: text, name: text,
+const contentShape = { release: z.object({ organizationId: z.string().uuid(), clientId: z.string().uuid(), releaseId: z.string().uuid(), version: text, name: text,
   summary: z.string().min(1).max(200), description: z.string().max(20000), sourceSha256: sha256Schema, contentRevision: z.number().int().positive() }).strict(),
   runtime: z.object({ minecraft: text, loader: z.object({ type: z.enum(["fabric", "quilt", "forge", "neoforge"]), version: text }).strict().nullable(),
     java: z.object({ major: z.number().int().min(7).max(25), vendor: z.literal("adoptium"), imageType: z.enum(["jre", "jdk"]) }).strict(), resolverVersion: z.literal("mua-runtime-resolver-1") }).strict(),
@@ -45,16 +45,10 @@ function validateContent(value: { runtime: z.infer<typeof contentShape.runtime>;
 export const recipeContentSchema = z.object({ format: z.literal("mua-recipe-content"), formatVersion: z.literal(2), ...contentShape }).strict().superRefine(validateContent);
 export const RECIPE_PROTOCOL_REVISION = 2;
 const manifestShape = { format: z.literal("mua-recipe-manifest"), formatVersion: z.literal(2), ...contentShape };
-const legacyRecipeManifestSchema = z.object({ ...manifestShape,
-  supportedPlatforms: selectedPlatformsSchema.refine(values => values.every((value, i) => i === 0 || MUA_PLATFORMS.indexOf(values[i - 1]) < MUA_PLATFORMS.indexOf(value)), "v2 平台必须按规范顺序排列") }).strict();
-// Keep the original signed shape readable; never strip fields or normalize signed bytes.
-export const recipeManifestSchema = z.union([
-  z.object({ ...manifestShape, protocolRevision: z.literal(RECIPE_PROTOCOL_REVISION) }).strict(),
-  legacyRecipeManifestSchema,
-]).superRefine(validateContent);
+export const recipeManifestSchema = z.object({ ...manifestShape, protocolRevision: z.literal(RECIPE_PROTOCOL_REVISION) }).strict().superRefine(validateContent);
 export type RecipeContent = z.infer<typeof recipeContentSchema>;
 export type RecipeManifest = z.infer<typeof recipeManifestSchema>;
-export const recipeReleaseRefSchema = z.object({ organizationId: z.string().uuid(), clientId: text, releaseId: z.string().uuid(), version: text, manifestSha256: sha256Schema }).strict();
+export const recipeReleaseRefSchema = z.object({ organizationId: z.string().uuid(), clientId: z.string().uuid(), releaseId: z.string().uuid(), version: text, manifestSha256: sha256Schema }).strict();
 const pair = z.object({ before: recipeFileSchema, after: recipeFileSchema }).strict();
 const changesShape = { added: z.array(recipeFileSchema), modified: z.array(pair), removed: z.array(recipeFileSchema), policyChanged: z.array(pair), sourceChanged: z.array(pair),
     runtimeChanged: z.object({ before: contentShape.runtime, after: contentShape.runtime }).strict().nullable(),
@@ -63,11 +57,7 @@ const metadataShape = { format: z.literal("muapack"), formatVersion: z.literal(2
   target: recipeReleaseRefSchema, base: recipeReleaseRefSchema.nullable(), indexSha256: sha256Schema,
   payload: z.array(z.object({ entry: muaPathSchema, sha256: sha256Schema, size: z.number().int().min(0).max(2 * 1024 ** 3) }).strict()).max(100000),
   removalPolicy: z.enum(["retain", "backup-managed"]), minimumLauncherProtocol: z.literal(2) };
-export const recipePackMetadataSchema = z.union([
-  z.object({ ...metadataShape, protocolRevision: z.literal(RECIPE_PROTOCOL_REVISION), changes: z.object(changesShape).strict() }).strict(),
-  z.object({ ...metadataShape, changes: z.object({ ...changesShape,
-    platformsChanged: z.object({ before: selectedPlatformsSchema, after: selectedPlatformsSchema }).strict().nullable() }).strict() }).strict(),
-]);
+export const recipePackMetadataSchema = z.object({ ...metadataShape, protocolRevision: z.literal(RECIPE_PROTOCOL_REVISION), changes: z.object(changesShape).strict() }).strict();
 export type RecipePackMetadata = z.infer<typeof recipePackMetadataSchema>;
 export const recipeSignatureSchema = z.object({ format: z.literal("mua-pack-signature"), formatVersion: z.literal(2), algorithm: z.literal("Ed25519"),
   keyId: z.string().regex(/^[a-f0-9]{24}$/), metadataSha256: sha256Schema, signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/) }).strict();

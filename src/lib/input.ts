@@ -31,8 +31,7 @@ export function serverId(value: string) {
   return value;
 }
 export function clientId(value: string) {
-  // Existing client IDs are retained during migration; new clients use UUIDs.
-  return /^[A-Za-z]{3,5}$/.test(value) ? value : uuid(value);
+  return uuid(value);
 }
 export function username(value: string) {
   const result = value.trim().toLowerCase();

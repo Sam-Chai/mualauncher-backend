@@ -5,7 +5,7 @@
   ],
   "createClient": [
     "Create an independent client",
-    "Names are unique within an organization after NFKC normalization and case folding; use update for existing names. Organization sessions may create unbound clients; Bearer tokens must choose an authorized server. Choosing a server additionally requires CLIENT_BIND and confirmed server publicationRevision, expectedClientId and replaceConfirmed when replacing a binding. New IDs are UUIDs; legacy IDs remain readable."
+    "Names are unique within an organization after NFKC normalization and case folding; use update for existing names. Organization sessions may create unbound clients; Bearer tokens must choose an authorized server. Choosing a server additionally requires CLIENT_BIND and confirmed server publicationRevision, expectedClientId and replaceConfirmed when replacing a binding. Client IDs are UUIDs."
   ],
   "getClient": [
     "Get client details and actual task progress",
@@ -33,7 +33,7 @@
   ],
   "submitClientUpload": [
     "Submit an imported version for review",
-    "First submission requires READY. Identical retries return the same draftId; changed metadata returns 409. Omitted Minecraft/Java values use Worker results or fail with 400. Worker facts override supplied mods/modDetails. Existing client names are immutable; the first unique upload with no history may confirm its detected name. Versions must be newer than their published base. v1 defaults to five platforms; new v2 ignores compatible platform inputs."
+    "Requires READY import and DRAFT_SUBMIT. The request must not contain mods or modDetails; Worker results supply them. Minecraft and Java may use detected metadata. v1 may select platforms, defaulting to five; v2 rejects platforms. Version ordering, name confirmation, immutable content and idempotent retries remain enforced."
   ],
   "retryClientUpload": [
     "Retry a failed import",
@@ -53,7 +53,7 @@
   ],
   "reviewClientDraft": [
     "Approve or reject a submitted draft",
-    "Requires SUBMITTED and the observed contentRevision/packageRevision (legacy packageRevision defaults to 1). Rejection requires a nonempty note. Rechecks the pinned base and candidate digest; changed state, revision or base returns 409. Approval allows Worker signing/building, but is neither PackageBuild READY nor publication."
+    "Requires DRAFT_REVIEW and SUBMITTED state. contentRevision and packageRevision are required and must match the current draft. Rejections require a nonempty note. Approval queues signed package generation; it does not publish the release."
   ],
   "configureDraftPlatforms": [
     "Change required v1 build platforms",
@@ -107,10 +107,6 @@
     "Read storage, Worker and signing status",
     "Superadmin panel sessions only. Reports actual bucket connectivity, nullable public signing identity, queues and Worker heartbeats from the last 30 seconds. No private keys or storage credentials are returned."
   ],
-  "getServerClients": [
-    "Read the bound client's legacy version view",
-    "Requires SERVER_READ; draft/release arrays additionally require DRAFT_READ/RELEASE_READ and are empty without a binding. This compatibility view omits the independent client's full upload/build progress; use client details for that."
-  ],
   "searchOrganizationAccounts": [
     "Search allowlisted accounts for grants",
     "Requires organization ORG_MEMBERS_READ. q needs at least three trimmed characters and at most 64 original characters. Searches ACTIVE accounts by username/display name, case-insensitively, returning up to ten sorted by display name."
@@ -150,10 +146,6 @@
   "archiveServer": [
     "Archive or restore a server",
     "Superadmin only, with server scope validation. Keeps history while stopping distribution and clearing binding. Restoration does not automatically relist or rebind."
-  ],
-  "archiveClientLegacy": [
-    "Archive or restore a client via a compatibility route",
-    "Requires CLIENT_ARCHIVE. Keeps immutable history while stopping distribution and clearing bindings. Restoration does not automatically relist or rebind."
   ],
   "setOrganizationMember": [
     "Set membership status and organization roles",
@@ -202,18 +194,6 @@
   "setDownloadSettings": [
     "Change Worker source and proxy settings",
     "Superadmin only, audited. Older callers may omit mirror fields to preserve current values. An enabled proxy needs a credential-free HTTP(S) host/port URL. Disabling the host allowlist retains HTTPS/public-IP/DNS-pinning/redirect/hash safeguards. Mirror proxying also needs the global proxy; MinIO bypasses it. JRE is default; only superadmins may choose JDK."
-  ],
-  "createLegacyMetadataDraft": [
-    "Create a legacy metadata-only draft",
-    "Requires DRAFT_CREATE and an existing bound client. This does not complete an upload or expose submission/review/publication for metadata-only content. Use the source upload workflow for client publication."
-  ],
-  "updateLegacyMetadataDraft": [
-    "Edit a legacy metadata-only draft",
-    "Requires DRAFT_EDIT. Only unarchived DRAFT/REJECTED records without associated uploads may be edited, matching and incrementing contentRevision. Uploaded drafts cannot be edited in place."
-  ],
-  "archiveLegacyMetadataDraft": [
-    "Archive or restore a legacy metadata draft",
-    "Requires DRAFT_ARCHIVE. Only DRAFT/REJECTED records belonging to the currently bound client. This differs from withdrawing an independent client's draft with two revision fields."
   ],
   "probeServer": [
     "Read actual Minecraft connectivity",

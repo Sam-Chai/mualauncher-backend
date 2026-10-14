@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
@@ -191,7 +192,7 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     assert.equal(created.status, 201, await created.clone().text()); const identity = await created.json();
     for (const packageFormatVersion of [1, 2]) {
       const oversized = await fetch(origin + "/api/v1/clients/uploads", { method: "POST", headers: { Cookie: cookies.get(root.id)!, Origin: origin, "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId: identity.clientId, fileName: "source.zip", size: 1024 * 1024 + 1, baseReleaseId: null, basePublicationRevision: 0, packageFormatVersion }) });
+        body: JSON.stringify({ clientId: fixtureClientId(identity.clientId), fileName: "source.zip", size: 1024 * 1024 + 1, baseReleaseId: null, basePublicationRevision: 0, packageFormatVersion }) });
       assert.equal(oversized.status, 413); assert((await oversized.text()).includes("1 MB"));
     }
     assert.equal((await patchSettings(root, { maxUploadSizeMb: 1024 })).status, 200);
@@ -249,8 +250,15 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     await adminWrite("PATCH", `/api/admin/accounts/${account.id}`, { displayName: "Contract updated" });
     await adminWrite("PUT", `/api/admin/organizations/${org.id}/members/${account.id}`, { roles: ["READ_ONLY"], status: "ACTIVE" });
     await adminWrite("PUT", `/api/admin/organizations/${org.id}/members/${account.id}/servers/API`, { roles: ["SERVER_EDITOR"] });
-    for (const path of [`/api/admin/organizations/${org.id}/account-search?q=contract`, "/api/admin/servers/API/clients", "/api/admin/state", "/api/admin/pipeline"]) {
+    for (const path of [`/api/admin/organizations/${org.id}/account-search?q=contract`, "/api/admin/state", "/api/admin/pipeline"]) {
       assert.equal((await fetch(origin + path, { headers: panelHeaders })).status, 200);
+    }
+    for (const [method, path] of [["GET", "/api/admin/servers/API/clients"], ["POST", "/api/admin/servers/API/drafts"],
+      ["PATCH", "/api/admin/servers/API/drafts/00000000-0000-4000-8000-000000000001"],
+      ["POST", "/api/admin/servers/API/drafts/00000000-0000-4000-8000-000000000001/archive"],
+      ["POST", "/api/admin/clients/00000000-0000-4000-8000-000000000001/archive"]]) {
+      const response = await globalThis.fetch(origin + path, { method, headers: panelHeaders, ...(method === "GET" ? {} : { body: "{}" }) });
+      assert.equal(response.status, 404, `${method} ${path}`);
     }
     const token = await adminWrite("POST", "/api/admin/tokens", { name: "Contract token", serverIds: ["API"], permissions: ["SERVER_READ", "DRAFT_READ"], expiresInDays: 1 }, 201);
     assert.equal((await fetch(origin + "/api/admin/tokens", { headers: panelHeaders })).status, 200);

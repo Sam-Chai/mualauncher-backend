@@ -13,7 +13,7 @@ export function muaFixture(version = "1.0.0", platform: MuaPlatform = "windows-a
   const loaderFile = file("instance", "libraries/fabric-loader-0.19.5.jar", "synthetic loader");
   const javaFile = file("java", javaPath, "synthetic Java", "managed", true);
   const environmentDocuments = new Map<string, Buffer>();
-  const javaIdentity = { major: 25, vendor: "example", version: "25.0.0", build: "1", executable: javaPath, archiveSha256: muaDigest(Buffer.from("synthetic archive")) };
+  const javaIdentity = { major: 25, vendor: "example", version: "25.0.0", build: "1", imageType: "jre" as const, executable: javaPath, archiveSha256: muaDigest(Buffer.from("synthetic archive")) };
   function environment(value: unknown) {
     const document = muaEnvironmentManifestSchema.parse(value); const bytes = encodeMuaJson(document); const sha256 = muaDigest(bytes);
     environmentDocuments.set(sha256, bytes); return { kind: document.kind, sha256 };
@@ -26,11 +26,11 @@ export function muaFixture(version = "1.0.0", platform: MuaPlatform = "windows-a
     environment({ ...common, kind: "java", java: javaIdentity, files: [javaFile] }),
   ];
   const manifest = muaPlatformManifestSchema.parse({ format: "mua-platform-manifest", formatVersion: 1,
-    release: { organizationId: "11111111-1111-4111-8111-111111111111", clientId: "NPU", releaseId: version === "1.0.0" ?
+    release: { organizationId: "11111111-1111-4111-8111-111111111111", clientId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", releaseId: version === "1.0.0" ?
       "22222222-2222-4222-8222-222222222222" : "33333333-3333-4333-8333-333333333333", version, name: "NPU 示例", summary: "协议测试", description: "Synthetic fixture; not runnable.",
       sourceSha256: muaDigest(Buffer.from(`synthetic source ${version}`)), contentRevision: 1 },
     platform, runtime: { minecraft: "26.1", loader: { type: "fabric", version: "0.19.5" },
-      java: { major: javaIdentity.major, vendor: javaIdentity.vendor, version: javaIdentity.version, build: javaIdentity.build,
+      java: { major: javaIdentity.major, vendor: javaIdentity.vendor, version: javaIdentity.version, build: javaIdentity.build, imageType: javaIdentity.imageType,
         executable: javaPath, manifestSha256: environments[2].sha256 } }, environments,
     launch: { mainClass: "net.fabricmc.loader.impl.launch.knot.KnotClient", classpath: [minecraftFile.path, loaderFile.path],
       jvmArgs: ["-Dexample=true"], gameArgs: ["--username", "${auth_player_name}"],

@@ -16,7 +16,7 @@
 
 行内“绑定 / 解绑”管理关联。选择已有客户端的服务器时必须确认替换。新客户端尚未有当前发布时保存待绑定请求，服务器继续使用旧客户端；审核发布并启用当前版本时，有 CLIENT_BIND 的操作者按已确认的绑定修订完成替换。只有版本切换权限的人员可先启用客户端版本，再由管理员手动绑定。绑定已发布客户端可立即生效，旧客户端及历史保留。请求校验服务器 revision 与 expectedClientId；期间绑定发生变化返回 409，需要取消待绑定请求后重新确认。解绑保留客户端当前版本和全部历史，只停止该服务器分发。
 
-v1 提交可传 platforms，默认除 Linux aarch64 外五项，Worker 准备环境。新 v2 不提交 platforms，使用 protocolRevision:2 的平台无关清单和单一配方任务；旧 API 有效平台列表兼容接收但不限制新 v2。审核后签名组包，必需产物完成才可发布。提交后进入 /admin/releases/review，审核、发布与切换权限继续分离；期间旧当前版本保持可用。
+v1 提交可传 platforms，默认除 Linux aarch64 外五项，Worker 准备环境。新 v2 不提交 platforms，使用 protocolRevision:2 的平台无关清单和单一配方任务；v2 提交含 platforms 返回 400。审核后签名组包，必需产物完成才可发布。提交后进入 /admin/releases/review，审核、发布与切换权限继续分离；期间旧当前版本保持可用。
 
 归档保留 Client、草稿、Release 和存储对象，同时停止分发并清除当前绑定。恢复不会自动上架或恢复绑定。并发更新的基准若改变，提交／审核／发布返回 409，要求基于最新当前版本重新上传。
 
@@ -39,7 +39,7 @@ Worker 为独立进程。任务保存在 PostgreSQL，领取、租约续期、�
 
 网页使用 HttpOnly 会话，写请求带 Origin。自动化使用 Authorization: Bearer mua_...，不要求 Origin，不继承浏览器会话。Token 在 Settings 创建，最多 90 天有效，只显示一次，限制服务器和权限；每次请求再次与账号当前 RBAC 取交集，账号停用、成员撤权、Token 撤销均生效。Token 不能创建其他 Token。
 
-客户端端点统一使用 Client.id，不再把服务器 ID 当客户端身份；迁移保留旧客户端 ID 的原字符串，新客户端用 UUID。基准修订是客户端 revision，绑定修订是服务器 publicationRevision，不能混用。未绑定客户端由组织权限管理；单服授权按当前绑定服务器计算，解绑后使用固定 scopeServerId 作为授权来源，不能藉此操作其他服务器。没有来源服务器的独立客户端要求组织范围授权。新建时选定服务器要求 CLIENT_BIND；纯客户端编辑人员可按组织授权创建未绑定客户端。Token 创建独立客户端须选择授权服务器，创建或变更绑定还需 CLIENT_BIND。
+客户端端点统一使用 Client.id，不再把服务器 ID 当客户端身份；迁移统一使用 UUID。基准修订是客户端 revision，绑定修订是服务器 publicationRevision，不能混用。未绑定客户端由组织权限管理；单服授权按当前绑定服务器计算，解绑后使用固定 scopeServerId 作为授权来源，不能藉此操作其他服务器。没有来源服务器的独立客户端要求组织范围授权。新建时选定服务器要求 CLIENT_BIND；纯客户端编辑人员可按组织授权创建未绑定客户端。Token 创建独立客户端须选择授权服务器，创建或变更绑定还需 CLIENT_BIND。
 
 上传 Token 通常包含 SERVER_READ、DRAFT_READ、DRAFT_CREATE、DRAFT_EDIT、DRAFT_SUBMIT。审核与发布权限显式另授。没有另一套 GitHub Release：下方接口仍生成同一组 ClientDraft／ClientRelease。
 
@@ -50,7 +50,7 @@ Worker 为独立进程。任务保存在 PostgreSQL，领取、租约续期、�
 | GET /api/v1/clients/:clientId | 客户端详情及可读版本历史 |
 | POST /api/v1/clients/:clientId/bind | {serverId,publicationRevision,expectedClientId,replaceConfirmed}；CLIENT_BIND，检查双方权限与同组织 |
 | POST /api/v1/clients/:clientId/unbind | {serverId:null或当前服务器ID,publicationRevision:null或当前绑定修订}；解绑或取消待绑定请求 |
-| POST /api/v1/clients/uploads | {clientId,fileName,size,baseReleaseId,basePublicationRevision,comparisonDraftId?,packageFormatVersion?:1或2}；旧请求缺省为 1，返回 id、partSize、锁定的 packageFormatVersion |
+| POST /api/v1/clients/uploads | {clientId,fileName,size,baseReleaseId,basePublicationRevision,comparisonDraftId?,packageFormatVersion:1或2}；必须显式提供格式，返回 id、partSize、锁定的 packageFormatVersion |
 | POST /api/v1/clients/uploads/:id/parts | {partNumber} 获取仅限该任务该分片的 10 分钟 PUT URL |
 | PUT 返回的 URL | 二进制分片，记录响应 ETag；每片 64 MiB，末片可更小 |
 | POST /api/v1/clients/uploads/:id/complete | {parts:[{partNumber,etag}]} 校验全部分片、大小和 ETag，合并后两种格式均排队，由 Worker 按保存格式分支处理；大对象合并不持有数据库写锁，重复完成保留既有状态与格式 |
@@ -78,37 +78,37 @@ Worker 为独立进程。任务保存在 PostgreSQL，领取、租约续期、�
       "description": "## 更新内容\n\n- 升级模组\n- 修正配置"
     }
 
-模组列表由 Worker 自动生成并固定到草稿、Release 环境快照及 Manifest；旧自动化请求中的 mods 字段仍接受，但不作为事实来源。client:upload 的 metadata.json 可省略 mods、minecraftVersion 与 javaVersion。已发布历史不重写；新上传及更新采用本规则。
+模组列表由 Worker 自动生成并固定到草稿、Release 环境快照及 Manifest；提交请求禁止包含 mods／modDetails 字段。client:upload 的 metadata.json 不传 mods／modDetails，可省略 minecraftVersion 与 javaVersion。已发布历史不重写；新上传及更新采用本规则。
 
 ### 格式字段与分阶段行为
 
-packageFormatVersion 是 muapack 分发格式，不能与源包扩展名或旧 Release Manifest schemaVersion 混用。创建上传时接受数字 1／2；其他值、字符串、null 返回 400。旧 API 省略时按 v1，新网页必须选择，新脚本明确把格式提交到创建上传 API。格式属于上传／候选版本，同一个 Client 可以先上传 v1、再选择 v2，不改变客户端身份。
+packageFormatVersion 是 muapack 分发格式，不能与源包扩展名或客户端 Manifest schemaVersion 混用。创建上传时接受数字 1／2；其他值、字符串、null 返回 400。API 省略格式返回 400，新网页必须选择，新脚本明确把格式提交到创建上传 API。格式属于上传／候选版本，同一个 Client 可以先上传 v1、再选择 v2，不改变客户端身份。
 
-数据库在 ClientUpload／ClientDraft／ClientRelease 保存 packageFormatVersion，默认 1；所有历史行仅增加判别字段，不重写 OSS Manifest、签名、产物或发布身份。格式创建后不可变，提交和发布继承来源格式，读取上传、客户端详情和版本历史返回字段；不能通过 submit／retry／complete 改选格式。
+数据库在 ClientUpload／ClientDraft／ClientRelease 保存 packageFormatVersion，默认 1；首发基线使用当前结构。格式创建后不可变，提交和发布继承来源格式，读取上传、客户端详情和版本历史返回字段；不能通过 submit／retry／complete 改选格式。
 
 本阶段 v2 上传完成进入 QUEUED → PROCESSING → READY／FAILED。Worker 先通过 INSPECTING 返回名称、包内版本、MC／Java／加载器、模组和 optional，再进入 CAS 校验本地 overrides。按远程 → overrides → client-overrides 应用覆盖层，server-overrides／client unsupported 不进入目标。本地文件 VERIFIED，远程文件 DECLARED，downloadedBytes=0，不执行远程下载或环境安装。仍应用超管远程白名单（启用时）、HTTPS／地址／持久链接与路径保护；不进行 DNS 或远程字节验证，Launcher 后续必须逐跳校验公开地址及所有上游哈希。
 
 v2 的 filesObjectKey／filesSha256 指向摘要保护的内部 `{schemaVersion:2,format:"mua-import-recipe",runtime,files}` 索引，区别于旧 schemaVersion=1 的 CAS 索引和旧 Release Manifest。保留远程 SHA-1、SHA-512、可选 SHA-256、大小、下载地址及本地 SHA-256／载荷路径、policy、optional、executable；runtime 保存 MC、加载器及 Java major（未知为 null，等待管理员确认）。不预选 Java 构建、不伪造环境清单或发布身份。旧索引读取器明确拒绝 v2；回收只索引本地 CAS，不为远程声明注册引用。
 
-UploadView 中 v2 的 statistics=null、recipeStatistics 提供 localFiles／remoteFiles／optionalFiles、localSize／remoteDeclaredSize／newLocalDataSize／localCasReusePercent／sourceSize。本地 CAS 复用率不等于玩家更新节省量，远程大小未经下载验证，环境大小未知。READY 仅导入完成，可以提交审核并创建 universal 配方组包任务；不会创建环境下载任务或立即切换当前版本。迁移会将有效客户端、组织及活动账号的旧 WAITING_PROCESSOR 重新排队，其余保留可取消状态。读取、取消、重试、限额、授权撤销、租约和归档删除沿用统一流程。
+UploadView 中 v2 的 statistics=null、recipeStatistics 提供 localFiles／remoteFiles／optionalFiles、localSize／remoteDeclaredSize／newLocalDataSize／localCasReusePercent／sourceSize。本地 CAS 复用率不等于玩家更新节省量，远程大小未经下载验证，环境大小未知。READY 仅导入完成，可以提交审核并创建 universal 配方组包任务；不会创建环境下载任务或立即切换当前版本。上传直接进入统一 QUEUED／PROCESSING 流程。读取、取消、重试、限额、授权撤销、租约和归档删除沿用统一流程。
 
-Actions 的 metadata.json 可以带 `"packageFormatVersion": 2`，脚本把它用于创建上传，不放进提交资料。缺省为 1 兼容旧配置。两种格式均等待导入完成后提交同一审核 API，输出 `{clientId,uploadId,draftId,packageFormatVersion,status:"SUBMITTED",statistics,recipeStatistics}`，不自动审核／发布。
+Actions 的 metadata.json 可以带 `"packageFormatVersion": 2`，脚本把它用于创建上传，不放进提交资料。必须明确提供数字 1 或 2。两种格式均等待导入完成后提交同一审核 API，输出 `{clientId,uploadId,draftId,packageFormatVersion,status:"SUBMITTED",statistics,recipeStatistics}`，不自动审核／发布。
 
 ### v2 完整组包与发布
 
-提交生成固定的 `mua-recipe-content`。新草稿旧 supportedPlatforms 列为空，目标投影为 protocolRevision:2 且无平台字段；非空历史草稿保留旧投影及审核／READY 字节。Worker 创建 `(draftId,platform:"universal",revision:packageRevision)` 单一任务，准备完整目标后等待审核；通过后只读本地 CAS，生成 mua-pack.json、完整 mrpack 索引、目标清单、独立域签名和 overrides。CRC／SHA-256／大小、清单／索引一致性与签名验证并保存 OSS 后才为 READY。
+提交生成固定的 `mua-recipe-content`。目标为 protocolRevision:2 且无平台字段；数据库不保存 v2 平台声明。Worker 创建 `(draftId,platform:"universal",revision:packageRevision)` 单一任务，准备完整目标后等待审核；通过后只读本地 CAS，生成 mua-pack.json、完整 mrpack 索引、目标清单、独立域签名和 overrides。CRC／SHA-256／大小、清单／索引一致性与签名验证并保存 OSS 后才为 READY。
 
 2026-10-11 起，平台配置 API 只用于 v1，v2 返回 409；v2 界面仅显示通用配方包状态与失败重试。历史 v2 的任务修订、平台声明、READY 对象与签名保持原样。审核／发布须使用当前修订。发布记录指向最终跨平台 target，而非内部 content；数据库要求当前必需任务 READY、target 摘要／键及签名密钥与发布一致，应用还检查 OSS 对象大小／摘要。远程声明与环境不要求 Worker 下载，因此不可标成已验收。
 
-新 v2 管理完整下载不需要平台，旧 platform 参数不限制新修订；历史 v2 仍校验原声明。管理下载保持 DRAFT_READ／RELEASE_READ、版本归属与 READY 检查。公开 manifest／packages 使用 acceptedFormatVersions=2 或 1,2，旧请求只接受 v1，当前 v2 返回 415。新 packages 返回 minimumLauncherProtocol:2、protocolRevision:2、runtime、optional 模组和 full 信息，不返回平台字段。匹配固定基准 ID／摘要才选择 update，新修订不检查平台覆盖，历史受限目标保留旧门槛；失败回退 full 且基准字段为 null。旧 CAS 单文件端点不用于 v2，归档仍停止新分发。
+新 v2 管理完整下载不需要平台，各系统获取同一配方。管理下载保持 DRAFT_READ／RELEASE_READ、版本归属与 READY 检查。公开 manifest／packages 使用 acceptedFormatVersions=2 或 1,2，请求必须声明接受格式，当前 v2 返回 415。新 packages 返回 minimumLauncherProtocol:2、protocolRevision:2、runtime、optional 模组和 full 信息，不返回平台字段。匹配固定基准 ID／摘要才选择 update，新修订不检查平台覆盖；失败回退 full 且基准字段为 null。公开 CAS 单文件端点已删除，归档仍停止新分发。
 
 ### v2 自动增量
 
-更新仍上传完整 mrpack／PCL 包，上传时固定 baseReleaseId 和客户端 revision。审核后 Worker 读取精确已发布 v2 基准，核对摘要／组织／客户端／发布身份，重算文件、策略、来源及 runtime／launch 差异，新修订没有 platformsChanged。更新包携带完整原始基准／目标、目标远程索引和所需本地 after 字节；远程／环境仅为声明，未变化本地不进 update。removalPolicy=retain，preserve／玩家文件不自动删除，零变化允许零载荷。新修订可基于历史 v2 更新；历史目标保留原平台规则。
+更新仍上传完整 mrpack／PCL 包，上传时固定 baseReleaseId 和客户端 revision。审核后 Worker 读取精确已发布 v2 基准，核对摘要／组织／客户端／发布身份，重算文件、策略、来源及 runtime／launch 差异，新修订没有 platformsChanged。更新包携带完整原始基准／目标、目标远程索引和所需本地 after 字节；远程／环境仅为声明，未变化本地不进 update。removalPolicy=retain，preserve／玩家文件不自动删除，零变化允许零载荷。只接受 protocolRevision:2 的 v2 基准与目标。
 
-PackageBuild.artifacts.update 增加 baseManifestSha256（旧 v1 可省略）；发布核对它与上传时的发布基准，full／update 的 OSS 大小与摘要均有效才可发布。没有基准、跨格式或平台没有交集仅生成 full；损坏基准明确失败，不偷偷选择另一版本。当前只生成相对于一个固定发布的更新包，其他旧版本请求回退 full，不提供更新链组合。管理“下载完整包”始终 full，发布包详情显示真实 full／update ZIP 大小；环境未知量不伪造。
+PackageBuild.artifacts.update 增加 baseManifestSha256（必填）；发布核对它与上传时的发布基准，full／update 的 OSS 大小与摘要均有效才可发布。没有基准、跨格式或平台没有交集仅生成 full；损坏基准明确失败，不偷偷选择另一版本。当前只生成相对于一个固定发布的更新包，其他旧版本请求回退 full，不提供更新链组合。管理“下载完整包”始终 full，发布包详情显示真实 full／update ZIP 大小；环境未知量不伪造。
 
-2026-10-11 下载更新：v2 packages 不要求 platform，可省略或使用 universal，后台管理 v2 package／platform-manifest 同样可省略。v1 与 v2 均校验实际基准清单及 full／所选 update 的 OSS 大小／摘要；v1 新产物记录 baseManifestSha256，旧记录读取封存平台清单推导。响应提供 etag／expiresAt／refreshUrl，`GET /api/v1/servers/:serverId/releases/:releaseId/packages` 固定已发布版本刷新，支持 packageSha256 防止续传到其他字节，详见[Launcher 下载与刷新](launcher-download-api.md)。
+2026-10-11 下载更新：v2 packages 不要求 platform，可省略或使用 universal，后台管理 v2 package／platform-manifest 同样可省略。v1 与 v2 均校验实际基准清单及 full／所选 update 的 OSS 大小／摘要；v1／v2 更新产物都必须记录 baseManifestSha256。响应提供 etag／expiresAt／refreshUrl，`GET /api/v1/servers/:serverId/releases/:releaseId/packages` 固定已发布版本刷新，支持 packageSha256 防止续传到其他字节，详见[Launcher 下载与刷新](launcher-download-api.md)。
 
 公开调用示例：`GET /api/v1/servers/NPU/packages?platform=windows-amd64&acceptedFormatVersions=2&baseReleaseId=<UUID>&baseManifestSha256=<SHA-256>`。摘要参数可选，推荐按安装记录提供；无基准／错误基准／不兼容平台／摘要不符返回目标 full，仍附 full 修复地址。无效摘要或缺少 ID 却提供摘要返回 400。Launcher 必须验签并核对本地真实基准及清单摘要，缺失未变化文件从同目标 full 修复。归档／下架继续拒绝新分发。
 
@@ -157,9 +157,9 @@ detectedInfo 包含 schemaVersion:1、instanceId、minecraftVersion、javaVersio
 
 新生成 mua-client-manifest schemaVersion 2，包含真实 organizationId、clientId、版本／名称、runtime、mods、Summary／Description、源 ZIP SHA-256、排序后的 {path,sha256,size,policy} 文件列表与 update 统计。提交后锁定清单，审核绑定 contentRevision，发布内容不可修改。精确 UTF-8 字节受 SHA-256 摘要及 Ed25519 签名覆盖。
 
-GET /api/v1/servers/:serverId/manifest 返回精确签名 JSON 字节，响应头包含 X-MUA-Manifest-Sha256、X-MUA-Signing-Key、X-MUA-Signature、X-MUA-Signature-Algorithm。GET /api/v1/servers/:serverId/files/:sha256 仅允许当前公开版本中的哈希，返回 5 分钟下载 URL。归档／下架停止生成新链接；已签发链接在短期到期前仍可用。猜测其他组织私有 CAS 哈希不能通过此接口下载。
+GET /api/v1/servers/:serverId/manifest 返回精确签名 JSON 字节，响应头包含 X-MUA-Manifest-Sha256、X-MUA-Signing-Key、X-MUA-Signature、X-MUA-Signature-Algorithm。公开 CAS 单文件入口已删除，下载通过 muapack packages 接口提供。归档／下架停止生成新链接；已签发链接在短期到期前仍可用。存储对象键不由公开调用者指定。
 
-后续：其他包格式解析、生产密钥生命周期、Launcher 验签／安装与旧 managed 文件清理。服务器目录的 currentRelease 包含 clientId、packageFormatVersion 与 manifestUrl；服务器身份由目录及请求路由确定，不写死进新版不可变清单。旧 schemaVersion 1 的清单、摘要和签名保留原字节，只能绑定原服务器；跨服务器绑定前须新版本生成带 clientId 的清单。旧 Manifest schemaVersion 与 muapack formatVersion 独立。启动器源码尚未修改，需联调 clientId / serverId 分离和 v2 安装协议。
+后续：其他包格式解析、生产密钥生命周期、Launcher 验签／安装与旧 managed 文件清理。服务器目录的 currentRelease 包含 clientId、packageFormatVersion 与 manifestUrl；服务器身份由目录及请求路由确定，不写死进新版不可变清单。客户端 Manifest 只接受 schemaVersion:2；Manifest schemaVersion 与 muapack formatVersion 独立。启动器源码尚未修改，需联调 clientId / serverId 分离和 v2 安装协议。
 
 ## v2 分发统计（2026-10-13）
 

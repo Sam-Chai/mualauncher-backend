@@ -8,7 +8,7 @@ import { statistics } from "./schemas";
 
 export const uuid = z.string().uuid();
 export const serverId = z.string().regex(/^[A-Za-z]{3,5}$/);
-export const clientId = z.union([uuid, serverId]);
+export const clientId = uuid;
 export const date = z.string().datetime({ offset: true });
 const nullableText = z.string().nullable(), nullableDate = date.nullable(), integer = z.number().int().nonnegative();
 export const permission = z.enum([...new Set(Object.values(rolePermissions).flat())] as [string, ...string[]]);
@@ -29,7 +29,7 @@ export const inspection = detectedRuntime.extend({ schemaVersion: z.literal(1), 
     hashes: z.object({ sha1: z.string().optional(), sha512: z.string().optional(), sha256: z.string().optional() }).strict().optional(),
     status: z.enum(["PENDING", "DECLARED", "DOWNLOADING", "VERIFIED", "FAILED"]), downloadedBytes: integer, error: nullableText }).strict()).optional(),
 }).strict();
-export const upload = z.object({ id: uuid, clientId: z.string(), fileName: z.string(), size: integer, partSize: integer,
+export const upload = z.object({ id: uuid, clientId: uuid, fileName: z.string(), size: integer, partSize: integer,
   packageFormatVersion: z.union([z.literal(1), z.literal(2)]), status: z.nativeEnum(UploadStatus), progress: integer,
   error: nullableText, draftId: uuid.nullable(), statistics: statistics.nullable(), recipeStatistics: recipeStatistics.nullable(),
   detectedMods: z.array(z.string()), warnings: z.array(z.string()), comparisonDraftId: uuid.nullable(), comparisonStatistics: statistics.nullable(),
@@ -39,11 +39,11 @@ export const buildProgress = z.object({ platform: z.string(), status: z.enum(["Q
   phase: z.string(), progress: integer, error: nullableText, artifacts: packageArtifactsSchema.nullable() }).strict();
 const sourceBuild = z.object({ draftId: uuid, platform: z.string(), revision: integer, status: z.string(), required: z.boolean(),
   artifacts: z.unknown() }).strict(); // Historical JSON is returned unchanged here.
-export const releaseSource = z.object({ supportedPlatforms: z.array(z.string()), packageRevision: integer,
+export const releaseSource = z.object({ packageRevision: integer,
   upload: z.object({ statistics: importStatistics, comparisonStatistics: statistics.nullable() }).strict().nullable(),
   packageBuilds: z.array(sourceBuild) }).strict();
 const versionShape = { id: uuid, versionLabel: nullableText, name: nullableText, description: nullableText, changelog: z.string(), summary: nullableText, archivedAt: nullableDate };
-export const draft = z.object({ ...versionShape, packageFormatVersion: z.number().int(), supportedPlatforms: z.array(z.string()), versionSequence: integer,
+export const draft = z.object({ ...versionShape, packageFormatVersion: z.number().int(), versionSequence: integer,
   replacesDraftId: uuid.nullable(), archiveReason: nullableText, supersededByDraftId: uuid.nullable(),
   candidateMetadata: z.unknown(), reviewNote: nullableText, status: z.nativeEnum(DraftStatus), contentRevision: integer, packageRevision: integer,
   createdAt: date, upload: z.object({ id: uuid, statistics: importStatistics, comparisonStatistics: statistics.nullable() }).strict().nullable(),
@@ -52,12 +52,12 @@ export const release = z.object({ ...versionShape, versionLabel: z.string(), nam
   packageFormatVersion: z.number().int(), environmentSnapshot: z.unknown(), publishedAt: date,
   sourceDraft: releaseSource.nullable(), packageBuilds: z.array(sourceBuild.extend({ artifacts: packageArtifactsSchema.nullable() })) }).strict();
 export const displaySchedule = z.object({ displayMode: z.enum(["PERMANENT", "RANGE"]), displayStartsAt: nullableDate, displayEndsAt: nullableDate }).strict();
-export const client = z.object({ clientId: z.string(), name: z.string(), organizationId: uuid, organizationName: z.string(),
+export const client = z.object({ clientId: uuid, name: z.string(), organizationId: uuid, organizationName: z.string(),
   serverId: serverId.nullable(), serverName: z.string(), requestedServerId: serverId.nullable(), scopeServerId: serverId.nullable(),
   archived: z.boolean(), blocked: z.boolean(), displaySchedule: displaySchedule.nullable(), lifecycleStatus: z.enum(["ARCHIVED", "PUBLISHED", "UNPUBLISHED"]),
   permissions: z.array(permission), publicationRevision: integer, currentReleaseId: uuid.nullable(), initialPackageFormatVersion: z.number().int().nullable(),
   bindingRevision: integer.nullable(), drafts: z.array(draft), releases: z.array(release), canDelete: z.boolean(), uploads: z.array(upload.extend({ canEdit: z.boolean() })) }).strict();
-export const createdClient = z.object({ clientId: z.string(), name: z.string(), currentReleaseId: z.null(), publicationRevision: z.literal(0) }).strict();
+export const createdClient = z.object({ clientId: uuid, name: z.string(), currentReleaseId: z.null(), publicationRevision: z.literal(0) }).strict();
 export const published = z.object({ releaseId: uuid, versionLabel: z.string(), activated: z.boolean().optional(), archivedDraftIds: z.array(uuid).optional() }).strict();
 export const fullPackage = z.object({ packageType: z.literal("full"), packageFormatVersion: z.number().int(), platform: z.string(),
   versionLabel: z.string(), fileName: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/), size: integer, expiresIn: z.literal(300), url: z.string().url() }).strict();
@@ -67,7 +67,7 @@ export const server = z.object({ serverId, organizationId: uuid, displayName: z.
   iconObjectKey: nullableText, sortOrder: z.number().int(), themeColor: nullableText, mottoImageUrl: nullableText,
   ...displaySchedule.shape, isListed: z.boolean(), archivedAt: nullableDate, clientArchivedAt: nullableDate,
   currentReleaseId: uuid.nullable(), currentReleaseActive: z.boolean(), publicationRevision: integer,
-  boundClientId: nullableText, boundClientName: nullableText, permissions: z.array(permission) }).strict();
+  boundClientId: uuid.nullable(), boundClientName: nullableText, permissions: z.array(permission) }).strict();
 export const state = z.object({ actor: z.object({ id: uuid, displayName: z.string(), isSuperAdmin: z.boolean(), username: nullableText.optional() }).strict(),
   organizations: z.array(z.object({ id: uuid, displayName: z.string(), description: z.string(), clientCount: integer, avatarObjectKey: nullableText,
     archivedAt: nullableDate, permissions: z.array(permission), servers: z.array(server),
@@ -87,18 +87,13 @@ export const probe = z.object({ serverId, state: z.enum(["ONLINE", "HIGH_LATENCY
   latencyMs: z.number().nullable(), latencyKind: z.union([z.enum(["PONG", "STATUS"]), z.null()]), highLatencyMs: z.number(), message: z.string(), version: nullableText, playersOnline: z.number().int().nullable() }).strict();
 export const motto = mottoMetadataSchema;
 export const mottoSaved = ok.extend({ iconObjectKey: nullableText }).strict();
-export const oldDraft = draft.pick({ id: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true,
-  reviewNote: true, status: true, contentRevision: true, archivedAt: true, createdAt: true }).extend({ upload: z.object({ id: uuid, statistics: importStatistics }).strict().nullable() }).strict();
-export const oldRelease = release.omit({ packageFormatVersion: true, packageBuilds: true }).strict();
-export const serverClients = z.object({ drafts: z.array(oldDraft), releases: z.array(oldRelease) }).strict();
-
 const text = (max = 200, minimum = 1) => z.string().trim().min(minimum).max(max);
 const nullableInput = (max = 500) => z.union([text(max), z.literal(""), z.null()]);
 export const organizationCreate = z.object({ displayName: text(), description: text(5000, 0).optional(), avatarObjectKey: nullableInput().optional() }).strict();
 export const organizationUpdate = organizationCreate.partial();
-export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(), iconObjectKey: nullableInput().optional(),
+export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),
   displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: date.nullable().optional(), displayEndsAt: date.nullable().optional() }).strict();
-export const serverUpdate = z.object({ displayName: text().optional(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(), iconObjectKey: nullableInput().optional(),
+export const serverUpdate = z.object({ displayName: text().optional(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),
   sortOrder: z.number().int().min(-2147483647).max(2147483647).optional(), themeColor: z.union([z.string().regex(/^#[0-9a-f]{6}$/i), z.literal(""), z.null()]).optional(),
   isListed: z.boolean().optional(), displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: nullableDate.optional(), displayEndsAt: nullableDate.optional() }).strict();
 export const member = z.object({ roles: z.array(role), status: z.nativeEnum(AccountStatus) }).strict();
@@ -107,6 +102,4 @@ export const accountCreate = z.object({ displayName: text(), username: text(64, 
 export const accountUpdate = z.object({ displayName: text().optional(), status: z.nativeEnum(AccountStatus).optional(), isSuperAdmin: z.boolean().optional(), password: z.string().min(12).max(128).optional() }).strict();
 export const login = z.object({ username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i), password: z.string().min(1).max(128) }).strict();
 export const passwordChange = z.object({ currentPassword: z.string().max(128), newPassword: z.string().min(12).max(128) }).strict();
-export const oldDraftCreate = z.object({ versionLabel: text(100), name: text(), description: text(10000, 0), changelog: text(10000, 0) }).strict();
-export const oldDraftUpdate = oldDraftCreate.extend({ contentRevision: z.number().int() }).strict();
 export const clientMetadata = clientMetadataSchema;

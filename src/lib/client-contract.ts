@@ -16,8 +16,7 @@ export const clientMetadataSchema = z.object({
   description: z.string().max(20000),
 }).strict();
 export type ClientMetadata = z.infer<typeof clientMetadataSchema>;
-// Accepted for old API callers, but Worker output always supplies the authoritative mods.
-export const clientSubmissionSchema = clientMetadataSchema.extend({ mods: clientMetadataSchema.shape.mods.optional(),
+export const clientSubmissionSchema = clientMetadataSchema.omit({ mods: true, modDetails: true }).extend({
   minecraftVersion: clientMetadataSchema.shape.minecraftVersion.optional(), javaVersion: clientMetadataSchema.shape.javaVersion.optional(), platforms: selectedPlatformsSchema.optional() });
 export type PackFile = { path: string; sha256: string; size: number; policy: "managed" | "preserve"; optional?: boolean };
 export type ImportFile = { path: string; source: "local" | "remote"; optional: boolean; size: number;
@@ -48,7 +47,7 @@ export function runtimeAutofill(info: DetectedRuntime, current: Pick<ClientMetad
   };
 }
 export type ReleaseManifest = {
-  schemaVersion: 1 | 2; format: "mua-client-manifest"; clientId?: string; serverId?: string; organizationId: string;
+  schemaVersion: 2; format: "mua-client-manifest"; clientId: string; organizationId: string;
   version: string; name: string; runtime: { minecraft: string; java: number };
   mods: string[]; summary: string; description: string; sourceSha256: string;
   modDetails?: { path: string; optional: boolean }[];
@@ -66,7 +65,6 @@ export type UploadView = {
 };
 export function uploadProcessingLabel(upload: Pick<UploadView, "status" | "processingPhase" | "progress"> & Partial<Pick<UploadView, "packageFormatVersion">>) {
   if (upload.packageFormatVersion === 2 && upload.status === "READY") return "v2 识别完成 · 待提交";
-  if (upload.status === "WAITING_PROCESSOR") return "历史上传待迁移 · 请联系管理员";
   if (upload.processingPhase === "SELECT_INSTANCE") return "请选择要发布的客户端实例";
   if (upload.status === "QUEUED") return "等待 Worker 处理";
   if (upload.processingPhase === "FETCHING") return "正在读取上传的整合包";

@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -21,7 +22,7 @@ function fixture(permissions: Server["permissions"], superAdmin = false) {
     serverId: "NPB", organizationId: "00000000-0000-4000-8000-000000000001", displayName: "NPU BETA", description: "Test server",
     gameAddress: "beta.example.edu:25565", iconObjectKey: null, mottoImageUrl: null, sortOrder: 3, themeColor: "#123456", isListed: true, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null,
     archivedAt: null, clientArchivedAt: null, currentReleaseId: "00000000-0000-4000-8000-000000000002", currentReleaseActive: true,
-    publicationRevision: 1, boundClientId: "00000000-0000-4000-8000-000000000003", boundClientName: "Beta client", permissions,
+    publicationRevision: 1, boundClientId: fixtureClientId("00000000-0000-4000-8000-000000000003"), boundClientName: "Beta client", permissions,
   };
   const state: State = {
     actor: { id: "00000000-0000-4000-8000-000000000004", displayName: "Tester", isSuperAdmin: superAdmin },

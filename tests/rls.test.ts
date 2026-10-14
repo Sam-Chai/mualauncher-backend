@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -38,11 +39,11 @@ async function fixture() {
     const other = await m.createOrganization(db, root, { displayName: "Beta" });
     for (const [serverId, organizationId] of [["AAA", org.id], ["AAB", org.id], ["BBB", other.id]]) {
       await m.createServer(db, root, { serverId, organizationId, displayName: serverId });
-      await db.client.create({ data: { id: serverId, organizationId, name: serverId, nameKey: serverId.toLowerCase(), scopeServerId: serverId } });
-      await db.serverPublication.update({ where: { serverId }, data: { clientId: serverId } });
-      await db.clientDraft.create({ data: { clientId: serverId, createdById: root.id } });
+      await db.client.create({ data: { id: fixtureClientId(serverId), organizationId, name: serverId, nameKey: serverId.toLowerCase(), scopeServerId: serverId } });
+      await db.serverPublication.update({ where: { serverId }, data: { clientId: fixtureClientId(serverId) } });
+      await db.clientDraft.create({ data: { clientId: fixtureClientId(serverId), createdById: root.id } });
     }
-    await db.client.create({ data: { id: "pending", organizationId: org.id, name: "pending", nameKey: "pending", scopeServerId: "AAB", requestedServerId: "AAA", requestedRevision: 0, expectedClientId: "AAA" } });
+    await db.client.create({ data: { id: fixtureClientId("pending"), organizationId: org.id, name: "pending", nameKey: "pending", scopeServerId: "AAB", requestedServerId: "AAA", requestedRevision: 0, expectedClientId: fixtureClientId("AAA") } });
     for (const [account, roles] of [[admin, ["ORG_ADMIN"]], [single, []], [reader, ["READ_ONLY"]], [reviewer, ["REVIEWER"]], [publisher, ["PUBLISHER"]], [operator, ["RELEASE_OPERATOR"]]] as const)
       await m.setMember(db, root, org.id, account.id, { roles, status: "ACTIVE" });
     await m.setGrant(db, root, org.id, single.id, "AAA", { roles: ["SERVER_ADMIN"] });
@@ -124,19 +125,19 @@ test("unfiltered queries isolate organizations, current bindings, fallback scope
     assert.deepEqual((await db.server.findMany()).map(s => s.serverId).sort(), ["AAA", "AAB"]);
     assert.equal(await db.clientDraft.count(), 2);
     assert.equal(await db.server.updateMany({ where: { serverId: "BBB" }, data: { displayName: "forbidden" } }).then(r => r.count), 0);
-    await rejected(db, () => db.client.create({ data: { id: "cross-org", organizationId: f.other.id, name: "cross", nameKey: "cross" } }));
+    await rejected(db, () => db.client.create({ data: { id: fixtureClientId("cross-org"), organizationId: f.other.id, name: "cross", nameKey: "cross" } }));
     const state = await m.getState(db, f.admin); assert.equal(state.organizations.length, 1); assert.equal(state.organizations[0].members.length, 7); // Includes the scoped editor created by the permission regression.
   });
-  await as(f.single, async db => { assert.deepEqual((await db.client.findMany()).map(c => c.id), ["AAA"]); assert.equal(await db.client.findUnique({ where: { id: "pending" } }), null); });
-  await owner.serverPublication.update({ where: { serverId: "AAA" }, data: { clientId: null } });
+  await as(f.single, async db => { assert.deepEqual((await db.client.findMany()).map(c => c.id), [fixtureClientId("AAA")]); assert.equal(await db.client.findUnique({ where: { id: fixtureClientId("pending") } }), null); });
+  await owner.serverPublication.update({ where: { serverId: "AAA" }, data: { clientId: fixtureClientId(null) } });
   assert.equal(await as(f.single, db => db.client.count()), 1);
-  await owner.serverPublication.update({ where: { serverId: "AAA" }, data: { clientId: "AAA" } });
+  await owner.serverPublication.update({ where: { serverId: "AAA" }, data: { clientId: fixtureClientId("AAA") } });
 });
 test("readers cannot write; reviewers, publishers and operators keep distinct capabilities", async () => {
   for (const actor of [f.reader, f.reviewer, f.publisher, f.operator]) await as(actor, async db => {
     assert.equal(await db.server.count(), 2);
     assert.equal(await db.server.updateMany({ where: { serverId: "AAA" }, data: { description: "deny" } }).then(r => r.count), 0);
-    await rejected(db, () => db.client.create({ data: { id: "deny", organizationId: f.org.id, name: "deny", nameKey: "deny" } }));
+    await rejected(db, () => db.client.create({ data: { id: fixtureClientId("deny"), organizationId: f.org.id, name: "deny", nameKey: "deny" } }));
     assert.equal(await db.clientDraft.count(), actor.id === f.operator.id ? 0 : 2);
   });
   await as(f.admin, async db => {
@@ -175,7 +176,7 @@ test("public can only call projections; worker can process data but cannot publi
   await worker.workerHeartbeat.upsert({ where: { id: "rls-worker" }, create: { id: "rls-worker", lastSeen: new Date() }, update: { lastSeen: new Date() } });
   await assert.rejects(worker.organizationMember.updateMany({ data: { status: "DISABLED" } }));
   await assert.rejects(worker.$executeRawUnsafe(`INSERT INTO "${schema}"."ClientRelease"("id") VALUES (gen_random_uuid())`));
-  await assert.rejects(worker.client.delete({ where: { id: "AAA" } }));
+  await assert.rejects(worker.client.delete({ where: { id: fixtureClientId("AAA") } }));
   await assert.rejects(worker.client.updateMany({ data: { currentReleaseId: null } }));
 });
 test("management state RLS performance is measured against the same owner baseline", async () => {
@@ -199,8 +200,8 @@ test("restricted archival preserves history and deletion hides the client; self-
   const made = await as(f.admin, db => c.createClient(db, f.admin, { organizationId: f.org.id, name }));
   await as(f.admin, db => c.archiveClient(db, f.admin, made.clientId, { archived: true }));
   await as(f.admin, db => c.deleteClient(db, f.admin, made.clientId));
-  assert.equal(await as(f.admin, db => db.client.findUnique({ where: { id: made.clientId } })), null);
-  assert((await owner.client.findUniqueOrThrow({ where: { id: made.clientId } })).deletedAt);
+  assert.equal(await as(f.admin, db => db.client.findUnique({ where: { id: fixtureClientId(made.clientId) } })), null);
+  assert((await owner.client.findUniqueOrThrow({ where: { id: fixtureClientId(made.clientId) } })).deletedAt);
   const rollback = new Error("rollback");
   await assert.rejects(as(f.root, async db => {
     await m.createAccount(db, f.root, { displayName: "second root", username: "second-root", password: "testing-second-root-password", isSuperAdmin: true });

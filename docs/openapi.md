@@ -1,6 +1,9 @@
 # Union Link OpenAPI 与 Scalar
 
-第 1–7 步已接入：OpenAPI 3.1 中英文完整规范覆盖 69 个实际业务操作，后台左侧 `API` 在 `/admin/api` 内嵌 Scalar。默认完整规范，可切换 Launcher 公开规范；语言、主题和登录重定向沿用网站设置。执行顺序见[客户端操作指南](api-workflows.md)，变更见[兼容性记录](openapi-changelog.md)，路径见[接口清单](api-inventory.md)。
+2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。
+
+
+第 1–7 步已接入：OpenAPI 3.1 中英文完整规范覆盖 63 个实际业务操作，后台左侧 `API` 在 `/admin/api` 内嵌 Scalar。默认完整规范，可切换 Launcher 公开规范；语言、主题和登录重定向沿用网站设置。执行顺序见[客户端操作指南](api-workflows.md)，变更见[兼容性记录](openapi-changelog.md)，路径见[接口清单](api-inventory.md)。
 
 ## 发布边界
 
@@ -8,7 +11,7 @@
 | --- | --- | --- |
 | `/admin/api` | 内嵌 Scalar，完整及公开规范切换 | 后台会话；否则跳转登录 |
 | `/api/admin/openapi?locale=zh-CN\|en-US` | 66 个完整操作 | 逐请求检查 Cookie；private, no-store；Vary: Cookie |
-| `/openapi.json?locale=zh-CN\|en-US` | 5 个 Launcher GET | 公开，无后台和认证路径 |
+| `/openapi.json?locale=zh-CN\|en-US` | 4 个 Launcher GET | 公开，无后台和认证路径 |
 | `docs/openapi/union-link.admin.{locale}.json` | 完整离线产物 | 随源码审查，不上传公共站点／Registry |
 | `docs/openapi/union-link.{locale}.json` | 公开离线产物 | CI 通过后发布 GitHub Actions artifact |
 

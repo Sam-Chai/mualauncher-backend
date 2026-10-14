@@ -33,7 +33,7 @@ enum DraftStatus {
 
 enum UploadStatus {
   UPLOADING
-  WAITING_PROCESSOR
+
   QUEUED
   PROCESSING
   READY
@@ -244,7 +244,6 @@ model ClientDraft {
   id                      String         @id @default(uuid()) @db.Uuid
   clientId                String
   packageFormatVersion    Int            @default(1)
-  supportedPlatforms      String[]       @default([])
   versionLabel            String?
   versionSequence         Int            @default(autoincrement()) @unique
   replacesDraftId         String?        @db.Uuid

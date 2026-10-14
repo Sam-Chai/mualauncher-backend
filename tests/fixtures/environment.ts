@@ -16,7 +16,7 @@ export const fixtureEnvironment: EnvironmentResolver = async (request, _director
   }
   const gameFile = await file("instance", `versions/${request.minecraft}/${request.minecraft}.jar`, `synthetic game ${request.minecraft}`);
   const javaFile = await file("java", request.platform.startsWith("windows") ? "bin/java.exe" : "bin/java", `synthetic Java ${request.javaMajor} ${request.platform}`, true);
-  const java = { major: request.javaMajor, vendor: "synthetic", version: String(request.javaMajor), build: "test", executable: javaFile.path };
+  const java = { major: request.javaMajor, vendor: "synthetic", version: String(request.javaMajor), build: "test", imageType: "jre" as const, executable: javaFile.path };
   const common = { format: "mua-environment-manifest", formatVersion: 1, platform: request.platform, resolverVersion: "test-1" };
   const environments: ResolvedEnvironment["environments"] = [];
   async function document(value: unknown) {

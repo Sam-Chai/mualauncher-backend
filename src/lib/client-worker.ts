@@ -63,7 +63,7 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
       const release = await client.clientRelease.findUnique({ where: { id: upload.baseReleaseId } }); invariant(release, 409, "基准发布不存在");
       if (release.packageFormatVersion === 1) {
       const bytes = await readObject(release.manifestObjectKey); invariant(digest(bytes) === release.manifestSha256, 422, "基准 Manifest 摘要不匹配");
-      const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest; invariant(manifest.format === "mua-client-manifest" && (manifest.schemaVersion === 2 ? manifest.clientId === upload.clientId : manifest.serverId === upload.clientId) && Array.isArray(manifest.files), 422, "基准 Manifest 格式不兼容");
+      const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest; invariant(manifest.format === "mua-client-manifest" && manifest.schemaVersion === 2 && manifest.clientId === upload.clientId && Array.isArray(manifest.files), 422, "基准 Manifest 格式不兼容");
       previous = manifest.files; previousVersion = release.versionLabel;
       }
     }

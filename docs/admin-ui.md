@@ -2,7 +2,7 @@
 
 2026-10-12：服务器管理已支持永久／区间展示，超管可设置北京时间起止；客户端状态下方显示区间说明。到期只隐藏目录，不自动下架或停止下载。见 [服务器展示时间](server-display-schedule.md)。
 
-更新时间：2026-10-12。入口 /admin，本机地址 http://localhost:3001/admin。根路径与旧 /dashboard 跳转至 /admin。
+更新时间：2026-10-12。入口 /admin，本机地址 http://localhost:3001/admin。根路径跳转至 /admin；旧 /dashboard 已移除。
 
 登录页和后台顶部提供中英文与黑白主题切换，默认中文／白色，保存浏览器偏好；切换保留表单内容、路由和权限行为，业务名称及说明保持原文。实现与验证见[界面偏好](interface-preferences.md)。
 
@@ -30,14 +30,14 @@ Tremor 来自官方 [AreaChart v1.0.0](https://github.com/tremorlabs/tremor/tree
 | 客户端详情 | /admin/clients/[id] | 同一管理表格限制到指定 server ID |
 | 待审核 | /admin/releases/review | 版本资料、Markdown、文件列表和差异；审核／驳回／签名发布 |
 | 已发布 | /admin/releases/published | 历史 Release 与当前版本 |
-| 已撤销 | /admin/releases/revoked | 旧归档视图；独立撤销流程未实现 |
+| 已归档 | /admin/releases/archived | 已归档草稿与发布记录 |
 | Worker | /admin/system/workers | 心跳、队列与任务进度 |
 | Storage | /admin/system/storage | 实际 MinIO bucket 可用状态 |
 | Signing Keys | /admin/system/signing-keys | 当前签名公钥信息，私钥不返回前端 |
 | Audit Log | /admin/system/audit | 超管最近 50 条审计 |
 | Settings | /admin/system/settings | 自助改密与 API Token；超管管理上传大小、开放格式、下载与回收设置 |
 
-Client Profiles、Releases、Artifacts、Runtime 四个客户端菜单合并为“客户端管理”。旧 /admin/clients/artifacts、runtime、releases 与 [id]/releases 路径跳转到统一管理界面。Server、Listing、状态合并为“服务器管理”；旧 /admin/listings 与 /admin/servers/status 跳转至 /admin/servers。七个菜单分组保留。资讯、活动与 Launcher UI 仍是待接入页面。
+客户端管理与服务器管理各使用统一入口，旧分散页面已删除。资讯、活动和 Launcher UI 的导航与占位页已删除。
 
 ## 服务器管理
 
@@ -45,7 +45,7 @@ Client Profiles、Releases、Artifacts、Runtime 四个客户端菜单合并为�
 
 所有 SERVER_READ 账号可查看详情。有 SERVER_EDIT 的组织管理员或获授权单服编辑人员可以修改别名、简介、连接地址、“服务器箴言”图片、展示颜色及永久／区间展示时间；排序、上架标记与归档／恢复只向超管提供控制项。只读、审核及客户端编辑账号仅查看详情。归档的组织或服务器不显示资料保存表单，超管可在同一窗口恢复服务器，所属组织归档时提示先恢复组织。新建服务器仍只有超管可登记，保存后通过统一窗口设置展示信息。资料保存沿用原服务器 PATCH API，图片使用独立受权限保护的上传接口，服务端继续逐请求检查作用域、归档及字段权限。
 
-服务器箴言推荐宽高比 61:23（约 2.65:1），点击上传打开三分网格裁剪窗口，默认该比例，可移动、缩放、重置及从保留原图重新裁剪。新建时可预选图片随登记保存。表格最左侧显示箴言图片，从横向黄金分割点 61.8034% 开始向右淡出到白色。实现及权限／存储边界见[服务器箴言图片](server-motto-images.md)。
+服务器箴言推荐宽高比 2.35:1，点击上传打开三分网格裁剪窗口，默认该比例，可移动、缩放、重置及从保留原图重新裁剪。新建时可预选图片随登记保存。表格最左侧显示箴言图片，从横向黄金分割点 61.8034% 开始向右淡出到白色。实现及权限／存储边界见[服务器箴言图片](server-motto-images.md)。
 
 ## 客户端上传与更新
 
@@ -61,7 +61,7 @@ Client Profiles、Releases、Artifacts、Runtime 四个客户端菜单合并为�
 
 ## 数据与权限
 
-侧栏入口与空分组按当前 RBAC 隐藏。组织入口依组织权限，服务器／客户端／发布入口取可访问服务器权限并集；服务器管理依 SERVER_READ 可见，颜色与展示模式／时间在统一窗口内由对应 SERVER_EDIT 账号修改，排序和上架仍限超管。内容和系统运行管理仅超管可见，Settings 始终可见。组织筛选只过滤后端已授权的数据，不改变账号本身权限。API 不依赖菜单隐藏，在服务端再次校验账号、作用域与资源归属。
+侧栏入口与空分组按当前 RBAC 隐藏。组织入口依组织权限，服务器／客户端／发布入口取可访问服务器权限并集；服务器管理依 SERVER_READ 可见，颜色与展示模式／时间在统一窗口内由对应 SERVER_EDIT 账号修改，排序和上架仍限超管。系统运行管理仅超管可见，Settings 始终可见。组织筛选只过滤后端已授权的数据，不改变账号本身权限。API 不依赖菜单隐藏，在服务端再次校验账号、作用域与资源归属。
 
 登录、退出、改密后重新加载页面与同源其他标签，清除旧账号管理状态。侧栏显示当前账号身份和组织管理员范围，用户菜单显示登录用户名。
 

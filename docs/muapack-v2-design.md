@@ -1,10 +1,13 @@
 # muapack v2 需求与实施顺序
 
+2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。
+
+
 记录日期：2026-10-10。状态：第 1–6 步已完成，v2 可上传、识别、本地 CAS、完整组包、审核、签名、发布与管理下载；第 6 步的能力协商、完整／更新分发、差异表格与玩家已知网络量统计已接入，见 [分发统计](v2-distribution-statistics.md)。v2 自动增量与完整／更新分发已接入，Launcher 安装尚未接入；v1 继续保留。本文保留需求与实施顺序，具体契约见 [v2 协议基线](muapack-v2.md)。
 
 ## 已确认需求
 
-- 2026-10-12 已实现：新 v2 使用 protocolRevision:2，移除 supportedPlatforms／platformsChanged，不选择或限制发布系统架构，单一配方任务对同一发布／基准产物字节相同；运行环境由端侧解析。历史结构、审核目标及签名保持不变，原平台规则仅用于兼容。v1 按平台组包，见[下载契约](launcher-download-api.md)。
+- 2026-10-12 已实现：新 v2 使用 protocolRevision:2，移除 supportedPlatforms／platformsChanged，不选择或限制发布系统架构，单一配方任务对同一发布／基准产物字节相同；运行环境由端侧解析。首发仅接受当前平台无关修订。v1 按平台组包，见[下载契约](launcher-download-api.md)。
 
 - v2 基于 mrpack。包内同时存在 overrides 本地文件与 modrinth.index.json 声明的远程文件，两者不能混为一类。
 - MUA 保存 overrides 的实际文件，包括本地模组 JAR、配置及其他客户端覆盖文件；本地模组允许随 v2 分发。不要求把这些模组转换成远程下载声明，此规则替代上一轮“v2 包内不放任何模组 JAR”的建议。
@@ -31,7 +34,7 @@ v2 更新包包含基准／目标发布身份与摘要、目标完整清单、�
 ## 实施顺序
 
 1. **冻结协议与验收样例（已完成）。** 已确定 v2 完整／更新包布局、文件来源描述、哈希、环境要求、签名域、optional、managed／preserve、平台与基准规则；[离线样例](examples/muapack-v2/README.md) 包含混合 mrpack、历史与修订 2 签名完整／更新包及 62 项校验。保留 v1 契约与旧签名；样例不代表生产导入或游戏启动。
-2. **上传前格式选择与模型/API（已完成）。** 添加／更新在真正上传前选择 v1／v2，ClientUpload／ClientDraft／ClientRelease 保存 packageFormatVersion 并锁定；API Token／Actions 使用同一字段。旧请求／历史默认 1，不改写签名；恢复任务保留格式，改选需取消后新建，详见[标准 API](client-upload-api.md)。此步骤曾以 WAITING_PROCESSOR 暂存 v2，现由第 3 步迁移接入处理。
+2. **上传前格式选择与模型/API（已完成）。** 添加／更新在真正上传前选择 v1／v2，ClientUpload／ClientDraft／ClientRelease 保存 packageFormatVersion 并锁定；API Token／Actions 使用同一字段。创建上传必须显式声明格式；恢复任务保留格式，改选需取消后新建，详见[标准 API](client-upload-api.md)。上传直接进入统一处理队列。
 3. **共享识别与 Worker 分支（已完成）。** 共用 mrpack／已验证 PCL 适配、覆盖层和模组发现；v1 保持完整下载路径，v2 只校验本地文件并进入 CAS，保存远程完整上游哈希、大小、地址、策略／optional 以及 MC／加载器／Java 要求。使用独立 mua-import-recipe 索引，避免误读成旧 Manifest；远程状态为 DECLARED，文件字节未验证。前端展示独立本地／远程统计。旧等待任务仅在资源／账号有效时迁移排队；RBAC、租约、重试、回收与 v1 共存已验证。PCL 账号／启动器配置在保留文件路径校验前先应用共享隐私过滤，真实运行环境覆盖仍拒绝。
 4. **v2 完整包与审核签名（已完成）。** 提交生成不可变 mua-recipe-content，新目标使用 protocolRevision:2，无发布平台方案；Worker 生成单一跨平台目标配方并等待审核，通过后读取本地 CAS、重建 mrpack 索引、使用 v2 独立签名域组包并逐文件校验，再保存 OSS。所有当前必需产物 READY、审核修订一致及 OSS 大小／摘要有效才允许发布。历史平台改选会递增 packageRevision、撤销旧审核并新建任务；2026-10-12 起新 v2 不限制发布平台，历史修订及 READY 字节保留。v2 不套用 v1 环境准备门槛。Actions 与网页均提交同一草稿。
 5. **v2 增量包（已完成）。** 按完整目标与基准生成本地／远程文件差异、策略及环境变化；更新包只携带所需本地字节。验证零内容变化、URL 变化、optional 变化、配置保留以及基准不匹配时完整包回退。基准固定为上传时的已发布版本，不能用未发布草稿或版本号猜测；完整与增量均校验并保存后才 READY。跨 v1／v2 使用目标格式完整包迁移，再校验复用本地内容，不直接套用另一格式的更新包。
@@ -45,8 +48,8 @@ v2 更新包包含基准／目标发布身份与摘要、目标完整清单、�
 
 - 本地文件放在 overrides/<目标路径>。更新包携带新增／修改／策略变化涉及的本地 after 文件；缺失未变化的本地文件从同目标摘要的完整包补取，首版不增加单文件修复 API。
 - 固定 Minecraft／加载器版本和 Java major／vendor／imageType 要求，Launcher 首次安装选择精确 Java 构建并保存本地环境锁。后续启动复用，不因 latest 变化自动升级；不声称环境与 v1 一样逐字节可重现。
-- 新 v2 使用单一平台无关配方包与 protocolRevision:2，不表达操作系统专属模组／覆盖文件；minimumLauncherProtocol=2。旧端缺省只接受 v1，不暗中改发历史版本。
-- packageFormatVersion 已由创建上传时持久保存；旧 API 省略时兼容 v1，新 UI 先选择，脚本显式提交。改选需新建上传，不原地改任务事实。
+- 新 v2 使用单一平台无关配方包与 protocolRevision:2，不表达操作系统专属模组／覆盖文件；minimumLauncherProtocol=2。公开请求必须声明接受格式，不暗中改发其他版本。
+- packageFormatVersion 已由创建上传时持久保存；API、UI 与脚本均显式提交格式。改选需新建上传，不原地改任务事实。
 
 第 1–6 步已完成。新修订 v2 为候选生成 full，有精确固定的已发布同格式基准时同时生成 update，不以平台集合筛选。更新包含完整基准／目标／索引／差异及所需本地字节，零变化可零载荷。公开下载显式协商格式并核对基准 ID／摘要，错配回退 full。历史目标保留旧规则和签名。Launcher 安装与真实游戏验收仍待实施。
 

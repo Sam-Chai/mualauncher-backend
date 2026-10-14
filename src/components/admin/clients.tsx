@@ -38,12 +38,11 @@ type ReleaseRow = { row: ClientRow; release: Release };
 const clientRowId = (row: ClientRow) => row.clientId;
 const reviewRowId = (item: ReviewRow) => item.draft.id;
 const releaseRowId = (item: ReleaseRow) => item.release.id;
-const statusLabels: Record<string, string> = { UPLOADING: "上传未完成", WAITING_PROCESSOR: "历史上传待迁移 · 请联系管理员", QUEUED: "等待处理", PROCESSING: "正在分析", READY: "等待填写提交", FAILED: "解析失败", SUBMITTED: "待审核", APPROVED: "审核通过 · 待发布", REJECTED: "已驳回", RELEASED: "已发布", DRAFT: "资料草稿" };
+const statusLabels: Record<string, string> = { UPLOADING: "上传未完成", QUEUED: "等待处理", PROCESSING: "正在分析", READY: "等待填写提交", FAILED: "解析失败", SUBMITTED: "待审核", APPROVED: "审核通过 · 待发布", REJECTED: "已驳回", RELEASED: "已发布", DRAFT: "资料草稿" };
 function metadata(version: Draft | Release | undefined): ClientMetadata | undefined {
   if (!version) return undefined;
   const parsed = clientMetadataSchema.safeParse("candidateMetadata" in version ? version.candidateMetadata : version.environmentSnapshot);
-  return parsed.success ? parsed.data : { versionLabel: version.versionLabel ?? "", name: version.name ?? "", minecraftVersion: "", javaVersion: 21,
-    mods: [], summary: version.summary || version.changelog, description: version.description };
+  return parsed.success ? parsed.data : undefined;
 }
 function useClients() {
   const { epoch } = useAdmin(); const [rows, setRows] = useState<ClientRow[] | null>(null); const [error, setError] = useState("");
@@ -83,7 +82,7 @@ function ClientActionsCell({ row: tableRow }: CellContext<ClientRow, unknown>) {
   const organizations = uploadOrganizations(state);
   const previous = metadata(row.releases.find(release => release.id === row.currentReleaseId) ?? row.drafts.find(draft => !draft.archivedAt) ?? row.releases[0]);
   const current = previous ? { ...previous, name: row.name } : undefined;
-  const prepared = row.uploads.find(upload => ["WAITING_PROCESSOR", "READY", "QUEUED", "PROCESSING", "FAILED"].includes(upload.status) && upload.canEdit);
+  const prepared = row.uploads.find(upload => ["READY", "QUEUED", "PROCESSING", "FAILED"].includes(upload.status) && upload.canEdit);
   const canUpdate = !row.archived && !row.blocked && row.permissions.includes("DRAFT_CREATE") && row.permissions.includes("DRAFT_SUBMIT") && (!row.currentReleaseId || row.permissions.includes("DRAFT_EDIT"));
   const comparisonDrafts = row.permissions.includes("DRAFT_ARCHIVE") ? row.drafts.filter(draft => !draft.archivedAt && draft.status !== "RELEASED" && draft.upload) : [];
   const defaultPackageFormatVersion = packageFormatVersionSchema.parse(row.initialPackageFormatVersion ?? row.drafts[0]?.packageFormatVersion ?? 1);
@@ -128,12 +127,12 @@ function DeleteClientButton({ row }: { row: ClientRow }) {
   const [open, setOpen] = useState(false); const { busy, run } = useAdmin();
   return <AlertDialog open={open} onOpenChange={setOpen}><AlertDialogTrigger asChild><Button variant="destructive" size="sm" disabled={busy}>{t("删除")}</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{t("删除“")}{row.name}”？</AlertDialogTitle><AlertDialogDescription>{t("此客户端已归档下架且未绑定服务器，无论是否曾发布均可删除。删除后客户端无法恢复，名称可重新使用；发布与审计记录保留，文件由 Worker 移入 OSS 回收站，按超管设置的保留期清理。其他客户端仍使用的文件会保留。回收站中的相同文件可供后续上传复用。")}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>{t("取消")}</AlertDialogCancel><Button variant="destructive" disabled={busy} onClick={async () => { if (await run(() => api(`/api/v1/clients/${row.clientId}/delete`, "POST", {}), t("已删除客户端，文件等待回收"))) setOpen(false); }}>{t("确认删除")}</Button></AlertDialogFooter></AlertDialogContent></AlertDialog>;
 }
-export function ClientsPage({ serverId }: { serverId?: string }) {
+export function ClientsPage({ clientId }: { clientId?: string }) {
   const { t } = useI18n();
   const { state, organizationId, busy } = useAdmin(); const { rows, error } = useClients();
   const targets = uploadTargets(state);
   const organizations = uploadOrganizations(state).filter(org => organizationId === "all" || org.id === organizationId);
-  const visible = rows?.filter(row => (!serverId || row.clientId === serverId) && (serverId || organizationId === "all" || row.organizationId === organizationId)) ?? [];
+  const visible = rows?.filter(row => (!clientId || row.clientId === clientId) && (clientId || organizationId === "all" || row.organizationId === organizationId)) ?? [];
   const columns: ColumnDef<ClientRow>[] = [
     { id: "name", header: t("客户端名称"), accessorFn: row => row.name,
       cell: ({ getValue, row }) => <div><p className="font-medium">{String(getValue())}</p><p className="text-xs text-muted-foreground">{row.original.organizationName}</p></div> },
@@ -144,17 +143,18 @@ export function ClientsPage({ serverId }: { serverId?: string }) {
     { id: "packages", header: t("组包进度"), accessorFn: row => row.drafts[0]?.packageBuilds.map(build => `${build.platform} ${packageBuildLabel(build)}`).join(" ") ?? "", cell: ({ row }) => <PackageProgress draft={row.original.drafts[0]} /> },
     { id: "actions", header: t("操作"), enableHiding: false, cell: ClientActionsCell },
   ];
-  if (serverId && rows && !rows.some(row => row.clientId === serverId)) return <NoPermission />;
+  if (clientId && rows && !rows.some(row => row.clientId === clientId)) return <NoPermission />;
   return <><Heading title={t("客户端管理")} description={t("上传完整客户端、创建新版本并提交审核；客户端可独立上传和保留；每个服务器同时只绑定一个客户端。")}
-    action={organizations.length > 0 && !serverId && <ClientUploadDialog targets={targets} organizations={organizations} onDone={() => {}} disabled={!rows || busy || (!organizations.some(org => org.canUnbound) && !targets.some(target => organizations.some(org => org.id === target.organizationId)))} />} />
+    action={organizations.length > 0 && !clientId && <ClientUploadDialog targets={targets} organizations={organizations} onDone={() => {}} disabled={!rows || busy || (!organizations.some(org => org.canUnbound) && !targets.some(target => organizations.some(org => org.id === target.organizationId)))} />} />
     {error && <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert>}
     {!rows && !error ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{t("读取客户端…")}</p> : <DataTable data={visible} columns={columns} getRowId={clientRowId} empty={t("暂无客户端。点击“添加客户端”上传完整 ZIP 或 mrpack 源包。")} searchPlaceholder={t("搜索客户端、组织或服务器…")} />}
   </>;
 }
-export function ClientDetailPage() { return <ClientsPage serverId={useParams<{ id: string }>().id} />; }
+export function ClientDetailPage() { return <ClientsPage clientId={useParams<{ id: string }>().id} />; }
 function VersionDetails({ version, clientId }: { version: Draft | Release; clientId: string }) {
   const { t } = useI18n();
-  const data = metadata(version)!;
+  const data = metadata(version);
+  if (!data) return <Alert variant="destructive"><AlertDescription>{t("版本元数据缺失或无效，请检查上传记录。")}</AlertDescription></Alert>;
   const upload = "upload" in version ? version.upload : version.sourceDraft?.upload;
   return <div className="space-y-5"><dl className="grid grid-cols-2 gap-3 text-sm"><div>{t("客户端版本：")}{data.versionLabel}</div><div>{t("客户端名称：")}{data.name}</div><div>MC：{data.minecraftVersion || t("未填写")}</div><div>Java：{data.javaVersion}</div></dl>
     <div><h3 className="mb-2 font-semibold">{data.summary || t("提交说明")}</h3><MarkdownText value={data.description} /></div>
@@ -246,7 +246,7 @@ function PackageProgress({ draft }: { draft?: Draft }) {
 function PackageDialog({ row, draft }: { row: ClientRow; draft: Draft }) {
   const { t } = useI18n();
   const { run, busy } = useAdmin(); const [open, setOpen] = useState(false);
-  const selectedPlatforms = () => (draft.packageFormatVersion === 2 ? draft.supportedPlatforms : draft.packageBuilds.map(build => build.platform)).map(platform => muaPlatformSchema.parse(platform));
+  const selectedPlatforms = () => (draft.packageFormatVersion === 2 ? [] : draft.packageBuilds.map(build => build.platform)).map(platform => muaPlatformSchema.parse(platform));
   const [platforms, setPlatforms] = useState(selectedPlatforms);
   const canEdit = row.permissions.includes("DRAFT_CREATE") && row.permissions.includes("DRAFT_SUBMIT") && (!row.currentReleaseId || row.permissions.includes("DRAFT_EDIT")) && !row.archived && !row.blocked;
   return <Dialog open={open} onOpenChange={value => { if (value) setPlatforms(selectedPlatforms()); setOpen(value); }}><DialogTrigger asChild><Button size="sm" variant="outline">{draft.packageFormatVersion === 2 ? t("组包进度") : t("组包 / 平台")}</Button></DialogTrigger>
@@ -269,7 +269,7 @@ function PlatformManifestDialog({ row, draft, platform }: { row: ClientRow; draf
   }, [open, row.clientId, draft.id, platform, t]);
   const columns: ColumnDef<MuaFile>[] = [{ id: "path", header: t("目标路径"), accessorFn: file => `${file.root}/${file.path}` }, { accessorKey: "policy", header: t("策略") }, { accessorKey: "size", header: t("大小"), cell: ({ getValue }) => formatBytes(Number(getValue())) }, { accessorKey: "sha256", header: "SHA-256", cell: ({ getValue }) => <code className="text-xs">{String(getValue()).slice(0, 16)}…</code> }];
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button variant="ghost" size="sm">{t("查看环境与完整清单")}</Button></DialogTrigger><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl"><DialogHeader><DialogTitle>{platform === "universal" ? t("v2 跨平台配方") : platform} {" " + t("· 环境与完整清单")}</DialogTitle><DialogDescription>{draft.packageFormatVersion === 2 ? t("签名绑定本地载荷、远程下载声明和运行环境要求。远程字节与环境由 Launcher 校验和安装。") : t("清单记录实际下载和校验的环境与客户端文件，签名绑定这些内容。")}</DialogDescription></DialogHeader>
-    {manifest?.format === "mua-recipe-manifest" ? <div className="space-y-4 text-sm"><p>MC {manifest.runtime.minecraft} · {manifest.runtime.loader ? `${manifest.runtime.loader.type} ${manifest.runtime.loader.version}` : t("原版")}</p><p>Java {manifest.runtime.java.major} · {manifest.runtime.java.imageType.toUpperCase()} {" " + t("· 由 Launcher 准备")}</p>{"supportedPlatforms" in manifest && <p>{t("支持平台：")}{manifest.supportedPlatforms.join("、")}</p>}<RecipeFileTable files={manifest.files} /></div> : manifest ? <div className="space-y-4 text-sm"><p>MC {manifest.runtime.minecraft} · {manifest.runtime.loader ? `${manifest.runtime.loader.type} ${manifest.runtime.loader.version}` : t("原版")}</p><p>Java {manifest.runtime.java.major} · {manifest.runtime.java.vendor} · {manifest.runtime.java.build}</p><p className="break-all">{t("入口：")}{manifest.launch.mainClass}</p>
+    {manifest?.format === "mua-recipe-manifest" ? <div className="space-y-4 text-sm"><p>MC {manifest.runtime.minecraft} · {manifest.runtime.loader ? `${manifest.runtime.loader.type} ${manifest.runtime.loader.version}` : t("原版")}</p><p>Java {manifest.runtime.java.major} · {manifest.runtime.java.imageType.toUpperCase()} {" " + t("· 由 Launcher 准备")}</p><RecipeFileTable files={manifest.files} /></div> : manifest ? <div className="space-y-4 text-sm"><p>MC {manifest.runtime.minecraft} · {manifest.runtime.loader ? `${manifest.runtime.loader.type} ${manifest.runtime.loader.version}` : t("原版")}</p><p>Java {manifest.runtime.java.major} · {manifest.runtime.java.vendor} · {manifest.runtime.java.build}</p><p className="break-all">{t("入口：")}{manifest.launch.mainClass}</p>
       <details><summary>{t("启动参数与内存")}</summary><pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-xs">{JSON.stringify(manifest.launch, null, 2)}</pre></details><DataTable data={manifest.files} columns={columns} /></div> : <p role="status">{t(error) || t("读取清单…")}</p>}
   </DialogContent></Dialog>;
 }
@@ -282,20 +282,20 @@ function ReleaseActionsCell({ row: item }: CellContext<ReleaseRow, unknown>) {
   const { t } = useI18n();
   return <div className="flex gap-2"><EditorDialog title={t("版本 {0}", { "0": item.original.release.versionLabel })} trigger={<Button size="sm" variant="ghost">{t("详情")}</Button>} description={t("已发布版本内容不可修改。")}>{() => <VersionDetails version={item.original.release} clientId={item.original.row.clientId} />}</EditorDialog><ActivateButton row={item.original.row} release={item.original.release} /></div>;
 }
-export function ReleasesPage({ mode = "published" }: { mode?: "all" | "review" | "published" | "revoked" }) {
+export function ReleasesPage({ mode = "published" }: { mode?: "all" | "review" | "published" | "archived" }) {
   const { t, formatDate } = useI18n();
   const { organizationId } = useAdmin(); const { rows, error } = useClients();
   const visible = rows?.filter(row => organizationId === "all" || row.organizationId === organizationId) ?? [];
   const drafts = visible.filter(row => row.permissions.includes("DRAFT_REVIEW") || row.permissions.includes("RELEASE_PUBLISH"))
-    .flatMap(row => row.drafts.filter(draft => draft.status !== "RELEASED" && (mode === "revoked" ? row.archived || !!draft.archivedAt : !row.archived && !draft.archivedAt && ["SUBMITTED", "APPROVED"].includes(draft.status))).map(draft => ({ row, draft })));
-  const releases = visible.flatMap(row => row.releases.filter(release => mode === "revoked" ? row.archived || !!release.archivedAt : !row.archived && !release.archivedAt).map(release => ({ row, release })));
+    .flatMap(row => row.drafts.filter(draft => draft.status !== "RELEASED" && (mode === "archived" ? row.archived || !!draft.archivedAt : !row.archived && !draft.archivedAt && ["SUBMITTED", "APPROVED"].includes(draft.status))).map(draft => ({ row, draft })));
+  const releases = visible.flatMap(row => row.releases.filter(release => mode === "archived" ? row.archived || !!release.archivedAt : !row.archived && !release.archivedAt).map(release => ({ row, release })));
   const reviewColumns: ColumnDef<(typeof drafts)[number]>[] = [{ id: "name", header: t("客户端"), accessorFn: item => item.draft.name }, { id: "version", header: t("版本"), accessorFn: item => item.draft.versionLabel }, { id: "server", header: t("服务器"), accessorFn: item => `${item.row.organizationName} / ${item.row.serverName}` }, { id: "status", header: t("状态"), accessorFn: item => item.row.archived ? t("客户端已归档") : item.draft.archivedAt ? item.draft.archiveReason === "SUPERSEDED" ? t("被新发布替代 · 已归档") : t("已归档") : t(statusLabels[item.draft.status]) },
     { id: "packages", header: t("组包进度"), cell: ({ row }) => <PackageProgress draft={row.original.draft} /> }, { id: "actions", header: t("操作"), cell: ReviewActionsCell }];
   const releaseColumns: ColumnDef<(typeof releases)[number]>[] = [{ id: "name", header: t("客户端"), accessorFn: item => item.release.name }, { id: "version", header: t("版本"), accessorFn: item => item.release.versionLabel }, { id: "server", header: t("服务器"), accessorFn: item => item.row.serverName }, { id: "current", header: t("状态"), accessorFn: item => item.row.archived ? t("客户端已归档") : item.release.archivedAt ? t("版本已归档") : item.row.currentReleaseId === item.release.id ? t("当前版本") : t("历史版本") }, { id: "date", header: t("发布时间"), accessorFn: item => formatDate(item.release.publishedAt) },
     { id: "actions", header: t("操作"), cell: ReleaseActionsCell }];
-  return <><Heading title={mode === "review" ? t("客户端审核与发布") : mode === "revoked" ? t("已归档版本") : t("已发布客户端")} description={mode === "review" ? t("核对版本资料与真实文件清单，审核通过后签名发布。审核、发布、版本切换分别按 RBAC 授权。") : t("查看不可变的发布记录与服务器当前版本。")} />
+  return <><Heading title={mode === "review" ? t("客户端审核与发布") : mode === "archived" ? t("已归档版本") : t("已发布客户端")} description={mode === "review" ? t("核对版本资料与真实文件清单，审核通过后签名发布。审核、发布、版本切换分别按 RBAC 授权。") : t("查看不可变的发布记录与服务器当前版本。")} />
     {error && <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert>}
-    {!rows && !error ? <p role="status" className="text-sm text-muted-foreground">{t("正在读取版本…")}</p> : mode === "review" ? <DataTable data={drafts} columns={reviewColumns} getRowId={reviewRowId} empty={t("暂无待审核或待发布的客户端。")} /> : <div className="space-y-6"><DataTable data={releases} columns={releaseColumns} getRowId={releaseRowId} empty={t("暂无发布记录。")} />{mode === "revoked" && <DataTable data={drafts} columns={reviewColumns} getRowId={reviewRowId} caption={t("已归档的未发布版本")} empty={t("暂无归档草稿。")} />}</div>}
+    {!rows && !error ? <p role="status" className="text-sm text-muted-foreground">{t("正在读取版本…")}</p> : mode === "review" ? <DataTable data={drafts} columns={reviewColumns} getRowId={reviewRowId} empty={t("暂无待审核或待发布的客户端。")} /> : <div className="space-y-6"><DataTable data={releases} columns={releaseColumns} getRowId={releaseRowId} empty={t("暂无发布记录。")} />{mode === "archived" && <DataTable data={drafts} columns={reviewColumns} getRowId={reviewRowId} caption={t("已归档的未发布版本")} empty={t("暂无归档草稿。")} />}</div>}
   </>;
 }
 

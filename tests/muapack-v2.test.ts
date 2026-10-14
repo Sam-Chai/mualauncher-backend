@@ -17,15 +17,15 @@ async function documents(name: string, directory = root) {
     base: name === "update" ? await readFile(join(dir, "metadata/base-manifest.json")) : null, index: await readFile(join(dir, "modrinth.index.json")), signature: await readFile(join(dir, "metadata/signature.json")) };
 }
 async function revisedTarget(name: string) {
-  const legacy = JSON.parse((await documents(name)).target.toString()); delete legacy.supportedPlatforms;
-  return recipeTarget(encodeMuaJson({ ...legacy, format: "mua-recipe-content" }));
+  const target = JSON.parse((await documents(name)).target.toString()); delete target.protocolRevision;
+  return recipeTarget(encodeMuaJson({ ...target, format: "mua-recipe-content" }));
 }
 
 test("v2 revision 2 removes platform declarations and binds the revision, manifests and complete delta with signatures", async () => {
   const target = await revisedTarget("target-full"), targetBytes = encodeMuaJson(target);
   assert("protocolRevision" in target); assert.equal(target.protocolRevision, 2); assert(!("supportedPlatforms" in target));
   const indexBytes = encodeMuaJson(recipeModrinthIndex(target)), pair = generateKeyPairSync("ed25519");
-  for (const baseBytes of [null, encodeMuaJson(await revisedTarget("base-full")), (await documents("base-full")).target]) {
+  for (const baseBytes of [null, encodeMuaJson(await revisedTarget("base-full")) ]) {
     const metadata = createRecipePackMetadata(targetBytes, baseBytes), metadataBytes = encodeMuaJson(metadata);
     assert("protocolRevision" in metadata); assert.equal(metadata.protocolRevision, 2); assert(!("platformsChanged" in metadata.changes));
     assert.equal(metadata.payload.length, baseBytes ? 3 : 5);
@@ -43,7 +43,7 @@ test("v2 revision 2 removes platform declarations and binds the revision, manife
 
 test("v2 revision shapes are strict and cannot mix legacy platform fields with the platform-independent revision", async () => {
   const target = await revisedTarget("target-full"), bytes = encodeMuaJson(target);
-  const metadata = createRecipePackMetadata(bytes), index = encodeMuaJson(recipeModrinthIndex(target)), pair = generateKeyPairSync("ed25519");
+  const metadata = createRecipePackMetadata(bytes), pair = generateKeyPairSync("ed25519");
   for (const mutation of [
     { ...target, protocolRevision: undefined },
     { ...target, protocolRevision: 1 },
@@ -58,16 +58,15 @@ test("v2 revision shapes are strict and cannot mix legacy platform fields with t
     { ...metadata, changes: { ...metadata.changes, platformsChanged: null } },
     { ...metadata, unknown: true },
   ]) assert.throws(() => signRecipePackMetadata(encodeMuaJson(JSON.parse(JSON.stringify(mutation))), pair.privateKey));
-  const legacyDocs = await documents("target-full");
-  assert.throws(() => validateRecipePackDocuments(legacyDocs.metadata, bytes, null, index));
-  assert.throws(() => validateRecipePackDocuments(encodeMuaJson(metadata), legacyDocs.target, null, legacyDocs.index));
+  const oldShape = { ...target, protocolRevision: undefined, supportedPlatforms: ["windows-amd64"] };
+  assert.throws(() => readRecipeManifest(encodeMuaJson(JSON.parse(JSON.stringify(oldShape)))));
 });
 
-test("v2 revision 2 full and mixed-revision update archives validate signatures and all local payload bytes", async () => {
+test("v2 revision 2 full and update archives validate signatures and all local payload bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "mua-v2-revision-")), pair = generateKeyPairSync("ed25519");
   try {
     const target = await revisedTarget("target-full"), targetBytes = encodeMuaJson(target);
-    for (const base of [null, (await documents("base-full")).target, encodeMuaJson(await revisedTarget("base-full"))]) {
+    for (const base of [null, encodeMuaJson(await revisedTarget("base-full"))]) {
       const metadata = createRecipePackMetadata(targetBytes, base), bytes = encodeMuaJson(metadata), zip = new ZipFile(), chunks: Buffer[] = [];
       const done = new Promise<Buffer>((ok, bad) => { zip.outputStream.on("data", b => chunks.push(b)); zip.outputStream.on("error", bad); zip.outputStream.on("end", () => ok(Buffer.concat(chunks))); });
       zip.addBuffer(bytes, "mua-pack.json"); zip.addBuffer(targetBytes, "metadata/target-manifest.json");
@@ -82,8 +81,8 @@ test("v2 revision 2 full and mixed-revision update archives validate signatures 
     }
   } finally { assert(resolve(dir).startsWith(resolve(tmpdir()))); await rm(dir, { recursive: true, force: true }); }
 });
-test("production v2 verifier accepts all frozen and revision 2 full/update fixtures and binds regenerated mrpack indexes", async () => {
-  for (const directory of [root, join(root, "revision-2")]) for (const name of ["base-full", "target-full", "update"]) {
+test("production v2 verifier accepts current full/update fixtures and binds regenerated mrpack indexes", async () => {
+  for (const directory of [root]) for (const name of ["base-full", "target-full", "update"]) {
     const docs = await documents(name, directory), result = await validateRecipePackArchive(join(directory, name + ".muapack"), await key(directory));
     assert.equal(result.target.formatVersion, 2); assert.equal(result.metadata.packageType, name === "update" ? "update" : "full");
     assert.equal(result.objectCount, name === "update" ? 3 : 5);
@@ -132,7 +131,7 @@ test("v2 rejects protected paths, private addresses, credential URLs and noncano
     (value: typeof original) => { value.files[0].path = "PCL/config.json"; value.files[0].source.entry = "overrides/PCL/config.json"; },
     (value: typeof original) => { value.files[2].source.downloads = ["https://127.0.0.1/mod.jar"]; },
     (value: typeof original) => { value.files[2].source.downloads = ["https://remote.invalid/mod.jar?token=secret"]; },
-    (value: typeof original) => { value.supportedPlatforms.reverse(); },
+    (value: typeof original) => { value.supportedPlatforms = ["windows-amd64"]; },
   ]) { const value = structuredClone(original); mutate(value); assert.throws(() => readRecipeManifest(encodeMuaJson(value))); }
 });
 test("v2 archive verifier rejects missing, additional and tampered local payloads without extraction", async () => {

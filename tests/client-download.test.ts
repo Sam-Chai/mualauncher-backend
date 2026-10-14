@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import assert from "node:assert/strict";
 import { assertPublicResponse } from "./openapi-validation";
 import { test, type TestContext } from "node:test";
@@ -18,7 +19,7 @@ process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
 process.env.S3_REGION = "us-east-1";
 const denied = (status: number) => (error: unknown) => error instanceof AppError && error.status === status;
 
-function fixture(t: TestContext, format: 1 | 2, protocolRevision: 1 | 2 = 2) {
+function fixture(t: TestContext, format: 1 | 2, protocolRevision: 2 = 2) {
   const objects = new Map<string, { bytes: Buffer; sha256: string; size: number; etag: string }>();
   const put = (key: string, bytes: Buffer) => {
     const value = { bytes, sha256: digest(bytes), size: bytes.length, etag: '"opaque-multipart-etag-3"' };
@@ -26,20 +27,19 @@ function fixture(t: TestContext, format: 1 | 2, protocolRevision: 1 | 2 = 2) {
   };
   const manifests = format === 1 ? [muaFixture().manifest, muaFixture("1.1.0").manifest] : ["base-full", "target-full"].map(name => {
     const value = JSON.parse(readFileSync(`docs/examples/muapack-v2/${name}/metadata/target-manifest.json`, "utf8"));
-    if (protocolRevision === 1) value.supportedPlatforms = [...MUA_PLATFORMS];
-    else { delete value.supportedPlatforms; value.protocolRevision = 2; }
+    value.protocolRevision = protocolRevision;
     return value;
   });
   const releases = manifests.map((manifest, index) => {
     const bytes = format === 2 ? encodeMuaJson(manifest) : Buffer.from(JSON.stringify({
-      schemaVersion: 2, format: "mua-client-manifest", clientId: manifest.release.clientId, organizationId: manifest.release.organizationId,
+      schemaVersion: 2, format: "mua-client-manifest", clientId: fixtureClientId(manifest.release.clientId), organizationId: manifest.release.organizationId,
       version: manifest.release.version, name: manifest.release.name, summary: manifest.release.summary, description: manifest.release.description,
       sourceSha256: manifest.release.sourceSha256, runtime: { minecraft: manifest.runtime.minecraft, java: manifest.runtime.java.major },
       mods: manifest.mods.map((mod: { path: string }) => mod.path),
       files: manifest.files.filter((file: { root: string }) => file.root === "instance").map((file: { path: string; sha256: string; size: number; policy: string }) => ({ path: file.path, sha256: file.sha256, size: file.size, policy: file.policy })),
       update: { previousVersion: null, addedFiles: 0, modifiedFiles: 0, deletedFiles: 0, fullSize: 0, newDataSize: 0, estimatedDownloadSize: 0, casReusePercent: 0, fileCount: 0, sourceSize: 0 },
     }));
-    return { id: manifest.release.releaseId, sourceDraftId: manifest.release.releaseId, clientId: manifest.release.clientId, packageFormatVersion: format,
+    return { id: manifest.release.releaseId, sourceDraftId: manifest.release.releaseId, clientId: fixtureClientId(manifest.release.clientId), packageFormatVersion: format,
       versionLabel: manifest.release.version, archivedAt: null as Date | null, manifestObjectKey: `release-${index}`, manifestSha256: put(`release-${index}`, bytes).sha256 };
   });
   const builds = manifests.map((manifest, index) => {
@@ -158,6 +158,7 @@ for (const format of [1, 2] as const) {
 
 test("download parameters fail before issuing a link for invalid UUIDs, digests or platform", async t => {
   const f = fixture(t, 2);
+  await assert.rejects(publicPackage(f.db, "NPU", null, null), denied(400));
   await assert.rejects(f.request("not-a-uuid"), denied(400));
   await assert.rejects(f.request(null, "a".repeat(64)), denied(400));
   await assert.rejects(f.request(f.releases[0].id, "invalid-digest"), denied(400));
@@ -166,30 +167,13 @@ test("download parameters fail before issuing a link for invalid UUIDs, digests 
   await assert.rejects(publicPackage(fixture(t, 1).db, "NPU", "unsupported", null, "1"), denied(400));
 });
 
-test("legacy v1 missing baseline digest derives the immutable platform digest without editing artifacts", async t => {
+test("v1 rejects an update artifact without its required baseline digest", async t => {
   const f = fixture(t, 1), artifacts = f.builds[1].artifacts;
   delete (artifacts.update! as { baseManifestSha256?: string }).baseManifestSha256;
   const before = structuredClone(artifacts);
-  const response = await f.request(f.releases[0].id);
-  assert.equal(response.baseManifestSha256, f.builds[0].targetSha256); assert.equal(response.packageType, "update");
+  await assert.rejects(f.request(f.releases[0].id), denied(503));
   assert.deepEqual(artifacts, before);
   await assert.rejects(publicPackage(f.db, "NPU", null, null), denied(400));
-});
-
-test("v2 negotiation is explicit and no platform is required; legacy restrictions stay readable", async t => {
-  const f = fixture(t, 2, 1);
-  await assert.rejects(publicPackage(f.db, "NPU", null, null), denied(415));
-  const universal = await f.request(); assert("platform" in universal); assert.equal(universal.platform, "universal");
-  assertPublicResponse("PackageDownload", universal);
-  assertPublicResponse("PackageDownload", await f.request(f.releases[0].id));
-  assertPublicResponse("PublicManifest", JSON.parse(f.objects.get(f.releases[1].manifestObjectKey)!.bytes.toString("utf8")));
-  for (const platform of MUA_PLATFORMS) assert.equal((await publicPackage(f.db, "NPU", platform, null, "2")).sha256, universal.sha256);
-  const object = f.objects.get(f.releases[1].manifestObjectKey)!;
-  const document = JSON.parse(object.bytes.toString()); document.supportedPlatforms = ["windows-amd64"];
-  object.bytes = encodeMuaJson(document); object.sha256 = digest(object.bytes); object.size = object.bytes.length;
-  f.releases[1].manifestSha256 = object.sha256; f.builds[1].targetSha256 = object.sha256;
-  assert.equal((await f.request()).sha256, universal.sha256);
-  await assert.rejects(publicPackage(f.db, "NPU", "linux-amd64", null, "2"), denied(404));
 });
 
 test("v2 revision 2 distributes the same full/update on any platform and omits platform fields from discovery and refresh", async t => {
@@ -205,13 +189,5 @@ test("v2 revision 2 distributes the same full/update on any platform and omits p
     assert.equal(response.sha256, update.sha256); assert.equal(response.packageType, "update");
     assert(!("platform" in response));
   }
-  // A legacy restricted baseline still identifies the same instance files; its bytes and digest stay intact.
-  const object = f.objects.get(f.releases[0].manifestObjectKey)!;
-  const baseline = JSON.parse(object.bytes.toString()); delete baseline.protocolRevision; baseline.supportedPlatforms = ["windows-amd64"];
-  object.bytes = encodeMuaJson(baseline); object.sha256 = digest(object.bytes); object.size = object.bytes.length;
-  f.releases[0].manifestSha256 = object.sha256; f.builds[0].targetSha256 = object.sha256;
-  f.builds[1].artifacts.update!.baseManifestSha256 = object.sha256;
-  for (const platform of [null, "linux-amd64", "linux-riscv64"]) {
-    assert.equal((await publicPackage(f.db, "NPU", platform, baseId, "2", object.sha256)).packageType, "update");
-  }
+
 });

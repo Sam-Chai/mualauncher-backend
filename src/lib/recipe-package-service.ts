@@ -5,11 +5,9 @@ import { readObject, digest } from "./storage";
 import { encodeMuaJson } from "./muapack-protocol";
 import { recipeTarget, readRecipeManifest } from "./muapack-v2-protocol";
 import type { ClientDraft } from "@/generated/prisma/client";
-import { MUA_PLATFORMS, selectedPlatformsSchema } from "./muapack-contract";
 import type { RecipeManifest } from "./muapack-v2-contract";
 import { packageArtifactsSchema } from "./package-contract";
 
-export function canonicalRecipePlatforms(input: unknown) { const values = selectedPlatformsSchema.parse(input); return MUA_PLATFORMS.filter(platform => values.includes(platform)); }
 /** A sealed, published v2 baseline; never infer it from an unpublished draft or version label. */
 export async function recipeUpdateBase(db: Db, target: RecipeManifest, releaseId: string | null) {
   if (!releaseId) return null;
@@ -21,13 +19,12 @@ export async function recipeUpdateBase(db: Db, target: RecipeManifest, releaseId
   const base = readRecipeManifest(bytes);
   invariant(base.release.organizationId === target.release.organizationId && base.release.clientId === release.clientId &&
     base.release.releaseId === release.id && base.release.version === release.versionLabel, 422, "v2 更新基准身份不一致");
-  if ("supportedPlatforms" in target && (!("supportedPlatforms" in base) || !base.supportedPlatforms.some(platform => target.supportedPlatforms.includes(platform)))) return null;
   return { release, bytes, target: base };
 }
 export async function recipeDraftTarget(db: Db, draft: ClientDraft) {
   invariant(draft.packageFormatVersion === 2 && draft.candidateManifestKey && draft.candidateManifestSha256, 409, "v2 草稿缺少配方内容");
   const content = await readObject(draft.candidateManifestKey); invariant(digest(content) === draft.candidateManifestSha256, 422, "v2 草稿配方摘要不匹配");
-  const target = recipeTarget(content, draft.supportedPlatforms.length ? canonicalRecipePlatforms(draft.supportedPlatforms) : undefined);
+  const target = recipeTarget(content);
   const client = await db.client.findUniqueOrThrow({ where: { id: draft.clientId } });
   invariant(target.release.releaseId === draft.id && target.release.clientId === draft.clientId && target.release.organizationId === client.organizationId &&
     target.release.version === draft.versionLabel && target.release.name === draft.name && target.release.contentRevision === draft.contentRevision, 422, "v2 配方与草稿身份不匹配");

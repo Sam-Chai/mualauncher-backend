@@ -16,7 +16,6 @@ const encode = encodeMuaJson;
 const equal = (a, b) => encode(a).equals(encode(b));
 const copy = value => JSON.parse(JSON.stringify(value));
 const order = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-const platforms = ["windows-amd64", "windows-aarch64", "linux-amd64", "linux-aarch64", "macos-amd64", "macos-aarch64"];
 const domain = Buffer.from("MUA-MUAPACK-V2\0", "ascii");
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const sha = (value, length) => typeof value === "string" && new RegExp(`^[0-9a-f]{${length}}$`).test(value);
@@ -34,23 +33,15 @@ function publicUrl(value) {
   assert(![...url.searchParams.keys()].some(key => /signature|token|credential|expires|x-amz-|x-goog-/i.test(key)), "temporary URL");
   // DNS/redirect checks belong to the installer. This offline sample never resolves hosts.
 }
-function validatePlatforms(values) {
-  assert(Array.isArray(values) && values.length > 0 && values.length <= platforms.length);
-  assert.equal(new Set(values).size, values.length);
-  assert(values.every(value => platforms.includes(value)));
-  assert.deepEqual(values, [...values].sort((a, b) => platforms.indexOf(a) - platforms.indexOf(b)));
-}
 function validateTarget(target) {
-  const revised = Object.hasOwn(target, "protocolRevision");
-  fields(target, ["format", "formatVersion", "release", revised ? "protocolRevision" : "supportedPlatforms", "runtime", "launch", "files"]);
-  if (revised) assert.equal(target.protocolRevision, 2);
+  fields(target, ["format", "formatVersion", "release", "protocolRevision", "runtime", "launch", "files"]);
+  assert.equal(target.protocolRevision, 2);
   assert.equal(target.format, "mua-recipe-manifest"); assert.equal(target.formatVersion, 2);
   fields(target.release, ["organizationId", "clientId", "releaseId", "version", "name", "summary", "description", "sourceSha256", "contentRevision"]);
   assert(uuid.test(target.release.organizationId) && uuid.test(target.release.releaseId));
   for (const key of ["clientId", "version", "name", "summary"]) text(target.release[key]);
   assert(typeof target.release.description === "string" && target.release.description.length <= 20000);
   assert(sha(target.release.sourceSha256, 64)); assert(Number.isSafeInteger(target.release.contentRevision) && target.release.contentRevision > 0);
-  if (!revised) validatePlatforms(target.supportedPlatforms);
   fields(target.runtime, ["minecraft", "loader", "java", "resolverVersion"]); text(target.runtime.minecraft);
   assert.equal(target.runtime.resolverVersion, "mua-runtime-resolver-1");
   if (target.runtime.loader) {
@@ -136,9 +127,7 @@ function ref(target, bytes) {
   const { organizationId, clientId, releaseId, version } = target.release; return { organizationId, clientId, releaseId, version, manifestSha256: hash(bytes) };
 }
 function differences(base, target) {
-  const legacy = !Object.hasOwn(target, "protocolRevision");
-  const changes = { added: [], modified: [], removed: [], policyChanged: [], sourceChanged: [], runtimeChanged: null, launchChanged: null,
-    ...(legacy ? { platformsChanged: null } : {}) };
+  const changes = { added: [], modified: [], removed: [], policyChanged: [], sourceChanged: [], runtimeChanged: null, launchChanged: null };
   if (!base) return changes;
   const old = new Map(base.files.map(file => [file.path, file])), current = new Map(target.files.map(file => [file.path, file]));
   for (const after of target.files) {
@@ -149,8 +138,7 @@ function differences(base, target) {
     if (!modified && before.source.type === "remote" && !equal(before.source.downloads, after.source.downloads)) changes.sourceChanged.push({ before, after });
   }
   changes.removed = base.files.filter(file => !current.has(file.path));
-  assert(!legacy || Object.hasOwn(base, "supportedPlatforms"), "legacy target needs legacy baseline");
-  for (const [key, field] of [["runtimeChanged", "runtime"], ["launchChanged", "launch"], ...(legacy ? [["platformsChanged", "supportedPlatforms"]] : [])]) {
+  for (const [key, field] of [["runtimeChanged", "runtime"], ["launchChanged", "launch"]]) {
     if (!equal(base[field], target[field])) changes[key] = { before: base[field], after: target[field] };
   }
   return changes;
@@ -160,7 +148,7 @@ function metadataFor(targetBytes, baseBytes) {
   const changes = differences(base, target);
   const candidates = base ? [...changes.added, ...changes.modified.map(pair => pair.after), ...changes.policyChanged.map(pair => pair.after)] : target.files;
   const locals = new Map(candidates.filter(file => file.source.type === "local").map(file => [file.path, file]));
-  return { format: "muapack", formatVersion: 2, ...(Object.hasOwn(target, "protocolRevision") ? { protocolRevision: 2 } : {}),
+  return { format: "muapack", formatVersion: 2, protocolRevision: 2,
     packageType: base ? "update" : "full", target: ref(target, targetBytes), base: base ? ref(base, baseBytes) : null,
     indexSha256: hash(encode(indexFor(target))), changes,
     payload: [...locals.values()].map(file => ({ entry: file.source.entry, sha256: file.hashes.sha256, size: file.size })).sort((a, b) => order(a.entry, b.entry)),
@@ -281,7 +269,7 @@ function normalizeSource(source, sourceSha256, updated) {
     release: { organizationId: "11111111-1111-4111-8111-111111111111", clientId: "22222222-2222-4222-8222-222222222222",
       releaseId: updated ? "33333333-3333-4333-8333-333333333332" : "33333333-3333-4333-8333-333333333331",
       version: index.versionId, name: index.name, summary: index.summary, description: "# Offline sample\nSynthetic bytes only.", sourceSha256, contentRevision: 1 },
-    supportedPlatforms: updated ? ["windows-amd64", "linux-amd64"] : ["windows-amd64"],
+    protocolRevision: 2,
     runtime: { minecraft: index.dependencies.minecraft, loader: { type: "fabric", version: index.dependencies["fabric-loader"] }, java: { major: 21, vendor: "adoptium", imageType: "jre" }, resolverVersion: "mua-runtime-resolver-1" },
     launch: { jvmArgs: updated ? ["-Dmua.example=true"] : [], gameArgs: [], memory: { mode: "auto", minimumMiB: 1024, recommendedMiB: 2048 }, preLaunch: [] },
     files: [...files.values()].sort((a, b) => order(a.path, b.path)) };
@@ -309,7 +297,7 @@ async function checks() {
   assert.equal(target.metadata.target.manifestSha256, update.metadata.target.manifestSha256); cases.push("full/update target identity");
   assert.deepEqual(Object.fromEntries(["added", "modified", "removed", "policyChanged", "sourceChanged"].map(key => [key, update.metadata.changes[key].length])),
     { added: 2, modified: 3, removed: 1, policyChanged: 1, sourceChanged: 1 }); cases.push("complete delta counts");
-  assert(update.metadata.changes.runtimeChanged && update.metadata.changes.launchChanged && update.metadata.changes.platformsChanged); cases.push("environment, launch and platform changes");
+  assert(update.metadata.changes.runtimeChanged && update.metadata.changes.launchChanged); cases.push("environment and launch changes");
   for (const [i, name] of ["base.mrpack", "target.mrpack"].entries()) {
     const bytes = await readFile(resolve(root, "inputs", name)), source = await readZip(bytes), normalized = normalizeSource(source, hash(bytes), i === 1);
     assert(equal(normalized.target, loaded[i].target)); cases.push(name + ": local overrides and source hash preserved");
@@ -401,36 +389,7 @@ async function checks() {
   changeMetadata(duplicateJson, value => { value.target.manifestSha256 = hash(duplicateJson.get("metadata/target-manifest.json")); });
   signDocuments(duplicateJson, inputKey.privateKey);
   assert.throws(() => validateDocuments(duplicateJson, inputKey.publicKey)); cases.push("reject: duplicate JSON key");
-  const revisedPublicDocument = JSON.parse(await readFile(resolve(root, "revision-2/test-public-key.json"), "utf8"));
-  const revisedKey = createPublicKey({ key: Buffer.from(revisedPublicDocument.spkiDerBase64, "base64"), format: "der", type: "spki" });
-  const revisedLoaded = [];
-  for (const name of ["base-full", "target-full", "update"]) {
-    const file = `revision-2/${name}.muapack`, bytes = await readFile(resolve(root, file)), documents = await readZip(bytes);
-    const checked = validateDocuments(documents, revisedKey); revisedLoaded.push({ documents, ...checked });
-    assert.equal(checked.target.protocolRevision, 2); assert.equal(checked.metadata.protocolRevision, 2);
-    assert(!Object.hasOwn(checked.target, "supportedPlatforms")); assert(!Object.hasOwn(checked.metadata.changes, "platformsChanged"));
-    cases.push(file + ": revision, signature, inventories and payload verified without platform declarations");
-    packages.push({ file, sha256: hash(bytes), size: bytes.length, localPayloadFiles: checked.metadata.payload.length, remoteDeclarations: checked.target.files.filter(file => file.source.type === "remote").length });
-  }
-  assert.equal(revisedLoaded[0].metadata.target.manifestSha256, revisedLoaded[2].metadata.base.manifestSha256);
-  assert.equal(revisedLoaded[1].metadata.target.manifestSha256, revisedLoaded[2].metadata.target.manifestSha256);
-  cases.push("revision 2 exact full/update baseline and target binding");
-  const current = revisedLoaded[1], currentLocals = new Map([...current.documents].filter(([path]) => path.startsWith("overrides/")));
-  const mixed = packDocuments(encode(current.target), encode(base.target), currentLocals, variantKey.privateKey);
-  validateDocuments(mixed, variantKey.publicKey); cases.push("revision 2 update accepts exact legacy baseline without a platform gate");
-  for (const [name, change] of [
-    ["unknown revision", value => { value.protocolRevision = 3; }],
-    ["missing revision", value => { delete value.protocolRevision; }],
-    ["legacy field in revised target", value => { value.supportedPlatforms = ["windows-amd64"]; }],
-  ]) {
-    const value = copy(current.target); change(value); assert.throws(() => validateTarget(value)); cases.push("reject: " + name);
-  }
-  const badRevision = new Map(current.documents);
-  changeMetadata(badRevision, value => { value.protocolRevision = 3; }); signDocuments(badRevision, variantKey.privateKey);
-  assert.throws(() => validateDocuments(badRevision, variantKey.publicKey)); cases.push("reject: signed mismatched metadata revision");
-  const badChanges = new Map(current.documents);
-  changeMetadata(badChanges, value => { value.changes.platformsChanged = null; }); signDocuments(badChanges, variantKey.privateKey);
-  assert.throws(() => validateDocuments(badChanges, variantKey.publicKey)); cases.push("reject: legacy platform changes in revised metadata");
+  for (const mutation of [value => { delete value.protocolRevision; }, value => { value.protocolRevision = 1; }, value => { value.supportedPlatforms = ["windows-amd64"]; }]) { const value = copy(target.target); mutation(value); assert.throws(() => validateTarget(value)); cases.push("reject: non-current protocol shape"); }
   return { format: "muapack-v2-offline-fixture-report", formatVersion: 1, packages, checksPassed: cases.length, cases,
     networkRequests: 0, databaseWrites: 0, installedGames: 0, runtimeBinariesBundled: false, note: "Synthetic fixtures only; not a production installer or playable client." };
 }
@@ -451,22 +410,6 @@ async function generate() {
   }
   const report = await checks(); await writeFile(resolve(root, "verification-report.json"), encode(report)); return report;
 }
-async function generateRevision2() {
-  const key = generateKeyPairSync("ed25519"), targets = [], locals = [];
-  for (const name of ["base-full", "target-full"]) {
-    const docs = await readZip(await readFile(resolve(root, name + ".muapack")));
-    const target = decodeMuaJson(docs.get("metadata/target-manifest.json"));
-    delete target.supportedPlatforms; target.protocolRevision = 2; validateTarget(target);
-    targets.push(encode(target)); locals.push(new Map([...docs].filter(([path]) => path.startsWith("overrides/"))));
-  }
-  const publicDer = key.publicKey.export({ format: "der", type: "spki" });
-  await writeDocuments("revision-2", new Map([["test-public-key.json", encode({ algorithm: "Ed25519", keyId: hash(publicDer).slice(0, 24), spkiDerBase64: publicDer.toString("base64"), testOnly: true })]]));
-  for (const [name, target, base, local] of [["base-full", targets[0], null, locals[0]], ["target-full", targets[1], null, locals[1]], ["update", targets[1], targets[0], locals[1]]]) {
-    const docs = packDocuments(target, base, local, key.privateKey); validateDocuments(docs, key.publicKey);
-    await writeDocuments("revision-2/" + name, docs); await writeFile(resolve(root, "revision-2", name + ".muapack"), await zipBytes(docs));
-  }
-  const report = await checks(); await writeFile(resolve(root, "revision-2/verification-report.json"), encode(report)); return report;
-}
-const mode = process.argv[2] ?? "--check"; assert(["--generate", "--generate-revision-2", "--check"].includes(mode), "use --generate, --generate-revision-2 or --check");
-const report = mode === "--generate-revision-2" ? await generateRevision2() : mode === "--generate" ? await generate() : await checks();
+const mode = process.argv[2] ?? "--check"; assert(["--generate", "--check"].includes(mode), "use --generate or --check");
+const report = mode === "--generate" ? await generate() : await checks();
 console.log(JSON.stringify({ mode, checksPassed: report.checksPassed, packages: report.packages, networkRequests: report.networkRequests, installedGames: report.installedGames }));

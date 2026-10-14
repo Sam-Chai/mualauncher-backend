@@ -138,5 +138,5 @@
   "此统计仅适用于 muapack v2": "These statistics apply only to muapack v2",
   "配方文件统计尚未准备完成": "Recipe file statistics are not ready yet",
   "发布清单身份不匹配": "Release manifest identity does not match",
-  "这是尚未重新排队的历史 v2 上传，请联系管理员检查账号与客户端状态；也可取消后重新上传。已发布版本继续可用。": "This legacy v2 upload has not been requeued. Ask an administrator to check the account and client status, or cancel and upload again. Published versions remain available."
+  "版本元数据缺失或无效，请检查上传记录。": "Version metadata is missing or invalid. Check the upload record."
 }

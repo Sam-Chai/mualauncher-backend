@@ -2,12 +2,11 @@
 import { useI18n } from "@/components/preferences";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import type { getState, getClients } from "@/lib/management";
+import type { getState } from "@/lib/management";
 import { AUTH_CHANGE_KEY, navigateAfterAuthChange } from "@/lib/auth-navigation";
 export type State = Awaited<ReturnType<typeof getState>>;
 export type Organization = State["organizations"][number];
 export type Server = Organization["servers"][number];
-export type ClientData = Awaited<ReturnType<typeof getClients>>;
 export type Account = State["accounts"][number];
 export class RequestError extends Error { constructor(message: string, public status: number) { super(message); } }
 export async function api<T = { ok: boolean; id?: string }>(path: string, method = "GET", body?: unknown): Promise<T> {

@@ -1,7 +1,7 @@
 import "server-only";
 import type { Db } from "./auth";
 import { AppError, invariant } from "./errors";
-import { readObject, casBucket, casKey, signedDownload, signedDownloadInfo } from "./storage";
+import { readObject, signedDownloadInfo } from "./storage";
 import type { ReleaseManifest } from "./client-contract";
 import { muaPlatformSchema } from "./muapack-contract";
 import { packageArtifactsSchema, type PackageArtifacts } from "./package-contract";
@@ -12,7 +12,7 @@ import { storedHead } from "./package-storage";
 import { packagesBucket } from "./storage";
 import { uuid } from "./input";
 export function acceptedPackageFormats(value: string | null): number[] {
-  if (value === null) return [1];
+  invariant(value !== null, 400, "请明确提供 acceptedFormatVersions");
   invariant(/^(?:1|2)(?:,(?:1|2))?$/.test(value) && new Set(value.split(",")).size === value.split(",").length, 400, "acceptedFormatVersions 必须为 1、2 或 1,2");
   return value.split(",").map(Number);
 }
@@ -34,15 +34,9 @@ export async function publicManifest(db: Db, serverId: string, acceptedFormats: 
   }
   const manifest = publishedDocument(() => JSON.parse(bytes.toString("utf8")) as ReleaseManifest);
   invariant(manifest && manifest.version === release.versionLabel && manifest.organizationId === server!.organizationId &&
-    (manifest.schemaVersion === 2 ? manifest.clientId === release.clientId : manifest.schemaVersion === 1 && manifest.serverId === serverId),
+    manifest.schemaVersion === 2 && manifest.clientId === release.clientId,
     503, "发布清单与服务器绑定不一致");
   return { bytes, release };
-}
-export async function publicFile(db: Db, serverId: string, sha256: string) {
-  invariant(/^[0-9a-f]{64}$/.test(sha256), 404, "文件不存在");
-  const { bytes } = await publicManifest(db, serverId); const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest;
-  invariant(manifest.files.some(file => file.sha256 === sha256), 404, "文件不属于当前发布版本");
-  return { url: await signedDownload(casKey(sha256), casBucket()), expiresIn: 300 };
 }
 /** Same resolver for latest discovery and fixed-release URL renewal. Never accept an OSS key from the caller. */
 export async function publicPackage(db: Db, serverId: string, platformInput: string | null, baseReleaseId: string | null, acceptedFormats: string | null = null, baseManifestSha256: string | null = null, releaseId: string | null = null, packageSha256: string | null = null) {
@@ -53,11 +47,6 @@ export async function publicPackage(db: Db, serverId: string, platformInput: str
   const { release, bytes } = await publicManifest(db, serverId, acceptedFormats, releaseId);
   if (release.packageFormatVersion === 2) {
     const target = publishedDocument(() => readRecipeManifest(bytes));
-    const legacy = "supportedPlatforms" in target;
-    if (legacy) {
-      invariant(platformInput === null || platformInput === "universal" || platform.success, 400, "platform 无效");
-      invariant(!platform.success || target.supportedPlatforms.includes(platform.data), 404, "当前 v2 发布不支持此平台");
-    }
     const draft = await db.clientDraft.findUniqueOrThrow({ where: { id: release.sourceDraftId } });
     const build = await db.packageBuild.findUnique({ where: { draftId_platform_revision: { draftId: draft.id, platform: "universal", revision: draft.packageRevision } } });
     invariant(build?.required && build.status === "READY" && build.targetSha256 === release.manifestSha256 && build.targetObjectKey === release.manifestObjectKey, 404, "v2 完整包尚未提供");
@@ -70,14 +59,12 @@ export async function publicPackage(db: Db, serverId: string, platformInput: str
       if (!base) update = null;
       else {
         invariant(update.baseManifestSha256 === base.release.manifestSha256, 503, "v2 更新包基准摘要不一致");
-        const basePlatforms = "supportedPlatforms" in base.target ? base.target.supportedPlatforms : null;
-        const covered = !legacy || basePlatforms !== null && (platform.success ? basePlatforms.includes(platform.data) : target.supportedPlatforms.every(value => basePlatforms.includes(value)));
-        if (!covered || baseManifestSha256 !== null && baseManifestSha256 !== base.release.manifestSha256) update = null;
+        if (baseManifestSha256 !== null && baseManifestSha256 !== base.release.manifestSha256) update = null;
       }
     }
-    const download = await packageLinks(serverId, release.id, 2, legacy && platform.success ? platform.data : null, full, update, update?.baseManifestSha256 ?? null, packageSha256);
+    const download = await packageLinks(serverId, release.id, 2, null, full, update, update?.baseManifestSha256 ?? null, packageSha256);
     return { format: "muapack", formatVersion: 2, minimumLauncherProtocol: 2, releaseId: release.id, version: release.versionLabel,
-      ...(legacy ? { platform: platform.success ? platform.data : "universal", supportedPlatforms: target.supportedPlatforms } : { protocolRevision: target.protocolRevision }), runtime: target.runtime,
+      protocolRevision: target.protocolRevision, runtime: target.runtime,
       ...download, targetManifestSha256: release.manifestSha256, signingKeyId: artifacts.signingKeyId,
       mods: target.files.filter(file => /^mods\/.+\.jar$/i.test(file.path)).map(file => ({ path: file.path, name: null, version: null, optional: file.optional, source: file.source.type, hashes: file.hashes })),
     };
@@ -87,8 +74,8 @@ export async function publicPackage(db: Db, serverId: string, platformInput: str
   invariant(build?.required && build.status === "READY" && build.targetSha256 && build.targetObjectKey, 404, "当前发布未提供此平台的 muapack");
   const targetBytes = await checkedManifestBytes(build.targetObjectKey, build.targetSha256);
   const target = publishedDocument(() => readMuaPlatformManifest(targetBytes));
-  const legacy = publishedDocument(() => JSON.parse(bytes.toString("utf8")) as ReleaseManifest);
-  invariant(target.release.releaseId === release.id && target.release.clientId === release.clientId && target.release.organizationId === legacy.organizationId && target.release.version === release.versionLabel && target.platform === platform.data, 503, "平台清单与当前发布不一致");
+  const manifest = publishedDocument(() => JSON.parse(bytes.toString("utf8")) as ReleaseManifest);
+  invariant(target.release.releaseId === release.id && target.release.clientId === release.clientId && target.release.organizationId === manifest.organizationId && target.release.version === release.versionLabel && target.platform === platform.data, 503, "平台清单与当前发布不一致");
   const artifacts = publishedDocument(() => packageArtifactsSchema.parse(build.artifacts));
   let update = artifacts.update?.baseReleaseId === baseReleaseId ? artifacts.update : null;
   if (update) {
@@ -103,9 +90,8 @@ export async function publicPackage(db: Db, serverId: string, platformInput: str
       const baseBytes = await checkedManifestBytes(base.targetObjectKey, base.targetSha256);
       const manifest = publishedDocument(() => readMuaPlatformManifest(baseBytes));
       invariant(manifest.release.organizationId === target.release.organizationId && manifest.release.clientId === release.clientId && manifest.release.releaseId === baseRelease.id && manifest.release.version === baseRelease.versionLabel && manifest.platform === platform.data, 503, "v1 更新基准身份不一致");
-      // Old READY records omitted this digest. Derive it from sealed bytes without editing their records or signatures.
-      invariant(update.baseManifestSha256 === undefined || update.baseManifestSha256 === base.targetSha256, 503, "v1 更新包基准摘要不一致");
-      update = baseManifestSha256 !== null && baseManifestSha256 !== base.targetSha256 ? null : { ...update, baseManifestSha256: base.targetSha256 };
+      invariant(update.baseManifestSha256 === base.targetSha256, 503, "v1 更新包基准摘要不一致");
+      update = baseManifestSha256 !== null && baseManifestSha256 !== base.targetSha256 ? null : update;
     }
   }
   const download = await packageLinks(serverId, release.id, 1, platform.data, artifacts.full, update, update?.baseManifestSha256 ?? null, packageSha256);

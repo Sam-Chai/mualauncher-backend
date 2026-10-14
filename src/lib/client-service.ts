@@ -28,9 +28,9 @@ import { maxUploadSizeMb } from "./upload-size-settings";
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "./upload-size-policy";
 
 export const PART_SIZE = 64 * 1024 * 1024;
-const uploadInput = z.object({ clientId: z.string().min(1).max(100), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
+const uploadInput = z.object({ clientId: z.string().uuid(), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
   size: z.number().int().positive().max(MAX_UPLOAD_SIZE_MB * UPLOAD_MB), baseReleaseId: z.string().uuid().nullable(), basePublicationRevision: z.number().int().nonnegative(),
-  comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema.default(1) }).strict();
+  comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema }).strict();
 function parse<T>(schema: z.ZodType<T>, raw: unknown): T {
   const result = schema.safeParse(raw); invariant(result.success, 400, result.success ? "" : result.error.issues[0]?.message ?? "参数无效"); return result.data;
 }
@@ -60,7 +60,7 @@ function assertBaseline(upload: { baseReleaseId: string | null; basePublicationR
 export async function createUpload(db: Db, actor: Actor, raw: unknown) {
   const data = parse(uploadInput, raw);
   const scope = await requireClient(db, actor, data.clientId, "DRAFT_CREATE", true);
-  const format = data.packageFormatVersion ?? 1;
+  const format = data.packageFormatVersion;
   invariant((await enabledPackageFormats(db)).includes(format), 409, `muapack v${format} 当前未开放新上传，请选择开放的格式`);
   const limit = await maxUploadSizeMb(db);
   invariant(data.size <= limit * UPLOAD_MB, 413, `上传文件超过允许的最大大小（${limit} MB）`);
@@ -72,7 +72,7 @@ export async function createUpload(db: Db, actor: Actor, raw: unknown) {
   }
   invariant(await db.clientUpload.count({ where: { createdById: actor.id,
     client: { archivedAt: null, organization: { archivedAt: null } },
-    OR: [{ status: "UPLOADING", expiresAt: { gt: new Date() } }, { status: { in: ["WAITING_PROCESSOR", "QUEUED", "PROCESSING", "READY"] } }] } }) < 20,
+    OR: [{ status: "UPLOADING", expiresAt: { gt: new Date() } }, { status: { in: ["QUEUED", "PROCESSING", "READY"] } }] } }) < 20,
   429, "请先完成已有上传任务（最多 20 个）");
   const id = randomUUID(); const key = `uploads/${id}/source.zip`; const multipartId = await beginMultipart(key);
   const upload = await db.clientUpload.create({ data: { id, clientId: data.clientId, createdById: actor.id, fileName: data.fileName, size: BigInt(data.size),
@@ -93,7 +93,7 @@ export async function prepareCompletion(db: Db, actor: Actor, id: string, raw: u
   const { parts } = parse(z.object({ parts: z.array(z.object({ partNumber: z.number().int().positive(), etag: z.string().min(1).max(200) }).strict()).min(1).max(320) }).strict(), raw);
   const upload = await findUpload(db, actor, id, true);
   if (upload.status !== "UPLOADING") {
-    invariant(["WAITING_PROCESSOR", "QUEUED", "PROCESSING", "READY", "SUBMITTED"].includes(upload.status), 409, "上传任务不能完成"); return { upload, parts, alreadyCompleted: true };
+    invariant(["QUEUED", "PROCESSING", "READY", "SUBMITTED"].includes(upload.status), 409, "上传任务不能完成"); return { upload, parts, alreadyCompleted: true };
   }
   invariant(upload.expiresAt > new Date(), 409, "上传会话已过期，请重新上传");
   return { upload, parts, alreadyCompleted: false };
@@ -106,13 +106,13 @@ export async function transferCompletion(prepared: Awaited<ReturnType<typeof pre
 export async function queueCompletedUpload(db: Db, actor: Actor, id: string) {
   const upload = await findUpload(db, actor, id, true);
   if (upload.status !== "UPLOADING") {
-    invariant(["WAITING_PROCESSOR", "QUEUED", "PROCESSING", "READY", "SUBMITTED"].includes(upload.status), 409, "上传任务已关闭"); return uploadView(upload);
+    invariant(["QUEUED", "PROCESSING", "READY", "SUBMITTED"].includes(upload.status), 409, "上传任务已关闭"); return uploadView(upload);
   }
   return uploadView(await db.clientUpload.update({ where: { id }, data: { status: "QUEUED" } }));
 }
 export async function cancelUpload(db: Db, actor: Actor, id: string) {
   const upload = await findUpload(db, actor, id, true);
-  invariant(["UPLOADING", "WAITING_PROCESSOR", "QUEUED", "READY", "FAILED"].includes(upload.status), 409, "正在处理或已提交的任务不能取消");
+  invariant(["UPLOADING", "QUEUED", "READY", "FAILED"].includes(upload.status), 409, "正在处理或已提交的任务不能取消");
   if (upload.status === "UPLOADING") await abortMultipart(upload.sourceObjectKey, upload.multipartId);
   return uploadView(await db.clientUpload.update({ where: { id }, data: { status: "CANCELLED" } }));
 }
@@ -135,8 +135,8 @@ export async function selectUploadInstance(db: Db, actor: Actor, id: string, raw
 }
 export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknown) {
   const submitted = parse(clientSubmissionSchema, raw); const upload = await findUpload(db, actor, id, true);
-  const { platforms, modDetails: _untrustedModDetails, ...submittedMetadata } = submitted;
-  void _untrustedModDetails;
+  const { platforms, ...submittedMetadata } = submitted;
+  invariant(upload.packageFormatVersion === 1 || platforms === undefined, 400, "v2 不接受 platforms 参数");
   const info = upload.detectedInfo as ClientInspection | null;
   const metadata: ClientMetadata = parse(clientMetadataSchema, { ...submittedMetadata, mods: upload.detectedMods,
     ...(info?.importFiles ? { modDetails: info.importFiles.filter(file => /^mods\/.+\.jar$/i.test(file.path)).map(file => ({ path: file.path, optional: file.optional })) } : {}),
@@ -146,7 +146,7 @@ export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknow
   if (rename) {
     invariant(!upload.baseReleaseId && !upload.draftId && await db.clientRelease.count({ where: { clientId: upload.clientId } }) === 0 &&
       await db.clientDraft.count({ where: { clientId: upload.clientId } }) === 0 &&
-      await db.clientUpload.count({ where: { clientId: upload.clientId, id: { not: upload.id }, status: { in: ["UPLOADING", "WAITING_PROCESSOR", "QUEUED", "PROCESSING", "READY", "SUBMITTED"] } } }) === 0,
+      await db.clientUpload.count({ where: { clientId: upload.clientId, id: { not: upload.id }, status: { in: ["UPLOADING", "QUEUED", "PROCESSING", "READY", "SUBMITTED"] } } }) === 0,
     409, "已有版本或其他上传的客户端不能改名；更新必须使用原客户端名称");
     invariant(!await db.client.findFirst({ where: { organizationId: scope.client.organizationId, nameKey: normalizeName(metadata.name), deletedAt: null, id: { not: upload.clientId } } }),
       409, "客户端名称已存在，请使用该客户端的“更新”功能提交新版本");
@@ -201,7 +201,7 @@ export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknow
   return { draftId };
 }
 export async function reviewClient(db: Db, actor: Actor, clientId: string, draftId: string, raw: unknown) {
-  const data = parse(z.object({ decision: z.enum(["approve", "reject"]), note: z.string().max(5000), contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive().default(1) }).strict(), raw);
+  const data = parse(z.object({ decision: z.enum(["approve", "reject"]), note: z.string().max(5000), contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive() }).strict(), raw);
   const scope = await requireClient(db, actor, clientId, "DRAFT_REVIEW", true);
   invariant(data.decision !== "reject" || data.note.trim().length > 0, 400, "驳回时请填写审核说明");
   const draft = await db.clientDraft.findUnique({ where: { id: draftId }, include: { upload: true } });
@@ -219,13 +219,13 @@ export async function reviewClient(db: Db, actor: Actor, clientId: string, draft
 }
 export async function publishClient(db: Db, actor: Actor, clientId: string, draftId: string, raw: unknown) {
   const { activate, replacesDraftId, contentRevision, packageRevision } = parse(z.object({ activate: z.boolean(),
-    replacesDraftId: z.string().uuid().nullable().optional(), contentRevision: z.number().int().positive().optional(), packageRevision: z.number().int().positive().optional() }).strict(), raw);
+    replacesDraftId: z.string().uuid().nullable().optional(), contentRevision: z.number().int().positive(), packageRevision: z.number().int().positive() }).strict(), raw);
   const scope = await requireClient(db, actor, clientId, "RELEASE_PUBLISH", true);
   if (activate) await requireClient(db, actor, clientId, "RELEASE_ACTIVATE", true);
   const draft = await db.clientDraft.findUnique({ where: { id: draftId }, include: { upload: true, release: true } });
   invariant(draft?.clientId === clientId && draft.upload, 404, "上传版本不存在");
   if (draft.release) return { releaseId: draft.release.id, versionLabel: draft.release.versionLabel };
-  invariant((contentRevision === undefined || contentRevision === draft.contentRevision) && (packageRevision === undefined || packageRevision === draft.packageRevision), 409, "草稿修订已改变，请刷新后发布");
+  invariant(contentRevision === draft.contentRevision && packageRevision === draft.packageRevision, 409, "草稿修订已改变，请刷新后发布");
   invariant(draft.status === "APPROVED" && !draft.archivedAt && draft.reviewedRevision === draft.contentRevision && draft.reviewedById &&
     draft.candidateManifestKey && draft.candidateManifestSha256 && draft.name && draft.versionLabel && draft.candidateMetadata, 409, "此版本尚未审核通过");
   invariant(draft.reviewedPackageRevision === draft.packageRevision, 409, "发布平台尚未审核通过");
@@ -282,7 +282,7 @@ export async function clientList(db: Db, actor: Actor) {
     try { scope = await clientScope(db, actor, client.id); } catch (error) { if (error instanceof AppError && error.status === 404) continue; throw error; }
     if (!scope.permissions.includes("DRAFT_READ") && !scope.permissions.includes("RELEASE_READ")) continue;
     const drafts = scope.permissions.includes("DRAFT_READ") ? await db.clientDraft.findMany({ where: { clientId: client.id }, orderBy: { createdAt: "desc" },
-      select: { id: true, packageFormatVersion: true, supportedPlatforms: true, versionLabel: true, versionSequence: true, replacesDraftId: true, archiveReason: true, supersededByDraftId: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true, reviewNote: true, status: true, contentRevision: true, packageRevision: true, archivedAt: true, createdAt: true, upload: { select: { id: true, statistics: true, comparisonStatistics: true } }, packageBuilds: { where: { required: true }, orderBy: { platform: "asc" }, select: { platform: true, status: true, phase: true, progress: true, error: true, artifacts: true } } } }) : [];
+      select: { id: true, packageFormatVersion: true, versionLabel: true, versionSequence: true, replacesDraftId: true, archiveReason: true, supersededByDraftId: true, name: true, description: true, changelog: true, summary: true, candidateMetadata: true, reviewNote: true, status: true, contentRevision: true, packageRevision: true, archivedAt: true, createdAt: true, upload: { select: { id: true, statistics: true, comparisonStatistics: true } }, packageBuilds: { where: { required: true }, orderBy: { platform: "asc" }, select: { platform: true, status: true, phase: true, progress: true, error: true, artifacts: true } } } }) : [];
     const releases = scope.permissions.includes("RELEASE_READ") ? await db.clientRelease.findMany({ where: { clientId: client.id }, orderBy: { publishedAt: "desc" },
       select: { id: true, packageFormatVersion: true, versionLabel: true, name: true, description: true, changelog: true, summary: true, environmentSnapshot: true, publishedAt: true, archivedAt: true } }) : [];
     const releaseRows = await Promise.all(releases.map(async release => ({ ...release, sourceDraft: await releaseDetails(db, release.id) })));
@@ -320,7 +320,7 @@ export async function deleteClient(db: Db, actor: Actor, clientId: string) {
   invariant(!scope.client.binding && !scope.client.requestedServerId, 409, "已绑定或待绑定服务器的客户端不能删除");
   invariant(await db.clientUpload.count({ where: { clientId, status: "PROCESSING" } }) === 0, 409, "Worker 正在处理此客户端，请稍后再试");
   invariant(await db.packageBuild.count({ where: { draft: { clientId }, status: "PROCESSING" } }) === 0, 409, "Worker 正在组包，请稍后再试");
-  await db.clientUpload.updateMany({ where: { clientId, status: { in: ["UPLOADING", "WAITING_PROCESSOR", "QUEUED", "READY", "FAILED"] } }, data: { status: "CANCELLED" } });
+  await db.clientUpload.updateMany({ where: { clientId, status: { in: ["UPLOADING", "QUEUED", "READY", "FAILED"] } }, data: { status: "CANCELLED" } });
   await db.$executeRaw`SELECT ${securityFunction("delete_client")}(${clientId})`;
   await audit(db, actor, "CLIENT_DELETE", "Client", clientId, scope.client.organizationId, undefined, { name: scope.client.name });
   return { ok: true };
@@ -338,7 +338,7 @@ export const normalizeName = (name: string) => name.trim().normalize("NFKC").toL
 export async function createClient(db: Db, actor: Actor, raw: unknown) {
   const data = parse(z.object({ organizationId: z.string().uuid(), name: z.string().trim().min(1).max(200),
     serverId: z.string().regex(/^[A-Za-z]{3,5}$/).nullable().optional(), publicationRevision: z.number().int().nonnegative().optional(),
-    expectedClientId: z.string().nullable().optional(), replaceConfirmed: z.boolean().optional() }).strict(), raw);
+    expectedClientId: z.string().uuid().nullable().optional(), replaceConfirmed: z.boolean().optional() }).strict(), raw);
   if (data.serverId) {
     const scope = await requireServer(db, actor, data.serverId, "DRAFT_CREATE");
     invariant(scope.server.organizationId === data.organizationId, 409, "服务器与客户端必须属于同一组织");
@@ -357,16 +357,9 @@ export async function createClient(db: Db, actor: Actor, raw: unknown) {
   await audit(db, actor, "CLIENT_CREATE", "Client", client.id, client.organizationId, undefined, { name: client.name });
   return { clientId: client.id, name: client.name, currentReleaseId: null, publicationRevision: 0 };
 }
-async function checkLegacyBinding(db: Db, releaseId: string | null, serverId: string) {
-  if (!releaseId) return;
-  const release = await db.clientRelease.findUniqueOrThrow({ where: { id: releaseId } });
-  const bytes = await readObject(release.manifestObjectKey); invariant(digest(bytes) === release.manifestSha256, 422, "发布清单校验失败");
-  const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest;
-  invariant(manifest.schemaVersion !== 1 || manifest.serverId === serverId, 409, "此旧版 Manifest 固定原服务器，请先更新客户端后再绑定其他服务器");
-}
 export async function bindClient(db: Db, actor: Actor, clientId: string, raw: unknown) {
   const data = parse(z.object({ serverId: z.string().regex(/^[A-Za-z]{3,5}$/), publicationRevision: z.number().int().nonnegative(),
-    expectedClientId: z.string().nullable(), replaceConfirmed: z.boolean() }).strict(), raw);
+    expectedClientId: z.string().uuid().nullable(), replaceConfirmed: z.boolean() }).strict(), raw);
   const { client } = await requireClient(db, actor, clientId, "CLIENT_BIND");
   const scope = await requireServer(db, actor, data.serverId, "CLIENT_BIND");
   invariant(scope.server.organizationId === client.organizationId, 409, "只能绑定同组织服务器");
@@ -376,7 +369,6 @@ export async function bindClient(db: Db, actor: Actor, clientId: string, raw: un
   if (publication.clientId === clientId) return { ok: true, pending: false };
   invariant(!publication.clientId || data.replaceConfirmed, 409, "服务器已有客户端，请确认是否重新绑定到新客户端");
   if (publication.clientId) await requireClient(db, actor, publication.clientId, "CLIENT_BIND");
-  await checkLegacyBinding(db, client.currentReleaseId, data.serverId);
   if (!client.currentReleaseId && publication.clientId) {
     await db.client.update({ where: { id: clientId }, data: { requestedServerId: data.serverId, requestedRevision: publication.revision, expectedClientId: publication.clientId } });
     await audit(db, actor, "CLIENT_BIND_REQUEST", "Client", clientId, client.organizationId, data.serverId, { previousClientId: publication.clientId, revision: publication.revision });
@@ -404,7 +396,6 @@ async function setCurrentRelease(db: Db, actor: Actor, clientId: string, release
   await db.client.update({ where: { id: clientId }, data: { currentReleaseId: releaseId, revision: { increment: 1 } } });
   if (client.binding) {
     await requireServer(db, actor, client.binding.serverId, "RELEASE_ACTIVATE");
-    await checkLegacyBinding(db, releaseId, client.binding.serverId);
     await db.serverPublication.update({ where: { serverId: client.binding.serverId }, data: { releaseId, revision: { increment: 1 }, changedById: actor.id } });
   } else if (client.requestedServerId && permissions.includes("CLIENT_BIND")) {
     await bindClient(db, actor, clientId, { serverId: client.requestedServerId, publicationRevision: client.requestedRevision,

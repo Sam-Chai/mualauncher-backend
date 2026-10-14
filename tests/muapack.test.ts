@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createPublicKey, generateKeyPairSync, sign } from "node:crypto";
@@ -73,7 +74,7 @@ test("environment references lock platform, Java build and exact files", () => {
   const fixture = muaFixture(); assert.equal(validateMuaEnvironments(fixture.manifest, fixture.environmentDocuments).length, 3);
   const changed = structuredClone(fixture.manifest); changed.runtime.java.build = "new-build";
   assert.throws(() => validateMuaEnvironments(changed, fixture.environmentDocuments), /Java 构建/);
-  const imageType = structuredClone(fixture.manifest); imageType.runtime.java.imageType = "jre";
+  const imageType = structuredClone(fixture.manifest); imageType.runtime.java.imageType = "jdk";
   assert.throws(() => validateMuaEnvironments(imageType, fixture.environmentDocuments), /Java 构建/);
   const wrongPlatform = structuredClone(fixture.manifest); wrongPlatform.platform = "linux-amd64";
   assert.throws(() => validateMuaEnvironments(wrongPlatform, fixture.environmentDocuments), /平台/);
@@ -121,7 +122,7 @@ test("metadata-only updates carry no objects and duplicate target content is pac
 });
 test("updates cannot change client, organization, platform or reuse the same release identity", () => {
   const fixture = muaFixtureDocuments(true); const base = fixture.baseBytes!;
-  for (const override of [{ clientId: "OTHER" }, { organizationId: "44444444-4444-4444-8444-444444444444" }, { releaseId: muaFixture().manifest.release.releaseId }]) {
+  for (const override of [{ clientId: fixtureClientId("OTHER") }, { organizationId: "44444444-4444-4444-8444-444444444444" }, { releaseId: muaFixture().manifest.release.releaseId }]) {
     assert.throws(() => createMuaPackMetadata(encodeMuaJson({ ...fixture.manifest, release: { ...fixture.manifest.release, ...override } }), base, "retain"));
   }
   assert.throws(() => createMuaPackMetadata(muaFixture("1.0.1", "linux-amd64").targetBytes, base, "retain"), /相同平台/);

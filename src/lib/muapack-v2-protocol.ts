@@ -3,7 +3,6 @@ import { createPublicKey, sign, verify, type KeyObject } from "node:crypto";
 import { invariant } from "./errors";
 import { encodeMuaJson, decodeMuaJson, muaDigest, muaSigningKeyId } from "./muapack-protocol";
 import { RECIPE_PROTOCOL_REVISION, recipeContentSchema, recipeManifestSchema, recipePackMetadataSchema, recipeSignatureSchema, type RecipeManifest, type RecipePackMetadata } from "./muapack-v2-contract";
-import type { MuaPlatform } from "./muapack-contract";
 import { remoteSourceUrl } from "./remote-download";
 import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "./download-sources";
 
@@ -17,9 +16,9 @@ function validateRemoteSources(target: { files: RecipeManifest["files"] }) {
 }
 export function readRecipeContent(bytes: Buffer) { const target = recipeContentSchema.parse(decodeMuaJson(bytes)); validateRemoteSources(target); return target; }
 export function readRecipeManifest(bytes: Buffer) { const target = recipeManifestSchema.parse(decodeMuaJson(bytes)); validateRemoteSources(target); return target; }
-export function recipeTarget(contentBytes: Buffer, legacyPlatforms?: MuaPlatform[]) {
+export function recipeTarget(contentBytes: Buffer) {
   return recipeManifestSchema.parse({ ...readRecipeContent(contentBytes), format: "mua-recipe-manifest",
-    ...(legacyPlatforms ? { supportedPlatforms: legacyPlatforms } : { protocolRevision: RECIPE_PROTOCOL_REVISION }) });
+    protocolRevision: RECIPE_PROTOCOL_REVISION });
 }
 export function recipeModrinthIndex(target: RecipeManifest) {
   const keys = { fabric: "fabric-loader", quilt: "quilt-loader", forge: "forge", neoforge: "neoforge" };
@@ -33,7 +32,7 @@ export function createRecipePackMetadata(targetBytes: Buffer, baseBytes: Buffer 
   const target = readRecipeManifest(targetBytes), base = baseBytes ? readRecipeManifest(baseBytes) : null;
   invariant(!base || base.release.organizationId === target.release.organizationId && base.release.clientId === target.release.clientId &&
     base.release.releaseId !== target.release.releaseId && base.release.version !== target.release.version, 422, "v2 更新必须属于同一客户端的不同发布");
-  const changes: Omit<RecipePackMetadata["changes"], "platformsChanged"> = { added: [], modified: [], removed: [], policyChanged: [], sourceChanged: [], runtimeChanged: null, launchChanged: null };
+  const changes: RecipePackMetadata["changes"] = { added: [], modified: [], removed: [], policyChanged: [], sourceChanged: [], runtimeChanged: null, launchChanged: null };
   const sizes = new Map<string, number>();
   for (const file of [...(base?.files ?? []), ...target.files]) {
     const id = "sha512" in file.hashes ? `remote:${file.hashes.sha512}` : `local:${file.hashes.sha256}`;
@@ -54,13 +53,9 @@ export function createRecipePackMetadata(targetBytes: Buffer, baseBytes: Buffer 
   }
   const candidates = base ? [...changes.added, ...changes.modified.map(pair => pair.after), ...changes.policyChanged.map(pair => pair.after)] : target.files;
   const local = new Map(candidates.filter(file => file.source.type === "local").map(file => [file.path, file]));
-  const legacy = "supportedPlatforms" in target;
-  invariant(!legacy || !base || "supportedPlatforms" in base, 422, "旧 v2 目标不能使用新版配方作为更新基准");
-  const platformsChanged = legacy && base && "supportedPlatforms" in base && !equal(base.supportedPlatforms, target.supportedPlatforms)
-    ? { before: base.supportedPlatforms, after: target.supportedPlatforms } : null;
-  return recipePackMetadataSchema.parse({ format: "muapack", formatVersion: 2, ...(legacy ? {} : { protocolRevision: RECIPE_PROTOCOL_REVISION }),
+  return recipePackMetadataSchema.parse({ format: "muapack", formatVersion: 2, protocolRevision: RECIPE_PROTOCOL_REVISION,
     packageType: base ? "update" : "full", target: reference(target, targetBytes), base: base && baseBytes ? reference(base, baseBytes) : null,
-    indexSha256: muaDigest(encodeMuaJson(recipeModrinthIndex(target))), changes: legacy ? { ...changes, platformsChanged } : changes,
+    indexSha256: muaDigest(encodeMuaJson(recipeModrinthIndex(target))), changes,
     payload: [...local.values()].map(file => ({ entry: file.source.type === "local" ? file.source.entry : "", sha256: file.hashes.sha256, size: file.size })).sort((a, b) => a.entry < b.entry ? -1 : a.entry > b.entry ? 1 : 0),
     removalPolicy, minimumLauncherProtocol: 2 });
 }

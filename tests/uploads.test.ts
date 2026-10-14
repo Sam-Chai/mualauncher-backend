@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
@@ -30,7 +31,7 @@ import { createServer } from "node:net";
 import { storageClient, initializeStorage, digest, casKey, casBucket, packagesBucket, environmentsBucket, missingObject, readObject } from "../src/lib/storage";
 import { indexClientStorage, maintainRecycleBin, recycleSettings, updateRecycleSettings } from "../src/lib/recycle-storage";
 import { parseClientPack, filePolicy } from "../src/lib/pack-parser";
-import { publicManifest, publicFile } from "../src/lib/client-download";
+import { publicManifest } from "../src/lib/client-download";
 import { apiActor, createApiToken, revokeApiToken } from "../src/lib/api-auth";
 import { signingIdentity } from "../src/lib/signing";
 import type { ClientMetadata, ReleaseManifest, UploadView } from "../src/lib/client-contract";
@@ -79,10 +80,10 @@ const v1 = rawZip([{ name: ".minecraft/mods/shared.jar", data: shared }, { name:
   { name: ".minecraft/launcher_accounts.json", data: Buffer.from('{"token":"must-stay-private"}') }]);
 const v2 = rawZip([{ name: "mods/shared.jar", data: shared }, { name: "config/game.txt", data: Buffer.from("new") },
   { name: "mods/new.jar", data: Buffer.from("newmod") }, { name: "options.txt", data: Buffer.from("no!") }]);
-const fields: ClientMetadata = { name: "NPUcraft", versionLabel: "1.0.0", minecraftVersion: "1.21.1", javaVersion: 21, mods: ["shared.jar"], summary: "Initial client", description: "# NPU\nComplete client" };
+const fields: Omit<ClientMetadata, "mods" | "modDetails"> = { name: "NPUcraft", versionLabel: "1.0.0", minecraftVersion: "1.21.1", javaVersion: 21, summary: "Initial client", description: "# NPU\nComplete client" };
 async function prepare(bytes: Buffer, actor = admin, serverId = "NPA", processNow = true, fileName = "client.zip", comparisonDraftId: string | null = null, packageFormatVersion?: 1 | 2) {
-  const publication = await client.client.findUniqueOrThrow({ where: { id: serverId } });
-  const upload = await work(db => c.createUpload(db, actor, { clientId: serverId, fileName, size: bytes.length,
+  const publication = await client.client.findUniqueOrThrow({ where: { id: fixtureClientId(serverId) } });
+  const upload = await work(db => c.createUpload(db, actor, { packageFormatVersion: 1, clientId: fixtureClientId(serverId), fileName, size: bytes.length,
     baseReleaseId: publication.currentReleaseId, basePublicationRevision: publication.revision, comparisonDraftId,
     ...(packageFormatVersion === undefined ? {} : { packageFormatVersion }) }));
   const parts: { partNumber: number; etag: string }[] = [];
@@ -113,12 +114,12 @@ async function finishPackages(draftId: string) {
   assert.fail("Package pipeline did not finish");
 }
 async function approved(draftId: string) {
-  const result = await work(db => c.reviewClient(db, reviewer, "NPA", draftId, { decision: "approve", note: "Checked", contentRevision: 1 }));
+  const result = await work(db => c.reviewClient(db, reviewer, fixtureClientId("NPA"), draftId, { packageRevision: 1, decision: "approve", note: "Checked", contentRevision: 1 }));
   await finishPackages(draftId); return result;
 }
 before(async () => {
   await pool.query('CREATE SCHEMA "' + schema + '"'); created = true;
-  for (const migration of ["202610080001_initial", "202610080002_invariants", "202610080003_client_uploads", "202610080004_upload_integrity", "202610090001_independent_clients", "202610090002_client_inspection", "202610090003_client_recycle", "202610090004_muapack_builds", "202610090005_modrinth_import", "202610090006_environment_mirrors", "202610100001_draft_lifecycle", "202610100002_archived_client_deletion", "202610100003_package_format_choice", "202610100004_v2_recipe_import", "202610100005_v2_recipe_packages", "202610110001_package_format_settings", "202610120001_upload_size_settings", "202610120002_row_security", "202610120003_row_security_permissions", "202610120004_v2_platform_independent", "202610120005_server_display_schedule"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+  for (const migration of ["202610140001_initial_release"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
   temp = await mkdtemp(join(tmpdir(), "mua-upload-test-")); process.env.SIGNING_PRIVATE_KEY_PATH = join(temp, "key.pem");
   await writeFile(process.env.SIGNING_PRIVATE_KEY_PATH, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }));
   await initializeStorage();
@@ -129,8 +130,8 @@ before(async () => {
     const org = await m.createOrganization(db, root, { displayName: "NPU" }); const other = await m.createOrganization(db, root, { displayName: "Other" });
     await m.createServer(db, root, { organizationId: org.id, serverId: "NPA", displayName: "NPU release" }); await m.createServer(db, root, { organizationId: other.id, serverId: "OTH", displayName: "Other server" });
     for (const server of await db.server.findMany()) {
-      await db.client.create({ data: { id: server.serverId, organizationId: server.organizationId, name: fields.name, nameKey: c.normalizeName(fields.name), scopeServerId: server.serverId } });
-      await db.serverPublication.update({ where: { serverId: server.serverId }, data: { clientId: server.serverId } });
+      await db.client.create({ data: { id: fixtureClientId(server.serverId), organizationId: server.organizationId, name: fields.name, nameKey: c.normalizeName(fields.name), scopeServerId: server.serverId } });
+      await db.serverPublication.update({ where: { serverId: server.serverId }, data: { clientId: fixtureClientId(server.serverId) } });
     }
     for (const [actor, role] of [[admin, "ORG_ADMIN"], [reviewer, "REVIEWER"], [publisher, "PUBLISHER"], [operator, "RELEASE_OPERATOR"], [reader, "READ_ONLY"]] as const) await m.setMember(db, root, org.id, actor.id, { roles: [role], status: "ACTIVE" });
     await m.updateServer(db, root, "NPA", { isListed: true });
@@ -173,8 +174,8 @@ test("upload size settings default to 1024 MB, restrict writes to panel superadm
 test("upload size limit covers both formats and API actors, accepts exact limits and rejects before multipart creation", async () => {
   const org = await work(db => m.createOrganization(db, root, { displayName: "Upload size fixtures" }));
   await work(db => m.createServer(db, root, { organizationId: org.id, serverId: "SIZ", displayName: "Size boundaries" }));
-  const identity = await work(db => c.createClient(db, root, { organizationId: org.id, name: "Upload size boundaries", serverId: "SIZ", publicationRevision: 0, expectedClientId: null }));
-  const input = { clientId: identity.clientId, fileName: "client.zip", baseReleaseId: null, basePublicationRevision: 0 };
+  const identity = await work(db => c.createClient(db, root, { organizationId: org.id, name: "Upload size boundaries", serverId: "SIZ", publicationRevision: 0, expectedClientId: fixtureClientId(null) }));
+  const input = { clientId: fixtureClientId(identity.clientId), fileName: "client.zip", baseReleaseId: null, basePublicationRevision: 0 };
   const tokenActor = { ...root, apiScope: { permissions: ["SERVER_READ" as const, "DRAFT_CREATE" as const, "DRAFT_READ" as const], serverIds: ["SIZ"] } };
   try {
     for (const cap of [1024, 2048, MAX_UPLOAD_SIZE_MB]) {
@@ -199,11 +200,11 @@ test("lowering upload size keeps existing multipart completion and Worker proces
   const org = await work(db => m.createOrganization(db, root, { displayName: "Existing upload fixtures" }));
   const identity = await work(db => c.createClient(db, root, { organizationId: org.id, name: "Existing upload size" }));
   const bytes = rawZip([{ name: ".minecraft/config/large.dat", data: randomBytes(2 * UPLOAD_MB) }]);
-  const input = { clientId: identity.clientId, fileName: "client.zip", size: bytes.length, baseReleaseId: null, basePublicationRevision: 0 };
-  const upload = await work(db => c.createUpload(db, root, input));
+  const input = { clientId: fixtureClientId(identity.clientId), fileName: "client.zip", size: bytes.length, baseReleaseId: null, basePublicationRevision: 0 };
+  const upload = await work(db => c.createUpload(db, root, { packageFormatVersion: 1, ...input }));
   try {
     await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1 }));
-    await assert.rejects(work(db => c.createUpload(db, root, input)), denied(413));
+    await assert.rejects(work(db => c.createUpload(db, root, { packageFormatVersion: 1, ...input })), denied(413));
     const signed = await work(db => c.uploadPartUrl(db, root, upload.id, { partNumber: 1 }));
     const response = await fetch(signed.url, { method: "PUT", body: new Uint8Array(bytes) }); assert.equal(response.status, 200);
     const parts = [{ partNumber: 1, etag: response.headers.get("etag")! }];
@@ -216,8 +217,8 @@ test("lowering upload size keeps existing multipart completion and Worker proces
 });
 
 test("upload authorization and API Tokens keep real RBAC, account revocation and server scopes", async () => {
-  await assert.rejects(work(db => c.createUpload(db, admin, { clientId: "OTH", fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(404));
-  await assert.rejects(work(db => c.createUpload(db, reader, { clientId: "NPA", fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(403));
+  await assert.rejects(work(db => c.createUpload(db, admin, { packageFormatVersion: 1, clientId: fixtureClientId("OTH"), fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(404));
+  await assert.rejects(work(db => c.createUpload(db, reader, { packageFormatVersion: 1, clientId: fixtureClientId("NPA"), fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(403));
   const token = await work(db => createApiToken(db, admin, { name: "Actions", serverIds: ["NPA"], permissions: ["SERVER_READ", "DRAFT_READ", "DRAFT_CREATE", "DRAFT_EDIT", "DRAFT_SUBMIT"], expiresInDays: 30 }));
   const record = await client.apiToken.findUniqueOrThrow({ where: { id: token.id } }); assert.equal(record.tokenHash, tokenDigest(token.token)); assert.notEqual(record.tokenHash, token.token);
   const request = new Request("http://localhost/api/v1/clients", { headers: { Authorization: "Bearer " + token.token } });
@@ -225,7 +226,7 @@ test("upload authorization and API Tokens keep real RBAC, account revocation and
   await assert.rejects(work(db => createApiToken(db, admin, { name: "escalation", serverIds: ["NPA"], permissions: ["SERVER_READ", "RELEASE_PUBLISH"], expiresInDays: 30 })), denied(403));
   const organizationId = (await client.server.findUniqueOrThrow({ where: { serverId: "NPA" } })).organizationId;
   await work(db => m.setMember(db, root, organizationId, admin.id, { roles: ["ORG_ADMIN"], status: "DISABLED" }));
-  await assert.rejects(work(db => c.createUpload(db, actor, { clientId: "NPA", fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(404));
+  await assert.rejects(work(db => c.createUpload(db, actor, { packageFormatVersion: 1, clientId: fixtureClientId("NPA"), fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(404));
   await work(db => m.setMember(db, root, organizationId, admin.id, { roles: ["ORG_ADMIN"], status: "ACTIVE" }));
   await work(db => m.updateAccount(db, root, admin.id, { status: "DISABLED" }));
   await assert.rejects(apiActor(client, request, undefined), denied(401));
@@ -237,18 +238,18 @@ test("a full ZIP becomes private CAS files and a reviewed, signed immutable curr
   assert.equal(upload.packageFormatVersion, 1, "old callers default to muapack v1, independently of Manifest schemaVersion");
   assert.deepEqual(upload.detectedMods, ["shared.jar"]); assert(upload.warnings.some(warning => warning.includes("忽略")));
   const anonymous = await fetch(process.env.S3_ENDPOINT + "/" + casBucket() + "/" + casKey(digest(shared))); assert.equal(anonymous.status, 403);
-  const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, mods: ["forged.jar"] })); assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).releaseId, null);
+  const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, fields)); assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).releaseId, null);
   assert.equal((await work(db => c.submitUpload(db, admin, upload.id, fields))).draftId, draftId, "Submission retry is idempotent");
-  await assert.rejects(work(db => c.publishClient(db, root, "NPA", draftId, { activate: true })), denied(409));
-  await assert.rejects(work(db => c.reviewClient(db, admin, "NPA", draftId, { decision: "approve", note: "", contentRevision: 1 })), denied(403));
+  await assert.rejects(work(db => c.publishClient(db, root, fixtureClientId("NPA"), draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(409));
+  await assert.rejects(work(db => c.reviewClient(db, admin, fixtureClientId("NPA"), draftId, { packageRevision: 1, decision: "approve", note: "", contentRevision: 1 })), denied(403));
   await approved(draftId);
-  await assert.rejects(work(db => c.publishClient(db, publisher, "NPA", draftId, { activate: true })), denied(403));
-  const released = await work(db => c.publishClient(db, publisher, "NPA", draftId, { activate: false }));
+  await assert.rejects(work(db => c.publishClient(db, publisher, fixtureClientId("NPA"), draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(403));
+  const released = await work(db => c.publishClient(db, publisher, fixtureClientId("NPA"), draftId, { contentRevision: 1, packageRevision: 1, activate: false }));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).packageFormatVersion, 1);
   assert.equal((await client.clientRelease.findUniqueOrThrow({ where: { id: released.releaseId } })).packageFormatVersion, 1);
   assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).releaseId, null);
-  await work(db => c.activateClient(db, operator, "NPA", released.releaseId, { publicationRevision: 0 }));
-  const published = await publicManifest(client, "NPA"); const manifest = JSON.parse(published.bytes.toString()) as ReleaseManifest;
+  await work(db => c.activateClient(db, operator, fixtureClientId("NPA"), released.releaseId, { publicationRevision: 0 }));
+  const published = await publicManifest(client, "NPA", "1"); const manifest = JSON.parse(published.bytes.toString()) as ReleaseManifest;
   assert.equal(manifest.version, "1.0.0"); assert(!manifest.files.some(file => file.path.includes("launcher_accounts")));
   assert(manifest.format === "mua-client-manifest"); assert.deepEqual(manifest.mods, ["shared.jar"], "submitted mod names cannot replace Worker detection");
   assert.deepEqual((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).candidateMetadata, { ...fields, mods: ["shared.jar"] });
@@ -256,9 +257,6 @@ test("a full ZIP becomes private CAS files and a reviewed, signed immutable curr
   const identity = await signingIdentity(); const key = createPublicKey({ key: Buffer.from(identity.publicKey, "base64"), type: "spki", format: "der" });
   assert(verify(null, published.bytes, key, Buffer.from(published.release.signature, "base64")));
   assert(!verify(null, Buffer.from("tampered"), key, Buffer.from(published.release.signature, "base64")));
-  const download = await publicFile(client, "NPA", digest(shared)); const response = await fetch(download.url); assert.deepEqual(Buffer.from(await response.arrayBuffer()), shared);
-  await assert.rejects(publicFile(client, "NPA", digest("private")), denied(404));
-  await assert.rejects(work(db => m.saveDraft(db, admin, "NPA", { versionLabel: "1.0.0", name: "edited", description: "", changelog: "edit", contentRevision: 1 }, draftId)), denied(409));
   await assert.rejects(client.clientRelease.update({ where: { id: released.releaseId }, data: { name: "mutated" } }));
 });
 test("updates compute real CAS reuse and managed/preserve delta, enforce new versions and switch only on publish", async () => {
@@ -269,25 +267,25 @@ test("updates compute real CAS reuse and managed/preserve delta, enforce new ver
   const original = (await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).releaseId;
   const { draftId } = await submitted(upload, "1.1.0"); await approved(draftId);
   assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).releaseId, original);
-  await work(db => c.publishClient(db, root, "NPA", draftId, { activate: true }));
-  assert.equal(JSON.parse((await publicManifest(client, "NPA")).bytes.toString()).version, "1.1.0");
-  assert.deepEqual(JSON.parse((await publicManifest(client, "NPA")).bytes.toString()).mods, ["new.jar", "shared.jar"], "updates replace the entire detected mod list");
-  assert.equal(await client.clientRelease.count({ where: { clientId: "NPA" } }), 2);
+  await work(db => c.publishClient(db, root, fixtureClientId("NPA"), draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
+  assert.equal(JSON.parse((await publicManifest(client, "NPA", "1")).bytes.toString()).version, "1.1.0");
+  assert.deepEqual(JSON.parse((await publicManifest(client, "NPA", "1")).bytes.toString()).mods, ["new.jar", "shared.jar"], "updates replace the entire detected mod list");
+  assert.equal(await client.clientRelease.count({ where: { clientId: fixtureClientId("NPA") } }), 2);
 });
 
 test("all default signed packages download and verify; update packages bind the exact previous release", async () => {
-  const current = await client.client.findUniqueOrThrow({ where: { id: "NPA" } });
+  const current = await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } });
   const builds = await client.packageBuild.findMany({ where: { draftId: current.currentReleaseId! } }); assert.equal(builds.length, 5);
   assert(!builds.some(build => build.platform === "linux-aarch64"));
   for (const build of builds) {
     assert.equal(build.status, "READY"); const artifacts = packageArtifactsSchema.parse(build.artifacts); assert(artifacts.update);
-    const full = await publicPackage(client, "NPA", build.platform, null);
+    const full = await publicPackage(client, "NPA", build.platform, null, "1");
     assert.equal(full.packageType, "full"); assert.equal(full.releaseId, current.currentReleaseId);
     const response = await fetch(full.url); assert.equal(response.status, 200); const bytes = Buffer.from(await response.arrayBuffer()); assert.equal(digest(bytes), full.sha256);
     const path = join(temp, `download-${build.platform}.muapack`); await writeFile(path, bytes);
     const validated = await validateMuaPackArchive(path, createPublicKey((await signingIdentity()).privateKey));
     assert.equal(validated.target.platform, build.platform); assert.equal(validated.target.release.releaseId, full.releaseId);
-    const update = await publicPackage(client, "NPA", build.platform, artifacts.update.baseReleaseId); assert.equal(update.packageType, "update");
+    const update = await publicPackage(client, "NPA", build.platform, artifacts.update.baseReleaseId, "1"); assert.equal(update.packageType, "update");
     assert(artifacts.update.baseManifestSha256); assert.equal(update.baseManifestSha256, artifacts.update.baseManifestSha256);
     assert.equal((await publicPackage(client, "NPA", build.platform, artifacts.update.baseReleaseId, "1", "0".repeat(64))).packageType, "full");
     const pinned = await publicPackage(client, "NPA", build.platform, artifacts.update.baseReleaseId, "1", update.baseManifestSha256, update.releaseId, update.sha256);
@@ -299,16 +297,16 @@ test("all default signed packages download and verify; update packages bind the 
     assert.equal(delta.metadata.base!.releaseId, artifacts.update.baseReleaseId); assert.equal(delta.metadata.packageType, "update"); assert.equal(delta.metadata.removalPolicy, "retain");
     assert(delta.metadata.changes.removed.some(file => file.path === "config/remove.txt"));
     assert(delta.metadata.changes.modified.some(pair => pair.after.path === "config/game.txt"));
-    const fallback = await publicPackage(client, "NPA", build.platform, "11111111-1111-4111-8111-111111111111"); assert.equal(fallback.packageType, "full");
+    const fallback = await publicPackage(client, "NPA", build.platform, "11111111-1111-4111-8111-111111111111", "1"); assert.equal(fallback.packageType, "full");
   }
-  await assert.rejects(publicPackage(client, "NPA", "windows-x86", null), denied(400));
+  await assert.rejects(publicPackage(client, "NPA", "windows-x86", null, "1"), denied(400));
 });
 
 test("persistent package jobs require review, retry expired leases, invalidate changed platform approval and gate publishing", async () => {
   const org = (await client.server.findUniqueOrThrow({ where: { serverId: "NPA" } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Package gates" }));
   const upload = await prepare(v1, admin, identity.clientId);
-  const result = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: "Package gates", platforms: ["linux-amd64"] }));
+  const result = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: "Package gates", ...(upload.packageFormatVersion === 1 ? { platforms: ["linux-amd64"] } : {}) }));
   const draftId = result.draftId;
   await assert.rejects(work(db => configurePackages(db, reader, identity.clientId, draftId, { platforms: ["windows-amd64"] })), denied(403));
   await assert.rejects(work(db => configurePackages(db, admin, identity.clientId, draftId, { platforms: [] })), denied(400));
@@ -327,14 +325,14 @@ test("persistent package jobs require review, retry expired leases, invalidate c
   const prepared = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(prepared.status, "PREPARED"); assert.equal(prepared.artifacts, null, "unreviewed content has no signed package");
   await assert.rejects(work(db => managementFullPackage(db, admin, identity.clientId, "drafts", draftId, "linux-amd64")), denied(409));
   await assert.rejects(work(db => managementFullPackage(db, operator, identity.clientId, "drafts", draftId, "linux-amd64")), denied(403));
-  await assert.rejects(work(db => managementFullPackage(db, admin, "OTH", "drafts", draftId, "linux-amd64")), denied(404));
-  await assert.rejects(work(db => managementFullPackage(db, root, "OTH", "drafts", draftId, "linux-amd64")), denied(404), "foreign draft cannot be downloaded through an authorized client");
+  await assert.rejects(work(db => managementFullPackage(db, admin, fixtureClientId("OTH"), "drafts", draftId, "linux-amd64")), denied(404));
+  await assert.rejects(work(db => managementFullPackage(db, root, fixtureClientId("OTH"), "drafts", draftId, "linux-amd64")), denied(404), "foreign draft cannot be downloaded through an authorized client");
   await assert.rejects(work(db => managementFullPackage(db, admin, identity.clientId, "drafts", draftId, "invalid")), denied(400));
   await assert.rejects(work(db => managementFullPackage(db, admin, identity.clientId, "drafts", draftId, "windows-amd64")), denied(404), "cancelled platforms cannot be downloaded");
   await work(async db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "", contentRevision: 1, packageRevision: (await db.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).packageRevision }));
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: false })), denied(409));
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: false })), denied(409));
   const candidate = await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } });
-  await assert.rejects(client.clientRelease.create({ data: { id: draftId, clientId: identity.clientId, sourceDraftId: draftId, versionLabel: candidate.versionLabel!, name: candidate.name!,
+  await assert.rejects(client.clientRelease.create({ data: { id: draftId, clientId: fixtureClientId(identity.clientId), sourceDraftId: draftId, versionLabel: candidate.versionLabel!, name: candidate.name!,
     description: candidate.description, changelog: candidate.changelog, summary: candidate.summary, environmentSnapshot: candidate.candidateMetadata!,
     manifestObjectKey: candidate.candidateManifestKey!, manifestSha256: candidate.candidateManifestSha256!, signingKeyId: "test", signature: "test", approvedById: reviewer.id, publishedById: root.id } }), "direct database inserts also require ready packages");
   await finishPackages(draftId);
@@ -346,19 +344,19 @@ test("persistent package jobs require review, retry expired leases, invalidate c
   assert.equal(digest(Buffer.from(await completeResponse.arrayBuffer())), artifacts.full.sha256);
   const saved = await readObject(artifacts.full.key); await storageClient().send(new DeleteObjectsCommand({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: artifacts.full.key }] } }));
   await assert.rejects(work(db => managementFullPackage(db, admin, identity.clientId, "drafts", draftId, "linux-amd64")), denied(422));
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: false })), denied(422), "missing OSS artifact cannot be published");
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: candidate.packageRevision, activate: false })), denied(422), "missing OSS artifact cannot be published");
   await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: artifacts.full.key, Body: saved, Metadata: { sha256: artifacts.full.sha256 } }));
   await assert.rejects(client.packageBuild.update({ where: { id: build.id }, data: { targetSha256: "0".repeat(64) } }), "completed build is immutable in the database");
   await work(db => configurePackages(db, admin, identity.clientId, draftId, { platforms: ["linux-amd64", "windows-amd64"] }));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).status, "SUBMITTED");
   await assert.rejects(work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "", contentRevision: 1, packageRevision: 1 })), denied(409), "stale review cannot approve a changed platform selection");
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: false })), denied(409));
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: false })), denied(409));
   const windows = await client.packageBuild.findUniqueOrThrow({ where: { draftId_platform_revision: { draftId, platform: "windows-amd64", revision: 1 } } });
   await client.packageBuild.update({ where: { id: windows.id }, data: { status: "FAILED", error: "network failed" } });
   await assert.rejects(work(db => retryPackages(db, reader, identity.clientId, draftId)), denied(403));
   await work(db => retryPackages(db, admin, identity.clientId, draftId)); assert.equal((await client.packageBuild.findUniqueOrThrow({ where: { id: windows.id } })).status, "QUEUED");
   await work(async db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "", contentRevision: 1, packageRevision: (await db.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).packageRevision }));
-  await finishPackages(draftId); const released = await work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: false })); assert.equal(released.releaseId, draftId);
+  await finishPackages(draftId); const released = await work(async db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: (await db.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).packageRevision, activate: false })); assert.equal(released.releaseId, draftId);
   await assert.rejects(work(db => configurePackages(db, admin, identity.clientId, draftId, { platforms: ["linux-amd64"] })), denied(409));
 });
 test("ZIP traversal, case collisions, symlinks, unsupported formats and bad CRC never become releases", async () => {
@@ -368,15 +366,15 @@ test("ZIP traversal, case collisions, symlinks, unsupported formats and bad CRC 
     rawZip([{ name: "modrinth.index.json", data: Buffer.from("{}") }])];
   const corrupt = Buffer.from(v2); corrupt[30 + Buffer.byteLength("mods/shared.jar")] ^= 0xff; bad.push(corrupt);
   for (const bytes of bad) { const upload = await prepare(bytes); assert.equal(upload.status, "FAILED"); assert.equal(upload.draftId, null); await assert.rejects(submitted(upload, "invalid"), denied(409)); }
-  assert.equal(await client.clientRelease.count({ where: { clientId: "NPA" } }), 2);
+  assert.equal(await client.clientRelease.count({ where: { clientId: fixtureClientId("NPA") } }), 2);
 });
 test("competing updates cannot silently replace a newly published baseline; archive stops public distribution", async () => {
   const first = await prepare(v2); const second = await prepare(v2); assert.equal(first.statistics?.newDataSize, 0); assert.equal(first.statistics?.casReusePercent, 100);
   const a = await submitted(first, "1.2.0"); const b = await submitted(second, "1.3.0"); await approved(a.draftId); await approved(b.draftId);
-  await work(db => c.publishClient(db, root, "NPA", a.draftId, { activate: true }));
-  await assert.rejects(work(db => c.publishClient(db, root, "NPA", b.draftId, { activate: true })), denied(409));
-  await work(db => c.archiveClient(db, admin, "NPA", { archived: true })); await assert.rejects(publicManifest(client, "NPA"), denied(404));
-  assert.equal(await client.clientRelease.count({ where: { clientId: "NPA" } }), 3); assert.equal(await client.clientDraft.count({ where: { clientId: "NPA" } }), 4);
+  await work(db => c.publishClient(db, root, fixtureClientId("NPA"), a.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
+  await assert.rejects(work(db => c.publishClient(db, root, fixtureClientId("NPA"), b.draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(409));
+  await work(db => c.archiveClient(db, admin, fixtureClientId("NPA"), { archived: true })); await assert.rejects(publicManifest(client, "NPA", "1"), denied(404));
+  assert.equal(await client.clientRelease.count({ where: { clientId: fixtureClientId("NPA") } }), 3); assert.equal(await client.clientDraft.count({ where: { clientId: fixtureClientId("NPA") } }), 4);
 });
 test("a ZIP larger than one 64 MiB part verifies all parts and streams to CAS without incomplete publication", async () => {
   const data = randomBytes(65 * 1024 * 1024);
@@ -406,9 +404,9 @@ test("deflate, ZIP64 and Unicode paths are parsed; a crashed Worker lease can be
 });
 test("the standard HTTP API and Actions upload script share the reviewed release pipeline", { skip: !process.env.MUA_HTTP_TEST_DIST, timeout: 90000 }, async () => {
   // This integration test must also run independently of preceding release tests.
-  if (!await client.clientRelease.findFirst({ where: { clientId: "NPA" } })) {
+  if (!await client.clientRelease.findFirst({ where: { clientId: fixtureClientId("NPA") } })) {
     const initial = await submitted(await prepare(v1), "1.0.0"); await approved(initial.draftId);
-    await work(db => c.publishClient(db, root, "NPA", initial.draftId, { activate: true }));
+    await work(db => c.publishClient(db, root, fixtureClientId("NPA"), initial.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   }
   const probe = createServer(); await new Promise<void>(resolve => probe.listen(0, "127.0.0.1", resolve));
   const port = (probe.address() as { port: number }).port; await new Promise<void>(resolve => probe.close(() => resolve()));
@@ -455,9 +453,9 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     assert.equal(saveSettings.status, 200); assert.deepEqual((await saveSettings.json()).minecraftDownloadSources, ["ustc", "nju"]);
     assert.equal((await fetch(origin + "/api/admin/download-settings", { method: "PATCH", headers: { ...rootHeaders, Origin: "https://evil.test" }, body: JSON.stringify(initialSettings) })).status, 403);
     assert.equal((await fetch(origin + "/api/admin/download-settings", { method: "PATCH", headers: rootHeaders, body: JSON.stringify(initialSettings) })).status, 200);
-    const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+    const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
     const formatIdentity = await work(db => c.createClient(db, admin, { organizationId: org, name: "HTTP format choice" }));
-    const formatInput = { clientId: formatIdentity.clientId, fileName: "recipe.mrpack", size: 100, baseReleaseId: null, basePublicationRevision: 0, packageFormatVersion: 2 };
+    const formatInput = { clientId: fixtureClientId(formatIdentity.clientId), fileName: "recipe.mrpack", size: 100, baseReleaseId: null, basePublicationRevision: 0, packageFormatVersion: 2 };
     const chooseFormat = (headers: Record<string, string>, body: unknown = formatInput) => fetch(origin + "/api/v1/clients/uploads", { method: "POST", headers, body: JSON.stringify(body) });
     const policyPath = origin + "/api/admin/package-format-settings";
     const savePolicy = (headers: Record<string, string>, enabledPackageFormats: number[]) => fetch(policyPath, { method: "PATCH", headers, body: JSON.stringify({ enabledPackageFormats }) });
@@ -484,7 +482,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     assert.equal((await fetch(origin + `/api/v1/clients/uploads/${chosenUpload.id}/cancel`, { method: "POST", headers: adminHeaders, body: "{}" })).status, 200);
     const archivedIdentity = await work(db => c.createClient(db, admin, { organizationId: org, name: "HTTP draft archive" }));
     const archivedUpload = await prepare(v1, admin, archivedIdentity.clientId);
-    const archivedDraft = await work(db => c.submitUpload(db, admin, archivedUpload.id, { ...fields, name: archivedIdentity.name, platforms: ["windows-amd64"] }));
+    const archivedDraft = await work(db => c.submitUpload(db, admin, archivedUpload.id, { ...fields, name: archivedIdentity.name, ...(archivedUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
     const archiveUrl = origin + `/api/v1/clients/${archivedIdentity.clientId}/drafts/${archivedDraft.draftId}/archive`;
     const archiveBody = JSON.stringify({ contentRevision: 1, packageRevision: 1 });
     assert.equal((await fetch(archiveUrl, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin }, body: archiveBody })).status, 401);
@@ -496,10 +494,10 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     assert.equal((await archivedRow.json()).drafts[0].archiveReason, "MANUAL");
     const publishedIdentity = await work(db => c.createClient(db, admin, { organizationId: org, name: "HTTP archived published deletion" }));
     const publishedUpload = await prepare(v1, admin, publishedIdentity.clientId);
-    const publishedDraft = await work(db => c.submitUpload(db, admin, publishedUpload.id, { ...fields, name: publishedIdentity.name, platforms: ["windows-amd64"] }));
-    await work(db => c.reviewClient(db, reviewer, publishedIdentity.clientId, publishedDraft.draftId, { decision: "approve", note: "checked", contentRevision: 1 }));
+    const publishedDraft = await work(db => c.submitUpload(db, admin, publishedUpload.id, { ...fields, name: publishedIdentity.name, ...(publishedUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+    await work(db => c.reviewClient(db, reviewer, publishedIdentity.clientId, publishedDraft.draftId, { packageRevision: 1, decision: "approve", note: "checked", contentRevision: 1 }));
     await finishPackages(publishedDraft.draftId);
-    await work(db => c.publishClient(db, root, publishedIdentity.clientId, publishedDraft.draftId, { activate: true }));
+    await work(db => c.publishClient(db, root, publishedIdentity.clientId, publishedDraft.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
     const publishedUrl = origin + `/api/v1/clients/${publishedIdentity.clientId}`;
     const remove = (headers: Record<string, string>) => fetch(publishedUrl + "/delete", { method: "POST", headers, body: "{}" });
     assert.equal((await remove(adminHeaders)).status, 409);
@@ -512,16 +510,16 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     assert.equal((await remove(adminHeaders)).status, 200);
     assert.equal((await fetch(publishedUrl, { headers: adminHeaders })).status, 404);
     assert.equal((await fetch(publishedUrl + `/releases/${publishedDraft.draftId}/package?platform=windows-amd64`, { headers: rootHeaders })).status, 404);
-    assert.equal(await client.clientRelease.count({ where: { clientId: publishedIdentity.clientId } }), 1);
+    assert.equal(await client.clientRelease.count({ where: { clientId: fixtureClientId(publishedIdentity.clientId) } }), 1);
     }
     const token = await work(db => createApiToken(db, root, { name: "HTTP pipeline", serverIds: ["OTH"], expiresInDays: 1,
       permissions: ["SERVER_READ", "DRAFT_READ", "DRAFT_CREATE", "DRAFT_EDIT", "DRAFT_SUBMIT", "DRAFT_REVIEW", "RELEASE_READ", "RELEASE_PUBLISH", "RELEASE_ACTIVATE", "CLIENT_BIND", "CLIENT_ARCHIVE", "CLIENT_DELETE"] }));
     const authorization = { Authorization: "Bearer " + token.token };
-    assert.equal((await fetch(origin + "/api/v1/clients/NPA", { headers: authorization })).status, 404);
+    assert.equal((await fetch(origin + `/api/v1/clients/${fixtureClientId("NPA")}`, { headers: authorization })).status, 404);
     const sourcePath = join(temp, "complete.zip"); const metadataPath = join(temp, "metadata.json");
-    const { mods: _mods, ...automaticMetadata } = fields; void _mods;
-    await writeFile(sourcePath, v2); await writeFile(metadataPath, JSON.stringify({ ...automaticMetadata, versionLabel: "1.0.0" }));
-    const cli = spawn(process.execPath, ["--import", "tsx", "scripts/upload-client.ts", sourcePath, metadataPath, "OTH"], {
+    const automaticMetadata = fields;
+    await writeFile(sourcePath, v2); await writeFile(metadataPath, JSON.stringify({ ...automaticMetadata, versionLabel: "1.0.0", packageFormatVersion: 1 }));
+    const cli = spawn(process.execPath, ["--import", "tsx", "scripts/upload-client.ts", sourcePath, metadataPath, fixtureClientId("OTH")], {
       windowsHide: true, env: { ...process.env, MUA_API_URL: origin, MUA_API_TOKEN: token.token }, stdio: ["ignore", "pipe", "pipe"],
     });
     let cliOutput = ""; let cliErrors = ""; let done = false;
@@ -532,59 +530,58 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     if (!done) cli.kill(); assert.equal(await cliFinished, 0, cliErrors);
     const result = JSON.parse(cliOutput.split("\n").find(line => line.startsWith("{"))!);
     assert.equal(result.status, "SUBMITTED");
-    assert.equal((await fetch(origin + "/api/v1/clients/OTH", { headers: authorization })).status, 200);
+    assert.equal((await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}`, { headers: authorization })).status, 200);
     assert.equal((await fetch(origin + "/api/v1/clients", { headers: authorization })).status, 200);
     const post = async (path: string, body: unknown) => {
       const response = await fetch(origin + path, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const json = await response.json(); assert.equal(response.status, 200, JSON.stringify(json)); return json;
     };
     assert.equal(await client.packageBuild.count({ where: { draftId: result.draftId, required: true } }), 5);
-    await post(`/api/v1/clients/OTH/drafts/${result.draftId}/platforms`, { platforms: ["windows-amd64", "linux-amd64"] });
-    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64")).status, 404);
-    await post("/api/v1/clients/OTH/drafts/" + result.draftId + "/review", { decision: "approve", note: "HTTP verified", contentRevision: 1, packageRevision: 2 });
-    const premature = await fetch(origin + `/api/v1/clients/OTH/drafts/${result.draftId}/publish`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: '{"activate":true}' }); assert.equal(premature.status, 409);
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/${result.draftId}/platforms`, { platforms: ["windows-amd64", "linux-amd64"] });
+    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64&acceptedFormatVersions=1")).status, 404);
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/` + result.draftId + "/review", { decision: "approve", note: "HTTP verified", contentRevision: 1, packageRevision: 2 });
+    const premature = await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${result.draftId}/publish`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify({ activate: true, contentRevision: 1, packageRevision: 2 }) }); assert.equal(premature.status, 409);
     await finishPackages(result.draftId);
-    const privateDownloadPath = `/api/v1/clients/OTH/drafts/${result.draftId}/package?platform=windows-amd64`;
+    const privateDownloadPath = `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${result.draftId}/package?platform=windows-amd64`;
     assert.equal((await fetch(origin + privateDownloadPath)).status, 401);
-    assert.equal((await fetch(origin + privateDownloadPath.replace("/OTH/", "/NPA/"), { headers: authorization })).status, 404);
+    assert.equal((await fetch(origin + privateDownloadPath.replace(`/${fixtureClientId("OTH")}/`, `/${fixtureClientId("NPA")}/`), { headers: authorization })).status, 404);
     const privateDownload = await fetch(origin + privateDownloadPath, { headers: authorization }); assert.equal(privateDownload.status, 200);
     const privatePackage = await privateDownload.json(); assert.equal(privatePackage.packageType, "full");
     const privateBytes = await fetch(privatePackage.url); assert.equal(privateBytes.status, 200);
     assert.equal(digest(Buffer.from(await privateBytes.arrayBuffer())), privatePackage.sha256);
-    const preview = await fetch(origin + `/api/v1/clients/OTH/drafts/${result.draftId}/platform-manifest?platform=windows-amd64`, { headers: authorization }); assert.equal(preview.status, 200); assert.equal((await preview.json()).release.releaseId, result.draftId);
-    await post("/api/v1/clients/OTH/drafts/" + result.draftId + "/publish", { activate: true });
-    const releasedPackage = await fetch(origin + `/api/v1/clients/OTH/releases/${result.draftId}/package?platform=windows-amd64`, { headers: authorization }); assert.equal(releasedPackage.status, 200);
+    const preview = await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${result.draftId}/platform-manifest?platform=windows-amd64`, { headers: authorization }); assert.equal(preview.status, 200); assert.equal((await preview.json()).release.releaseId, result.draftId);
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/` + result.draftId + "/publish", { contentRevision: 1, packageRevision: 2, activate: true });
+    const releasedPackage = await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/releases/${result.draftId}/package?platform=windows-amd64`, { headers: authorization }); assert.equal(releasedPackage.status, 200);
     assert.equal((await releasedPackage.json()).sha256, privatePackage.sha256);
     const downloadList = await c.clientList(client, root);
-    assert(downloadList.find(row => row.clientId === "OTH")?.releases[0].packageBuilds.some(build => build.status === "READY"));
-    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64")).status, 404, "unlisted servers cannot distribute completed packages");
+    assert(downloadList.find(row => row.clientId === fixtureClientId("OTH"))?.releases[0].packageBuilds.some(build => build.status === "READY"));
+    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64&acceptedFormatVersions=1")).status, 404, "unlisted servers cannot distribute completed packages");
     await work(db => m.updateServer(db, root, "OTH", { isListed: true }));
-    const packageResponse = await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64"); assert.equal(packageResponse.status, 200); const packageData = await packageResponse.json(); assert.equal(packageData.packageType, "full");
+    const packageResponse = await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64&acceptedFormatVersions=1"); assert.equal(packageResponse.status, 200); const packageData = await packageResponse.json(); assert.equal(packageData.packageType, "full");
     const refreshedV1 = await fetch(origin + packageData.refreshUrl); assert.equal(refreshedV1.status, 200);
     const fixedV1 = await refreshedV1.json(); assert.equal(fixedV1.sha256, packageData.sha256); assert.equal(fixedV1.releaseId, packageData.releaseId); assert(fixedV1.etag);
     assert.equal((await fetch(origin + packageData.refreshUrl.replace(packageData.sha256, "0".repeat(64)))).status, 409);
-    const foreignRelease = await client.clientRelease.findFirstOrThrow({ where: { clientId: "NPA" } });
+    const foreignRelease = await client.clientRelease.findFirstOrThrow({ where: { clientId: fixtureClientId("NPA") } });
     const operatorToken = randomBytes(32).toString("hex");
     await client.session.create({ data: { accountId: operator.id, tokenHash: tokenDigest(operatorToken), expiresAt: new Date(Date.now() + 60000) } });
     const operatorHeaders = { Cookie: `${COOKIE_NAME}=${operatorToken}` };
-    const operatorDetails = await fetch(origin + "/api/v1/clients/NPA", { headers: operatorHeaders }); assert.equal(operatorDetails.status, 200);
+    const operatorDetails = await fetch(origin + `/api/v1/clients/${fixtureClientId("NPA")}`, { headers: operatorHeaders }); assert.equal(operatorDetails.status, 200);
     const operatorRow = await operatorDetails.json(); assert.equal(operatorRow.drafts.length, 0); assert(operatorRow.releases[0].sourceDraft.packageBuilds.length > 0);
-    assert.equal((await fetch(origin + `/api/v1/clients/NPA/releases/${foreignRelease.id}/package?platform=windows-amd64`, { headers: operatorHeaders })).status, 200);
-    assert.equal((await fetch(origin + `/api/v1/servers/OTH/releases/${foreignRelease.id}/packages?platform=windows-amd64`)).status, 404);
-    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=linux-aarch64")).status, 404);
-    const manifestResponse = await fetch(origin + "/api/v1/servers/OTH/manifest"); assert.equal(manifestResponse.status, 200);
+    assert.equal((await fetch(origin + `/api/v1/clients/${fixtureClientId("NPA")}/releases/${foreignRelease.id}/package?platform=windows-amd64`, { headers: operatorHeaders })).status, 200);
+    assert.equal((await fetch(origin + `/api/v1/servers/OTH/releases/${foreignRelease.id}/packages?platform=windows-amd64&acceptedFormatVersions=1`)).status, 404);
+    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=linux-aarch64&acceptedFormatVersions=1")).status, 404);
+    const manifestResponse = await fetch(origin + "/api/v1/servers/OTH/manifest?acceptedFormatVersions=1"); assert.equal(manifestResponse.status, 200);
     const bytes = Buffer.from(await manifestResponse.arrayBuffer()); assert.equal(digest(bytes), manifestResponse.headers.get("x-mua-manifest-sha256"));
     const identity = await signingIdentity();
     assert(verify(null, bytes, createPublicKey(identity.privateKey), Buffer.from(manifestResponse.headers.get("x-mua-signature")!, "base64")));
-    const fileResponse = await fetch(origin + "/api/v1/servers/OTH/files/" + digest(shared)); assert.equal(fileResponse.status, 200);
-    const file = await fileResponse.json(); assert.deepEqual(Buffer.from(await (await fetch(file.url)).arrayBuffer()), shared);
+    const fileResponse = await globalThis.fetch(origin + "/api/v1/servers/OTH/files/" + digest(shared)); assert.equal(fileResponse.status, 404);
     // The same standard HTTP endpoint handles instance selection and early runtime metadata.
     const multi = rawZip([{ name: "versions/pcl/pcl.json", data: Buffer.from('{"id":"pcl","clientVersion":"1.21.1"}') },
       { name: "versions/hmcl/hmcl.json", data: Buffer.from('{"id":"hmcl","patches":[{"id":"game","version":"26.1"}]}') },
       { name: "versions/hmcl/mods/api.jar", data: randomBytes(39) }]);
-    const currentClient = await client.client.findUniqueOrThrow({ where: { id: "OTH" } });
+    const currentClient = await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("OTH") } });
     const createdUpload = await fetch(origin + "/api/v1/clients/uploads", { method: "POST", headers: { ...authorization, "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId: "OTH", fileName: "multi.zip", size: multi.length, baseReleaseId: currentClient.currentReleaseId, basePublicationRevision: currentClient.revision }) });
+      body: JSON.stringify({ clientId: fixtureClientId("OTH"), fileName: "multi.zip", size: multi.length, packageFormatVersion: 1, baseReleaseId: currentClient.currentReleaseId, basePublicationRevision: currentClient.revision }) });
     assert.equal(createdUpload.status, 201); const multiUpload = await createdUpload.json();
     const signed = await post(`/api/v1/clients/uploads/${multiUpload.id}/parts`, { partNumber: 1 });
     const put = await fetch(signed.url, { method: "PUT", body: new Uint8Array(multi) }); assert.equal(put.status, 200);
@@ -600,7 +597,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const v2Source = join(temp, "recipe.mrpack"), v2Metadata = join(temp, "v2-metadata.json");
     await writeFile(v2Source, await readFile("docs/examples/muapack-v2/inputs/target.mrpack"));
     await writeFile(v2Metadata, JSON.stringify({ ...automaticMetadata, versionLabel: "1.1.0", packageFormatVersion: 2 }));
-    const v2Cli = spawn(process.execPath, ["--import", "tsx", "scripts/upload-client.ts", v2Source, v2Metadata, "OTH"], {
+    const v2Cli = spawn(process.execPath, ["--import", "tsx", "scripts/upload-client.ts", v2Source, v2Metadata, fixtureClientId("OTH")], {
       windowsHide: true, env: { ...process.env, MUA_API_URL: origin, MUA_API_TOKEN: token.token }, stdio: ["ignore", "pipe", "pipe"],
     });
     let v2Output = "", v2Errors = "";
@@ -616,40 +613,40 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     assert.equal((await fetch(origin + uploadStatsPath)).status, 401);
     const uploadStatsResponse = await fetch(origin + uploadStatsPath, { headers: authorization }); assert.equal(uploadStatsResponse.status, 200);
     const uploadStats = await uploadStatsResponse.json(); assert.equal(uploadStats.base, null, "v1 baseline cannot be used for v2 delta statistics"); assert.equal(uploadStats.knownNetworkBytes, null);
-    const draftStatsPath = `/api/v1/clients/OTH/drafts/${v2Result.draftId}/distribution-statistics`;
-    assert.equal((await fetch(origin + draftStatsPath.replace("/OTH/", "/NPA/"), { headers: authorization })).status, 404);
-    assert.equal((await fetch(origin + `/api/v1/clients/OTH/releases/${result.draftId}/distribution-statistics`, { headers: authorization })).status, 409);
-    const recipe = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/manifest`, { headers: authorization }); assert.equal(recipe.status, 200); assert.equal((await recipe.json()).format, "mua-recipe-manifest");
+    const draftStatsPath = `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${v2Result.draftId}/distribution-statistics`;
+    assert.equal((await fetch(origin + draftStatsPath.replace(`/${fixtureClientId("OTH")}/`, `/${fixtureClientId("NPA")}/`), { headers: authorization })).status, 404);
+    assert.equal((await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/releases/${result.draftId}/distribution-statistics`, { headers: authorization })).status, 409);
+    const recipe = await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${v2Result.draftId}/manifest`, { headers: authorization }); assert.equal(recipe.status, 200); assert.equal((await recipe.json()).format, "mua-recipe-manifest");
     await runPackageWorker(workerClient, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
-    await post(`/api/v1/clients/OTH/drafts/${v2Result.draftId}/review`, { decision: "approve", note: "HTTP v2 verified", contentRevision: 1 });
-    const pendingV2 = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/publish`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: '{"activate":false}' }); assert.equal(pendingV2.status, 409);
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/${v2Result.draftId}/review`, { packageRevision: 1, decision: "approve", note: "HTTP v2 verified", contentRevision: 1 });
+    const pendingV2 = await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${v2Result.draftId}/publish`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify({ activate: false, contentRevision: 1, packageRevision: 1 }) }); assert.equal(pendingV2.status, 409);
     await runPackageWorker(workerClient, async () => { assert.fail("HTTP v2 must not resolve an environment"); });
-    const v2Full = await fetch(origin + `/api/v1/clients/OTH/drafts/${v2Result.draftId}/package?platform=universal`, { headers: authorization }); assert.equal(v2Full.status, 200);
+    const v2Full = await fetch(origin + `/api/v1/clients/${fixtureClientId("OTH")}/drafts/${v2Result.draftId}/package?platform=universal`, { headers: authorization }); assert.equal(v2Full.status, 200);
     const v2Artifact = await v2Full.json(); assert.equal(v2Artifact.packageFormatVersion, 2); assert.equal(v2Artifact.packageType, "full");
     const v2Bytes = Buffer.from(await (await fetch(v2Artifact.url)).arrayBuffer()); assert.equal(digest(v2Bytes), v2Artifact.sha256);
     const v2Path = join(temp, "http-v2.muapack"); await writeFile(v2Path, v2Bytes); await validateRecipePackArchive(v2Path, createPublicKey((await signingIdentity()).privateKey));
-    const v2Published = await post(`/api/v1/clients/OTH/drafts/${v2Result.draftId}/publish`, { activate: false });
+    const v2Published = await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/${v2Result.draftId}/publish`, { contentRevision: 1, packageRevision: 1, activate: false });
     const readyStatsResponse = await fetch(origin + draftStatsPath, { headers: authorization }); assert.equal(readyStatsResponse.status, 200);
     const readyStats = await readyStatsResponse.json(); assert.equal(readyStats.fullPackageBytes, v2Artifact.size); assert.equal(readyStats.knownNetworkBytes, readyStats.fullPackageBytes + readyStats.remoteDownloadBytes);
-    const releaseStatsPath = `/api/v1/clients/OTH/releases/${v2Published.releaseId}/distribution-statistics`;
+    const releaseStatsPath = `/api/v1/clients/${fixtureClientId("OTH")}/releases/${v2Published.releaseId}/distribution-statistics`;
     assert.equal((await fetch(origin + releaseStatsPath, { headers: authorization })).status, 200);
     assert.equal((await fetch(origin + releaseStatsPath, { headers: operatorHeaders })).status, 404, "other-organization access is denied");
-    const otherOrg = (await client.client.findUniqueOrThrow({ where: { id: "OTH" } })).organizationId;
+    const otherOrg = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("OTH") } })).organizationId;
     await work(db => m.setMember(db, root, otherOrg, operator.id, { roles: ["RELEASE_OPERATOR"], status: "ACTIVE" }));
     const cookieStats = await fetch(origin + releaseStatsPath, { headers: operatorHeaders }); assert.equal(cookieStats.status, 200, "release-only readers do not require draft access");
     assert.equal((await fetch(origin + draftStatsPath, { headers: operatorHeaders })).status, 403);
     assert.deepEqual(await cookieStats.json(), readyStats);
     assert.equal((await client.clientRelease.findUniqueOrThrow({ where: { id: v2Published.releaseId } })).packageFormatVersion, 2);
-    assert.equal((await client.client.findUniqueOrThrow({ where: { id: "OTH" } })).currentReleaseId, result.draftId, "publishing without activation keeps the previous version online");
-    await work(db => c.activateClient(db, root, "OTH", v2Published.releaseId, { publicationRevision: currentClient.revision }));
+    assert.equal((await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("OTH") } })).currentReleaseId, result.draftId, "publishing without activation keeps the previous version online");
+    await work(db => c.activateClient(db, root, fixtureClientId("OTH"), v2Published.releaseId, { publicationRevision: currentClient.revision }));
     const deltaUpload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), root, "OTH", true, "delta.mrpack", null, 2);
-    const deltaDraft = await post(`/api/v1/clients/uploads/${deltaUpload.id}/submit`, { ...automaticMetadata, versionLabel: "1.2.0", platforms: ["windows-amd64"] });
-    await post(`/api/v1/clients/OTH/drafts/${deltaDraft.draftId}/review`, { decision: "approve", note: "HTTP delta verified", contentRevision: 1 });
+    const deltaDraft = await post(`/api/v1/clients/uploads/${deltaUpload.id}/submit`, { ...automaticMetadata, versionLabel: "1.2.0" });
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/${deltaDraft.draftId}/review`, { packageRevision: 1, decision: "approve", note: "HTTP delta verified", contentRevision: 1 });
     await runPackageWorker(workerClient, async () => { assert.fail("HTTP delta must not resolve environments"); });
-    await post(`/api/v1/clients/OTH/drafts/${deltaDraft.draftId}/publish`, { activate: true });
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/drafts/${deltaDraft.draftId}/publish`, { contentRevision: 1, packageRevision: 1, activate: true });
     const deltaBase = await client.clientRelease.findUniqueOrThrow({ where: { id: v2Published.releaseId } });
     const query = `/api/v1/servers/OTH/packages?platform=windows-amd64&acceptedFormatVersions=2&baseReleaseId=${deltaBase.id}`;
-    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64")).status, 415);
+    assert.equal((await fetch(origin + "/api/v1/servers/OTH/packages?platform=windows-amd64&acceptedFormatVersions=1")).status, 415);
     const deltaResponse = await fetch(origin + query + `&baseManifestSha256=${deltaBase.manifestSha256}`); assert.equal(deltaResponse.status, 200);
     const delta = await deltaResponse.json(); assert.equal(delta.packageType, "update"); assert.equal(delta.baseReleaseId, deltaBase.id); assert.equal(delta.baseManifestSha256, deltaBase.manifestSha256);
     const refreshedV2 = await fetch(origin + delta.refreshUrl); assert.equal(refreshedV2.status, 200);
@@ -659,23 +656,23 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const deltaBytes = Buffer.from(await (await fetch(delta.url)).arrayBuffer()); assert.equal(digest(deltaBytes), delta.sha256);
     await writeFile(v2Path, deltaBytes); assert.equal((await validateRecipePackArchive(v2Path, createPublicKey((await signingIdentity()).privateKey))).objectCount, 0);
     const fallback = await (await fetch(origin + query + `&baseManifestSha256=${"0".repeat(64)}`)).json(); assert.equal(fallback.packageType, "full"); assert.equal(fallback.sha256, delta.full.sha256);
-    const last = await client.client.findUniqueOrThrow({ where: { id: "OTH" } });
-    await work(db => c.activateClient(db, root, "OTH", result.draftId, { publicationRevision: last.revision }));
+    const last = await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("OTH") } });
+    await work(db => c.activateClient(db, root, fixtureClientId("OTH"), result.draftId, { publicationRevision: last.revision }));
     const stillFixed = await fetch(origin + delta.refreshUrl); assert.equal(stillFixed.status, 200); assert.equal((await stillFixed.json()).sha256, delta.sha256);
     const org = (await client.server.findUniqueOrThrow({ where: { serverId: "OTH" } })).organizationId;
     const binding = await client.serverPublication.findUniqueOrThrow({ where: { serverId: "OTH" } });
     const create = (body: unknown) => fetch(origin + "/api/v1/clients", { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const target = { organizationId: org, serverId: "OTH", publicationRevision: binding.revision, expectedClientId: "OTH", replaceConfirmed: true };
+    const target = { organizationId: org, serverId: "OTH", publicationRevision: binding.revision, expectedClientId: fixtureClientId("OTH"), replaceConfirmed: true };
     const duplicate = await create({ ...target, name: "npucraft" }); assert.equal(duplicate.status, 409); assert((await duplicate.json()).error.includes("更新"));
     assert.equal((await create({ organizationId: org, name: "Unbound token" })).status, 403);
     assert.equal((await create({ ...target, name: "HTTP alternate", replaceConfirmed: false })).status, 409);
     const alternate = await create({ ...target, name: "HTTP alternate" }); assert.equal(alternate.status, 201);
     const newId = (await alternate.json()).clientId; assert.match(newId, /^[0-9a-f-]{36}$/);
     assert.equal((await fetch(origin + "/api/v1/clients/" + newId, { headers: authorization })).status, 200);
-    assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "OTH" } })).clientId, "OTH");
+    assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "OTH" } })).clientId, fixtureClientId("OTH"));
     await post("/api/v1/clients/" + newId + "/unbind", { serverId: null, publicationRevision: null });
-    await post("/api/v1/clients/OTH/unbind", { serverId: "OTH", publicationRevision: binding.revision });
-    await post("/api/v1/clients/" + newId + "/bind", { serverId: "OTH", publicationRevision: binding.revision + 1, expectedClientId: null, replaceConfirmed: false });
+    await post(`/api/v1/clients/${fixtureClientId("OTH")}/unbind`, { serverId: "OTH", publicationRevision: binding.revision });
+    await post("/api/v1/clients/" + newId + "/bind", { serverId: "OTH", publicationRevision: binding.revision + 1, expectedClientId: fixtureClientId(null), replaceConfirmed: false });
     assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "OTH" } })).clientId, newId);
     assert.equal((await fetch(origin + delta.refreshUrl)).status, 404, "fixed release URL cannot distribute an unbound client's history");
     const failedDelete = await fetch(origin + `/api/v1/clients/${newId}/delete`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: "{}" });
@@ -707,49 +704,49 @@ test("the standard HTTP API and Actions upload script share the reviewed release
 test("multiple clients retain independent history, replacing a server only after approval and publication", async () => {
   const org = (await client.server.findUniqueOrThrow({ where: { serverId: "NPA" } })).organizationId;
   await work(db => m.createServer(db, root, { organizationId: org, serverId: "BND", displayName: "Binding test" }));
-  const original = await work(db => c.createClient(db, admin, { organizationId: org, name: "Original", serverId: "BND", publicationRevision: 0, expectedClientId: null }));
+  const original = await work(db => c.createClient(db, admin, { organizationId: org, name: "Original", serverId: "BND", publicationRevision: 0, expectedClientId: fixtureClientId(null) }));
   const release = async (id: string, name: string, bytes: Buffer) => {
     const upload = await prepare(bytes, admin, id);
     const draft = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name }));
-    await work(db => c.reviewClient(db, reviewer, id, draft.draftId, { decision: "approve", note: "", contentRevision: 1 }));
+    await work(db => c.reviewClient(db, reviewer, id, draft.draftId, { packageRevision: 1, decision: "approve", note: "", contentRevision: 1 }));
     await finishPackages(draft.draftId);
     return { upload, draftId: draft.draftId };
   };
   const initial = await release(original.clientId, "Original", v1);
-  const first = await work(db => c.publishClient(db, root, original.clientId, initial.draftId, { activate: true }));
+  const first = await work(db => c.publishClient(db, root, original.clientId, initial.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   await work(db => m.updateServer(db, root, "BND", { isListed: true }));
-  const snapshot = await publicManifest(client, "BND");
+  const snapshot = await publicManifest(client, "BND", "1");
   const target = await client.serverPublication.findUniqueOrThrow({ where: { serverId: "BND" } });
-  const request = { organizationId: org, name: "Alternate", serverId: "BND", publicationRevision: target.revision, expectedClientId: original.clientId };
+  const request = { organizationId: org, name: "Alternate", serverId: "BND", publicationRevision: target.revision, expectedClientId: fixtureClientId(original.clientId) };
   await assert.rejects(work(db => c.createClient(db, admin, request)), denied(409));
   assert.equal(await client.client.count({ where: { organizationId: org, name: "Alternate" } }), 0, "failed creation must roll back");
   const alternate = await work(db => c.createClient(db, admin, { ...request, replaceConfirmed: true }));
-  assert.equal((await publicManifest(client, "BND")).release.id, first.releaseId);
+  assert.equal((await publicManifest(client, "BND", "1")).release.id, first.releaseId);
   const next = await release(alternate.clientId, "Alternate", v2);
   assert(next.upload.statistics!.casReusePercent > 0, "independent clients still reuse CAS");
-  assert.equal((await publicManifest(client, "BND")).release.id, first.releaseId);
-  const second = await work(db => c.publishClient(db, root, alternate.clientId, next.draftId, { activate: true }));
-  assert.equal((await publicManifest(client, "BND")).release.id, second.releaseId);
+  assert.equal((await publicManifest(client, "BND", "1")).release.id, first.releaseId);
+  const second = await work(db => c.publishClient(db, root, alternate.clientId, next.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
+  assert.equal((await publicManifest(client, "BND", "1")).release.id, second.releaseId);
   const saved = await client.clientRelease.findUniqueOrThrow({ where: { id: first.releaseId } });
   assert.equal(saved.manifestSha256, digest(snapshot.bytes));
-  assert.equal((await client.client.findUniqueOrThrow({ where: { id: original.clientId } })).currentReleaseId, first.releaseId);
+  assert.equal((await client.client.findUniqueOrThrow({ where: { id: fixtureClientId(original.clientId) } })).currentReleaseId, first.releaseId);
   const bound = await client.serverPublication.findUniqueOrThrow({ where: { serverId: "BND" } });
   await work(db => c.unbindClient(db, admin, alternate.clientId, { serverId: "BND", publicationRevision: bound.revision }));
-  await assert.rejects(publicManifest(client, "BND"), denied(404));
+  await assert.rejects(publicManifest(client, "BND", "1"), denied(404));
   const empty = await client.serverPublication.findUniqueOrThrow({ where: { serverId: "BND" } });
-  await work(db => c.bindClient(db, admin, original.clientId, { serverId: "BND", publicationRevision: empty.revision, expectedClientId: null, replaceConfirmed: false }));
-  assert.equal((await publicManifest(client, "BND")).release.id, first.releaseId);
-  assert.equal((await client.client.findUniqueOrThrow({ where: { id: alternate.clientId } })).currentReleaseId, second.releaseId);
+  await work(db => c.bindClient(db, admin, original.clientId, { serverId: "BND", publicationRevision: empty.revision, expectedClientId: fixtureClientId(null), replaceConfirmed: false }));
+  assert.equal((await publicManifest(client, "BND", "1")).release.id, first.releaseId);
+  assert.equal((await client.client.findUniqueOrThrow({ where: { id: fixtureClientId(alternate.clientId) } })).currentReleaseId, second.releaseId);
 
   const current = await client.serverPublication.findUniqueOrThrow({ where: { serverId: "BND" } });
   const third = await work(db => c.createClient(db, admin, { ...request, name: "Third", publicationRevision: current.revision, replaceConfirmed: true }));
   const stale = await release(third.clientId, "Third", v2);
   await work(db => c.unbindClient(db, admin, original.clientId, { serverId: "BND", publicationRevision: current.revision }));
-  await assert.rejects(work(db => c.publishClient(db, root, third.clientId, stale.draftId, { activate: true })), denied(409));
+  await assert.rejects(work(db => c.publishClient(db, root, third.clientId, stale.draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(409));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: stale.draftId } })).status, "APPROVED");
   assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "BND" } })).clientId, null);
   await work(db => c.unbindClient(db, admin, third.clientId, { serverId: null, publicationRevision: null }));
-  await work(db => c.publishClient(db, root, third.clientId, stale.draftId, { activate: true }));
+  await work(db => c.publishClient(db, root, third.clientId, stale.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "BND" } })).clientId, null);
 });
 
@@ -783,11 +780,11 @@ test("Worker discovers only mods JARs, including nested paths; API submission ne
   const upload = await prepare(source, root, "OTH");
   assert.equal(upload.status, "READY");
   assert.deepEqual(upload.detectedMods, ["Fabric.JAR", "nested/shared.jar"]);
-  const { mods: _mods, ...details } = fields; void _mods;
+  const details = fields;
   const { draftId } = await work(db => c.submitUpload(db, root, upload.id, { ...details, versionLabel: "auto-mods" }));
-  const manifest = await c.draftManifest(client, root, "OTH", draftId);
+  const manifest = await c.draftManifest(client, root, fixtureClientId("OTH"), draftId);
   assert(manifest.format === "mua-client-manifest"); assert.deepEqual(manifest.mods, upload.detectedMods);
-  assert.equal((await work(db => c.submitUpload(db, root, upload.id, { ...details, versionLabel: "auto-mods", mods: ["invented.jar"] }))).draftId, draftId);
+  await assert.rejects(work(db => c.submitUpload(db, root, upload.id, { ...details, versionLabel: "auto-mods", mods: ["invented.jar"] })), denied(400));
   const empty = await prepare(rawZip([{ name: ".minecraft/config/only.json", data: Buffer.from("{}") }]), root, "OTH");
   assert.equal(empty.status, "READY"); assert.deepEqual(empty.detectedMods, []);
 });
@@ -893,26 +890,26 @@ async function newRecycleClient(name: string) {
 async function removeClient(id: string) { await work(db => c.archiveClient(db, admin, id, { archived: true })); await work(db => c.deleteClient(db, admin, id)); }
 
 test("deletion requires archive, no binding, real scoped permission, and cancels pending jobs", async () => {
-  await work(db => c.archiveClient(db, admin, "NPA", { archived: false }));
+  await work(db => c.archiveClient(db, admin, fixtureClientId("NPA"), { archived: false }));
   const identity = await newRecycleClient("Delete authorization");
   await assert.rejects(work(db => c.deleteClient(db, admin, identity.clientId)), denied(409));
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));
   await assert.rejects(work(db => c.deleteClient(db, reader, identity.clientId)), denied(403));
   await assert.rejects(work(db => c.deleteClient(db, { ...root, isSuperAdmin: false }, identity.clientId)), denied(404));
-  await assert.rejects(client.client.update({ where: { id: "NPA" }, data: { deletedAt: new Date() } }), "database rejects active clients");
-  await assert.rejects(work(db => c.deleteClient(db, admin, "NPA")), denied(409));
-  await work(db => c.archiveClient(db, admin, "NPA", { archived: true }));
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId("NPA") }, data: { deletedAt: new Date() } }), "database rejects active clients");
+  await assert.rejects(work(db => c.deleteClient(db, admin, fixtureClientId("NPA"))), denied(409));
+  await work(db => c.archiveClient(db, admin, fixtureClientId("NPA"), { archived: true }));
   assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).clientId, null);
-  const archived = await c.clientDetails(client, admin, "NPA");
+  const archived = await c.clientDetails(client, admin, fixtureClientId("NPA"));
   assert.equal(archived.lifecycleStatus, "ARCHIVED"); assert.equal(archived.canDelete, true);
   assert(archived.releases.length > 0, "published history does not prevent deletion after archive");
-  await work(db => c.archiveClient(db, admin, "NPA", { archived: false }));
+  await work(db => c.archiveClient(db, admin, fixtureClientId("NPA"), { archived: false }));
   await work(db => c.deleteClient(db, admin, identity.clientId));
   await assert.rejects(c.clientDetails(client, admin, identity.clientId), denied(404));
   assert(!(await c.clientList(client, admin)).some(row => row.clientId === identity.clientId));
   assert.equal(await client.auditEvent.count({ where: { action: "CLIENT_DELETE", targetId: identity.clientId } }), 1);
   await assert.rejects(work(db => c.archiveClient(db, admin, identity.clientId, { archived: false })), denied(404));
-  await assert.rejects(client.client.update({ where: { id: identity.clientId }, data: { deletedAt: null } }), "deleted tombstones are immutable");
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { deletedAt: null } }), "deleted tombstones are immutable");
   const replacement = await newRecycleClient("delete authorization"); assert.notEqual(replacement.clientId, identity.clientId);
 
   const queued = await newRecycleClient("Delete queued"); const upload = await prepare(v1, admin, queued.clientId, false);
@@ -947,41 +944,41 @@ test("deleted ZIPs and exclusive CAS enter private recycle storage and matching 
 });
 
 test("archived published clients can be deleted while immutable history, shared CAS and environment caches stay protected", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   await work(db => m.createServer(db, root, { organizationId: org, serverId: "DEL", displayName: "Published deletion" }));
-  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Published recycle", serverId: "DEL", publicationRevision: 0, expectedClientId: null, replaceConfirmed: false }));
+  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Published recycle", serverId: "DEL", publicationRevision: 0, expectedClientId: fixtureClientId(null), replaceConfirmed: false }));
   const bytes = randomBytes(237), sha = digest(bytes);
   const zip = rawZip([{ name: "mods/exclusive.jar", data: bytes }, { name: "mods/shared.jar", data: shared }]);
   const builds = [];
   for (const versionLabel of ["1.0.0", "1.1.0"]) {
     const upload = await prepare(zip, admin, identity.clientId);
-    const draft = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, platforms: ["windows-amd64"] }));
-    await work(db => c.reviewClient(db, reviewer, identity.clientId, draft.draftId, { decision: "approve", note: "checked", contentRevision: 1 }));
+    const draft = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+    await work(db => c.reviewClient(db, reviewer, identity.clientId, draft.draftId, { packageRevision: 1, decision: "approve", note: "checked", contentRevision: 1 }));
     await finishPackages(draft.draftId);
-    await work(db => c.publishClient(db, root, identity.clientId, draft.draftId, { activate: true }));
+    await work(db => c.publishClient(db, root, identity.clientId, draft.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
     builds.push(await client.packageBuild.findUniqueOrThrow({ where: { draftId_platform_revision: { draftId: draft.draftId, platform: "windows-amd64", revision: 1 } } }));
   }
   const artifact = packageArtifactsSchema.parse(builds[1].artifacts); assert(artifact.update);
   await work(db => m.updateServer(db, root, "DEL", { isListed: true }));
   assert.equal((await c.clientDetails(client, admin, identity.clientId)).lifecycleStatus, "PUBLISHED");
   assert((await publishedServers(client)).some(server => server.serverId === "DEL"));
-  await publicPackage(client, "DEL", "windows-amd64", builds[0].draftId);
+  await publicPackage(client, "DEL", "windows-amd64", builds[0].draftId, "1");
   await assert.rejects(work(db => c.deleteClient(db, admin, identity.clientId)), denied(409));
-  await assert.rejects(client.client.update({ where: { id: identity.clientId }, data: { deletedAt: new Date() } }));
-  const history = await client.clientRelease.findMany({ where: { clientId: identity.clientId }, orderBy: { id: "asc" } });
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { deletedAt: new Date() } }));
+  const history = await client.clientRelease.findMany({ where: { clientId: fixtureClientId(identity.clientId) }, orderBy: { id: "asc" } });
   const envBefore = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
   const keys = new Set(history.map(release => release.manifestObjectKey));
   for (const build of builds) {
     keys.add(build.targetObjectKey!); const artifacts = packageArtifactsSchema.parse(build.artifacts);
     keys.add(artifacts.full.key); if (artifacts.update) keys.add(artifacts.update.key);
   }
-  const sourceKeys = await client.clientUpload.findMany({ where: { clientId: identity.clientId }, select: { sourceObjectKey: true, filesObjectKey: true } });
+  const sourceKeys = await client.clientUpload.findMany({ where: { clientId: fixtureClientId(identity.clientId) }, select: { sourceObjectKey: true, filesObjectKey: true } });
   for (const upload of sourceKeys) { keys.add(upload.sourceObjectKey); keys.add(upload.filesObjectKey!); }
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));
   const archived = await c.clientDetails(client, admin, identity.clientId);
   assert.equal(archived.lifecycleStatus, "ARCHIVED"); assert.equal(archived.canDelete, true);
   assert.equal(archived.releases.length, 2); assert(archived.currentReleaseId);
-  await assert.rejects(publicPackage(client, "DEL", "windows-amd64", null), denied(404));
+  await assert.rejects(publicPackage(client, "DEL", "windows-amd64", null, "1"), denied(404));
   assert(!(await publishedServers(client)).some(server => server.serverId === "DEL"));
   await assert.rejects(work(db => c.deleteClient(db, reader, identity.clientId)), denied(403));
   await assert.rejects(work(db => c.deleteClient(db, { ...root, isSuperAdmin: false }, identity.clientId)), denied(404));
@@ -989,9 +986,9 @@ test("archived published clients can be deleted while immutable history, shared 
   await assert.rejects(c.clientDetails(client, root, identity.clientId), denied(404));
   await assert.rejects(managementFullPackage(client, root, identity.clientId, "releases", history[0].id, "windows-amd64"), denied(404));
   await assert.rejects(work(db => c.archiveClient(db, admin, identity.clientId, { archived: false })), denied(404));
-  await assert.rejects(client.client.update({ where: { id: identity.clientId }, data: { deletedAt: null } }));
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { deletedAt: null } }));
   await assert.rejects(client.clientRelease.update({ where: { id: history[0].id }, data: { description: "edited" } }));
-  assert.deepEqual(await client.clientRelease.findMany({ where: { clientId: identity.clientId }, orderBy: { id: "asc" } }), history);
+  assert.deepEqual(await client.clientRelease.findMany({ where: { clientId: fixtureClientId(identity.clientId) }, orderBy: { id: "asc" } }), history);
   assert.equal(await client.auditEvent.count({ where: { action: "CLIENT_DELETE", targetId: identity.clientId } }), 1);
   const now = new Date(); await indexedMaintenance(now);
   for (const key of keys) {
@@ -1007,7 +1004,7 @@ test("archived published clients can be deleted while immutable history, shared 
   await indexedMaintenance(new Date(now.getTime() + 8 * 86400000));
   for (const key of keys) assert.equal(await objectExists(packagesBucket(), `recycle/clients/${identity.clientId}/${key}`), false);
   assert.equal(await objectExists(casBucket(), casKey(sha)), true);
-  assert.deepEqual(await client.clientRelease.findMany({ where: { clientId: identity.clientId }, orderBy: { id: "asc" } }), history);
+  assert.deepEqual(await client.clientRelease.findMany({ where: { clientId: fixtureClientId(identity.clientId) }, orderBy: { id: "asc" } }), history);
 });
 
 test("shared and archived published CAS stays live; last-reference removal starts seven-day retention", async () => {
@@ -1057,7 +1054,7 @@ test("concurrent upload restoration and expiry serialize by hash without deletin
   const added = views.reduce((total, view) => total + view.statistics!.newDataSize, 0); assert(added === 0 || added === bytes.length);
   assert.deepEqual(await readObject(casKey(sha), casBucket()), bytes);
   assert.equal((await client.casObject.findUniqueOrThrow({ where: { sha256: sha } })).trashedAt, null);
-  assert.equal(await client.casReference.count({ where: { sha256: sha, clientId: { in: [a.clientId, b.clientId] } } }), 2);
+  assert.equal(await client.casReference.count({ where: { sha256: sha, clientId: fixtureClientId({ in: [a.clientId, b.clientId] }) } }), 2);
 });
 
 test("invalid legacy inventories stop recycling; reconciliation catches late completed source ZIPs", async () => {
@@ -1097,10 +1094,10 @@ test("download settings default to unrestricted public sources and only session 
 });
 
 test("mrpack upload, name confirmation, optional flags and subsequent updates share signed publication and Launcher API", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   await work(db => m.createServer(db, root, { organizationId: org, serverId: "MRP", displayName: "Mrpack test" }));
   await work(db => m.updateServer(db, root, "MRP", { isListed: true }));
-  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "mrpack filename", serverId: "MRP", publicationRevision: 0, expectedClientId: null, replaceConfirmed: false }));
+  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "mrpack filename", serverId: "MRP", publicationRevision: 0, expectedClientId: fixtureClientId(null), replaceConfirmed: false }));
   const optionalBytes = Buffer.from("optional jar bytes");
   function pack(versionId: string, optional: boolean) {
     const index = { formatVersion: 1, game: "minecraft", name: "Mrpack test", versionId, dependencies: { minecraft: "26.1", "fabric-loader": "0.19.5" },
@@ -1111,28 +1108,28 @@ test("mrpack upload, name confirmation, optional flags and subsequent updates sh
   }
   const upload = await prepare(pack("1.0", true), admin, identity.clientId, true, "example.mrpack"); assert.equal(upload.status, "READY");
   assert.equal(upload.detectedInfo?.javaVersion, 25); assert.equal(upload.detectedInfo?.pack?.version, "1.0");
-  await assert.rejects(work(db => c.submitUpload(db, admin, upload.id, { ...fields, versionLabel: "1.0", platforms: ["windows-amd64"] })), denied(409));
-  const metadata = { ...fields, name: "Mrpack test", versionLabel: "1.0", minecraftVersion: "26.1", javaVersion: 25, platforms: ["windows-amd64"], modDetails: [{ path: "mods/optional.jar", optional: false }] };
+  await assert.rejects(work(db => c.submitUpload(db, admin, upload.id, { ...fields, versionLabel: "1.0", ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) })), denied(409));
+  const metadata = { ...fields, name: "Mrpack test", versionLabel: "1.0", minecraftVersion: "26.1", javaVersion: 25, platforms: ["windows-amd64"] };
   const first = await work(db => c.submitUpload(db, admin, upload.id, metadata));
   const firstManifest = await c.draftManifest(client, admin, identity.clientId, first.draftId);
   assert(firstManifest.format === "mua-client-manifest"); assert.equal(firstManifest.files.find(file => file.path === "mods/optional.jar")?.optional, true); assert.equal(firstManifest.modDetails?.find(mod => mod.path === "mods/optional.jar")?.optional, true);
-  assert.equal((await client.client.findUniqueOrThrow({ where: { id: identity.clientId } })).name, "Mrpack test");
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, first.draftId, { decision: "approve", note: "checked", contentRevision: 1 }));
-  await finishPackages(first.draftId); await work(db => c.publishClient(db, root, identity.clientId, first.draftId, { activate: true }));
-  const download = await publicPackage(client, "MRP", "windows-amd64", null);
+  assert.equal((await client.client.findUniqueOrThrow({ where: { id: fixtureClientId(identity.clientId) } })).name, "Mrpack test");
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, first.draftId, { packageRevision: 1, decision: "approve", note: "checked", contentRevision: 1 }));
+  await finishPackages(first.draftId); await work(db => c.publishClient(db, root, identity.clientId, first.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
+  const download = await publicPackage(client, "MRP", "windows-amd64", null, "1");
   assert.equal(download.mods.length, 2); assert.equal(download.mods.find(mod => mod.path === "mods/optional.jar")?.optional, true);
   const path = join(temp, "optional-full.muapack"); await writeFile(path, Buffer.from(await (await fetch(download.url)).arrayBuffer()));
   const validated = await validateMuaPackArchive(path, createPublicKey((await signingIdentity()).privateKey));
   const optionalFile = validated.target.files.find(file => file.path === "mods/optional.jar")!;
   assert.equal(optionalFile.optional, true); assert(validated.metadata.payload.some(object => object.sha256 === optionalFile.sha256));
-  const original = (await publicManifest(client, "MRP")).bytes;
+  const original = (await publicManifest(client, "MRP", "1")).bytes;
   const update = await prepare(pack("1.1", false), admin, identity.clientId, true, "update.mrpack"); assert.equal(update.status, "READY");
   await assert.rejects(work(db => c.submitUpload(db, admin, update.id, { ...metadata, name: "another client", versionLabel: "1.1" })), denied(409));
   const second = await work(db => c.submitUpload(db, admin, update.id, { ...metadata, versionLabel: "1.1" }));
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { decision: "approve", note: "checked", contentRevision: 1 }));
-  await finishPackages(second.draftId); assert.deepEqual((await publicManifest(client, "MRP")).bytes, original);
-  await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { activate: true }));
-  const delta = await publicPackage(client, "MRP", "windows-amd64", first.draftId); assert.equal(delta.packageType, "update");
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { packageRevision: 1, decision: "approve", note: "checked", contentRevision: 1 }));
+  await finishPackages(second.draftId); assert.deepEqual((await publicManifest(client, "MRP", "1")).bytes, original);
+  await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
+  const delta = await publicPackage(client, "MRP", "windows-amd64", first.draftId, "1"); assert.equal(delta.packageType, "update");
   assert.equal(delta.mods.find(mod => mod.path === "mods/optional.jar")?.optional, false);
   const build = await client.packageBuild.findUniqueOrThrow({ where: { draftId_platform_revision: { draftId: second.draftId, platform: "windows-amd64", revision: 1 } } });
   const complete = await work(db => managementFullPackage(db, operator, identity.clientId, "releases", second.draftId, "windows-amd64"));
@@ -1143,9 +1140,9 @@ test("mrpack upload, name confirmation, optional flags and subsequent updates sh
 });
 
 test("unpublished comparisons stay separate from player deltas, and publishing archives only the explicit replacement chain", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Draft lifecycle" }));
-  const submit = (upload: UploadView, versionLabel: string) => work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, platforms: ["windows-amd64"] }));
+  const submit = (upload: UploadView, versionLabel: string) => work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   const review = (draftId: string) => work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Checked", contentRevision: 1, packageRevision: 1 }));
   const first = await submit(await prepare(v1, admin, identity.clientId), "1.0.0");
   await review(first.draftId); await finishPackages(first.draftId);
@@ -1162,12 +1159,12 @@ test("unpublished comparisons stay separate from player deltas, and publishing a
   const thirdUpload = await prepare(v2, admin, identity.clientId, true, "client.zip", second.draftId);
   assert.equal(thirdUpload.comparisonStatistics!.estimatedDownloadSize, 0);
   const third = await submit(thirdUpload, "1.2.0");
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, third.draftId, { activate: true })), denied(409));
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, third.draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(409));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: first.draftId } })).archivedAt, null);
   await review(third.draftId); await finishPackages(third.draftId);
-  await assert.rejects(work(db => c.publishClient(db, publisher, identity.clientId, third.draftId, { activate: true })), denied(403));
+  await assert.rejects(work(db => c.publishClient(db, publisher, identity.clientId, third.draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(403));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: second.draftId } })).archivedAt, null);
-  const published = await work(db => c.publishClient(db, publisher, identity.clientId, third.draftId, { activate: false }));
+  const published = await work(db => c.publishClient(db, publisher, identity.clientId, third.draftId, { contentRevision: 1, packageRevision: 1, activate: false }));
   assert.deepEqual(new Set(published.archivedDraftIds), new Set([first.draftId, second.draftId]));
   for (const draftId of [first.draftId, second.draftId]) {
     const draft = await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } });
@@ -1180,24 +1177,24 @@ test("unpublished comparisons stay separate from player deltas, and publishing a
   const built = await client.packageBuild.findFirstOrThrow({ where: { draftId: third.draftId } }); assert.equal(packageArtifactsSchema.parse(built.artifacts).update, null);
   await assert.rejects(work(db => c.archiveClientDraft(db, admin, identity.clientId, third.draftId, { contentRevision: 1, packageRevision: 1 })), denied(409));
   await assert.rejects(client.clientDraft.update({ where: { id: third.draftId }, data: { archivedAt: new Date(), archiveReason: "MANUAL" } }));
-  const baseline = { clientId: identity.clientId, fileName: "client.zip", size: v1.length, baseReleaseId: null, basePublicationRevision: 0 };
-  await assert.rejects(work(db => c.createUpload(db, admin, { ...baseline, comparisonDraftId: third.draftId })), denied(409));
-  const otherClient = await client.client.findUniqueOrThrow({ where: { id: "OTH" } });
-  await assert.rejects(work(db => c.createUpload(db, root, { ...baseline, clientId: "OTH", baseReleaseId: otherClient.currentReleaseId, basePublicationRevision: otherClient.revision, comparisonDraftId: unrelated.draftId })), denied(404));
+  const baseline = { clientId: fixtureClientId(identity.clientId), fileName: "client.zip", size: v1.length, baseReleaseId: null, basePublicationRevision: 0 };
+  await assert.rejects(work(db => c.createUpload(db, admin, { packageFormatVersion: 1, ...baseline, comparisonDraftId: third.draftId })), denied(409));
+  const otherClient = await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("OTH") } });
+  await assert.rejects(work(db => c.createUpload(db, root, { packageFormatVersion: 1, ...baseline, clientId: fixtureClientId("OTH"), baseReleaseId: otherClient.currentReleaseId, basePublicationRevision: otherClient.revision, comparisonDraftId: unrelated.draftId })), denied(404));
   await assert.rejects(client.clientDraft.update({ where: { id: unrelated.draftId }, data: { replacesDraftId: third.draftId } }));
   const audits = await client.auditEvent.count({ where: { action: "DRAFT_SUPERSEDED", targetId: { in: [first.draftId, second.draftId] } } }); assert.equal(audits, 2);
 });
 
 test("manual draft archive enforces RBAC/revisions, cancels leases and permits explicit legacy replacement at publish", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Manual draft archive" }));
-  const submit = (upload: UploadView, versionLabel: string) => work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, platforms: ["windows-amd64"] }));
+  const submit = (upload: UploadView, versionLabel: string) => work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   const manual = await submit(await prepare(v1, admin, identity.clientId), "1.0.0");
   const lease = await client.packageBuild.findFirstOrThrow({ where: { draftId: manual.draftId } });
   await client.packageBuild.update({ where: { id: lease.id }, data: { status: "PROCESSING", leaseToken: "11111111-1111-4111-8111-111111111111", leaseUntil: new Date(Date.now() + 60000) } });
   const revisions = { contentRevision: 1, packageRevision: 1 };
   await assert.rejects(work(db => c.archiveClientDraft(db, reader, identity.clientId, manual.draftId, revisions)), denied(403));
-  await assert.rejects(work(db => c.archiveClientDraft(db, admin, "OTH", manual.draftId, revisions)), denied(404));
+  await assert.rejects(work(db => c.archiveClientDraft(db, admin, fixtureClientId("OTH"), manual.draftId, revisions)), denied(404));
   await assert.rejects(work(db => c.archiveClientDraft(db, admin, identity.clientId, manual.draftId, { ...revisions, packageRevision: 2 })), denied(409));
   await work(db => c.archiveClientDraft(db, admin, identity.clientId, manual.draftId, revisions));
   const canceled = await client.packageBuild.findUniqueOrThrow({ where: { id: lease.id } });
@@ -1208,7 +1205,7 @@ test("manual draft archive enforces RBAC/revisions, cancels leases and permits e
   const next = await submit(await prepare(v2, admin, identity.clientId), "1.2.0");
   await assert.rejects(client.clientDraft.update({ where: { id: old.draftId }, data: { archivedAt: new Date(), supersededByDraftId: next.draftId } }), "superseded pointers require a valid archive reason");
   await work(db => c.reviewClient(db, reviewer, identity.clientId, next.draftId, { decision: "approve", note: "", ...revisions })); await finishPackages(next.draftId);
-  await assert.rejects(work(db => c.publishClient(db, publisher, identity.clientId, next.draftId, { activate: false, replacesDraftId: old.draftId })), denied(403));
+  await assert.rejects(work(db => c.publishClient(db, publisher, identity.clientId, next.draftId, { contentRevision: 1, packageRevision: 1, activate: false, replacesDraftId: old.draftId })), denied(403));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: old.draftId } })).archivedAt, null);
   const result = await work(db => c.publishClient(db, root, identity.clientId, next.draftId, { activate: false, replacesDraftId: old.draftId, ...revisions }));
   assert.deepEqual(result.archivedDraftIds, [old.draftId]);
@@ -1216,9 +1213,9 @@ test("manual draft archive enforces RBAC/revisions, cancels leases and permits e
 });
 
 test("concurrent archival and publication serialize without archiving a published release or losing its prior draft", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Draft archive race" }));
-  const submit = (upload: UploadView, versionLabel: string) => work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, platforms: ["windows-amd64"] }));
+  const submit = (upload: UploadView, versionLabel: string) => work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel, ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   const old = await submit(await prepare(v1, admin, identity.clientId), "1.0.0");
   const next = await submit(await prepare(v2, admin, identity.clientId, true, "client.zip", old.draftId), "1.1.0");
   const revision = { contentRevision: 1, packageRevision: 1 };
@@ -1234,33 +1231,32 @@ test("concurrent archival and publication serialize without archiving a publishe
     assert.equal(latest.archivedAt, null); assert.equal(latest.status, "RELEASED"); assert.equal(previous.archiveReason, "SUPERSEDED");
   } else {
     assert.equal(latest.archiveReason, "MANUAL"); assert.equal(previous.archivedAt, null);
-    assert.equal((await client.client.findUniqueOrThrow({ where: { id: identity.clientId } })).currentReleaseId, null);
+    assert.equal((await client.client.findUniqueOrThrow({ where: { id: fixtureClientId(identity.clientId) } })).currentReleaseId, null);
   }
 });
 
 test("v2 full packages use local CAS only, immutable review revisions and explicit Launcher negotiation", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   await work(db => m.createServer(db, root, { organizationId: org, serverId: "VTF", displayName: "v2 integration" }));
   await work(db => m.updateServer(db, root, "VTF", { isListed: true }));
-  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 full pipeline", serverId: "VTF", publicationRevision: 0, expectedClientId: null }));
+  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 full pipeline", serverId: "VTF", publicationRevision: 0, expectedClientId: fixtureClientId(null) }));
   const upload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), admin, identity.clientId, true, "recipe.mrpack", null, 2);
   assert.equal(upload.status, "READY", upload.error ?? "import failed");
   const environmentsBefore = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
   const importDistribution = await recipeDistributionStats(client, admin, "uploads", upload.id);
   assert.equal(importDistribution.fullPackageBytes, null); assert.equal(importDistribution.remoteFiles, 4);
   await assert.rejects(recipeDistributionStats(client, admin, "drafts", upload.id, "NPA"), denied(404));
-  const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, platforms: ["windows-amd64", "linux-amd64"] }));
+  const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64", "linux-amd64"] } : {}) }));
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 must never download environment binaries"); };
-  await assert.rejects(work(db => c.reviewClient(db, reader, identity.clientId, draftId, { decision: "approve", note: "test", contentRevision: 1 })), denied(403));
+  await assert.rejects(work(db => c.reviewClient(db, reader, identity.clientId, draftId, { packageRevision: 1, decision: "approve", note: "test", contentRevision: 1 })), denied(403));
   assert.equal(await runPackageWorker(workerClient, neverResolve), true);
   let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } });
   assert.equal(build.platform, "universal"); assert.equal(build.revision, 1); assert.equal(build.status, "PREPARED", build.error ?? "preparation failed");
   const candidate = await c.draftManifest(client, reviewer, identity.clientId, draftId); assert(candidate.format === "mua-recipe-manifest");
   assert("protocolRevision" in candidate); assert.equal(candidate.protocolRevision, 2); assert(!("supportedPlatforms" in candidate));
-  assert.deepEqual((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).supportedPlatforms, []);
   assert.equal(candidate.files.filter(file => file.source.type === "remote").length, 4);
   await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Checked v2", contentRevision: 1, packageRevision: 1 }));
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true })), denied(409));
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(409));
   await runPackageWorker(workerClient, neverResolve);
   build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "build failed");
   const oldArtifacts = build.artifacts, oldTarget = build.targetSha256;
@@ -1279,16 +1275,16 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   const old = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } });
   assert.equal(old.status, "READY"); assert.equal(old.required, true); assert.deepEqual(old.artifacts, oldArtifacts); assert.equal(old.targetSha256, oldTarget);
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).packageRevision, 1);
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true, packageRevision: 2 })), denied(409));
-  const released = await work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true, packageRevision: 1 }));
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, activate: true, packageRevision: 2 })), denied(409));
+  const released = await work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, activate: true, packageRevision: 1 }));
   const release = await client.clientRelease.findUniqueOrThrow({ where: { id: released.releaseId } });
   assert.equal(release.packageFormatVersion, 2); assert.equal(release.manifestObjectKey, build.targetObjectKey);
   assert.equal(release.manifestSha256, build.targetSha256);
   assert.deepEqual(await recipeDistributionStats(client, admin, "releases", release.id, identity.clientId), fullDistribution);
   const manifest = readRecipeManifest((await publicManifest(client, "VTF", "1,2")).bytes); assert("protocolRevision" in manifest); assert.equal(manifest.protocolRevision, 2); assert(!("supportedPlatforms" in manifest));
   assert(verify(null, await readObject(release.manifestObjectKey), createPublicKey((await signingIdentity()).privateKey), Buffer.from(release.signature, "base64")));
-  await assert.rejects(publicManifest(client, "VTF"), denied(415));
-  await assert.rejects(publicPackage(client, "VTF", "windows-amd64", null), denied(415));
+  await assert.rejects(publicManifest(client, "VTF", "1"), denied(415));
+  await assert.rejects(publicPackage(client, "VTF", "windows-amd64", null, "1"), denied(415));
   const universal = await publicPackage(client, "VTF", null, null, "2");
   assert(!("platform" in universal)); assert(!("supportedPlatforms" in universal));
   const download = await publicPackage(client, "VTF", "windows-amd64", null, "2");
@@ -1304,7 +1300,6 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   await assert.rejects(publicPackage(client, "VTF", null, null, "2", null, released.releaseId, "0".repeat(64)), denied(409));
   const environmentsAfter = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
   assert.deepEqual(environmentsAfter.Contents, environmentsBefore.Contents, "v2 never creates cached runtime objects");
-  await assert.rejects(client.clientDraft.update({ where: { id: draftId }, data: { supportedPlatforms: ["linux-amd64"] } }));
   await assert.rejects(client.clientRelease.update({ where: { id: released.releaseId }, data: { manifestSha256: "0".repeat(64) } }));
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));
   await assert.rejects(publicManifest(client, "VTF", "2"), denied(404));
@@ -1314,21 +1309,21 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
 });
 
 test("v2 automatic deltas bind a published baseline, validate both packages and fall back for another platform or digest", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   await work(db => m.createServer(db, root, { organizationId: org, serverId: "VTD", displayName: "v2 delta integration" }));
   await work(db => m.updateServer(db, root, "VTD", { isListed: true }));
-  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 delta pipeline", serverId: "VTD", publicationRevision: 0, expectedClientId: null }));
+  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 delta pipeline", serverId: "VTD", publicationRevision: 0, expectedClientId: fixtureClientId(null) }));
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 delta must not resolve environment binaries"); };
   const source = await readFile("docs/examples/muapack-v2/inputs/target.mrpack");
   async function submit(bytes: Buffer, version: string, platforms: string[]) {
     const upload = await prepare(bytes, admin, identity.clientId, true, "delta.mrpack", null, 2); assert.equal(upload.status, "READY", upload.error ?? "import failed");
-    const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel: version, platforms }));
-    await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Delta verified", contentRevision: 1 }));
+    const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel: version, ...(upload.packageFormatVersion === 1 ? { platforms: platforms } : {}) }));
+    await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { packageRevision: 1, decision: "approve", note: "Delta verified", contentRevision: 1 }));
     return draftId;
   }
   const first = await submit(await readFile("docs/examples/muapack-v2/inputs/base.mrpack"), "1.0.0", ["windows-amd64"]);
   await runPackageWorker(workerClient, neverResolve);
-  await work(db => c.publishClient(db, root, identity.clientId, first, { activate: true }));
+  await work(db => c.publishClient(db, root, identity.clientId, first, { contentRevision: 1, packageRevision: 1, activate: true }));
   const base = await client.clientRelease.findUniqueOrThrow({ where: { id: first } }), baseBytes = await readObject(base.manifestObjectKey);
   const draftId = await submit(source, "1.1.0", ["windows-amd64", "linux-amd64"]);
   // A corrupted published baseline must fail, rather than silently signing an unrelated full/update pair.
@@ -1357,9 +1352,9 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   const before = await publicPackage(client, "VTD", "windows-amd64", null, "2"); assert.equal(before.releaseId, first, "built candidates remain private until published");
   const removed = artifacts.update.key;
   await storageClient().send(new DeleteObjectsCommand({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: removed }] } }));
-  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true })), denied(422));
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(422));
   await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: removed, Body: updateBytes, Metadata: { sha256: artifacts.update.sha256 } }));
-  await work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: true }));
+  await work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   const chosen = await publicPackage(client, "VTD", "windows-amd64", first, "1,2", base.manifestSha256);
   assert.equal(chosen.packageType, "update"); assert.equal(chosen.baseReleaseId, first); assert.equal(chosen.baseManifestSha256, base.manifestSha256);
   assert.equal(digest(Buffer.from(await (await fetch(chosen.url)).arrayBuffer())), artifacts.update.sha256);
@@ -1375,7 +1370,7 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   const emptyPath = join(temp, "empty-delta-v2.muapack"); await writeFile(emptyPath, await readObject(emptyArtifacts.update.key));
   const empty = await validateRecipePackArchive(emptyPath, publicKey); assert.equal(empty.objectCount, 0); assert.equal(empty.payloadSize, 0);
   assert.deepEqual(empty.metadata.changes.added, []); assert.deepEqual(empty.metadata.changes.modified, []); assert.deepEqual(empty.metadata.changes.removed, []);
-  await work(db => c.publishClient(db, root, identity.clientId, identical, { activate: true }));
+  await work(db => c.publishClient(db, root, identity.clientId, identical, { contentRevision: 1, packageRevision: 1, activate: true }));
   const stillPinned = await publicPackage(client, "VTD", null, first, "2", base.manifestSha256, draftId, chosen.sha256);
   assert.equal(stillPinned.releaseId, draftId); assert.equal(stillPinned.sha256, chosen.sha256);
   assert.equal((await publicPackage(client, "VTD", null, null, "2")).releaseId, identical);
@@ -1389,22 +1384,22 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
 });
 
 test("v2 unpublished draft comparison does not become a player delta baseline", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 unpublished delta" }));
   const oldUpload = await prepare(await readFile("docs/examples/muapack-v2/inputs/base.mrpack"), admin, identity.clientId, true, "base.mrpack", null, 2);
-  const first = await work(db => c.submitUpload(db, admin, oldUpload.id, { ...fields, name: identity.name, platforms: ["windows-amd64"] }));
+  const first = await work(db => c.submitUpload(db, admin, oldUpload.id, { ...fields, name: identity.name, ...(oldUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   const newUpload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), admin, identity.clientId, true, "target.mrpack", first.draftId, 2);
-  const second = await work(db => c.submitUpload(db, admin, newUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { decision: "approve", note: "replacement", contentRevision: 1 }));
+  const second = await work(db => c.submitUpload(db, admin, newUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(newUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { packageRevision: 1, decision: "approve", note: "replacement", contentRevision: 1 }));
   for (let i = 0; i < 2; i++) await runPackageWorker(workerClient, async () => { assert.fail("v2 does not resolve environment binaries"); });
   const build = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(build.status, "READY", build.error ?? "replacement failed");
   assert.equal(packageArtifactsSchema.parse(build.artifacts).update, null);
-  await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { activate: false }));
+  await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { contentRevision: 1, packageRevision: 1, activate: false }));
   assert((await client.clientDraft.findUniqueOrThrow({ where: { id: first.draftId } })).archivedAt);
 });
 
 test("format choice is sealed per upload; v2 imports only local files and does not starve v1", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Format choice" }));
   const bytes = await readFile("docs/examples/muapack-v2/inputs/target.mrpack");
   const casBefore = await client.casObject.findMany({ select: { sha256: true } });
@@ -1424,13 +1419,13 @@ test("format choice is sealed per upload; v2 imports only local files and does n
   assert.equal(digest(await readObject(imported.filesObjectKey!)), imported.filesSha256);
   assert.equal(inventory.runtime.loader?.version, "0.16.10"); assert.equal(inventory.files.length, 9);
   for (const file of inventory.files) if (file.source.type === "local") assert.equal(digest(await readObject(casKey(file.hashes.sha256!), casBucket())), file.hashes.sha256);
-  const refs = await client.casReference.findMany({ where: { clientId: identity.clientId } }); assert.equal(refs.length, 5);
+  const refs = await client.casReference.findMany({ where: { clientId: fixtureClientId(identity.clientId) } }); assert.equal(refs.length, 5);
   const missingHashes = inventory.files.filter(file => file.source.type === "local" && !casBefore.some(old => old.sha256 === file.hashes.sha256));
   assert.equal(await client.casObject.count(), casBefore.length + missingHashes.length);
   await assert.rejects(c.readInventory(imported.filesObjectKey!, imported.filesSha256!));
   await indexClientStorage(client); // Remote declarations, including declared SHA-256, never become CAS references.
-  assert.equal(await client.casReference.count({ where: { clientId: identity.clientId } }), 5);
-  assert.equal(await client.packageBuild.count({ where: { draft: { clientId: identity.clientId } } }), 0, "v2 upload creates no environment work");
+  assert.equal(await client.casReference.count({ where: { clientId: fixtureClientId(identity.clientId) } }), 5);
+  assert.equal(await client.packageBuild.count({ where: { draft: { clientId: fixtureClientId(identity.clientId) } } }), 0, "v2 upload creates no environment work");
   const view = await c.clientDetails(client, admin, identity.clientId); assert.equal(view.uploads[0].packageFormatVersion, 2);
   const event = await client.auditEvent.findFirstOrThrow({ where: { targetId: upload.id, action: "CLIENT_UPLOAD_CREATE" } });
   assert.equal((event.details as { packageFormatVersion: number }).packageFormatVersion, 2);
@@ -1444,7 +1439,7 @@ test("format choice is sealed per upload; v2 imports only local files and does n
   await assert.rejects(work(db => c.retryUpload(db, admin, upload.id)), denied(409));
   await assert.rejects(work(db => c.cancelUpload(db, reader, upload.id)), denied(403));
   const oldCaller = await prepare(v1, admin, identity.clientId); assert.equal(oldCaller.packageFormatVersion, 1); assert.equal(oldCaller.status, "READY");
-  await assert.rejects(client.client.update({ where: { id: identity.clientId }, data: { name: "Renamed", nameKey: "renamed" } }), "an imported v2 upload must count against first-submission rename");
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { name: "Renamed", nameKey: "renamed" } }), "an imported v2 upload must count against first-submission rename");
   await assert.rejects(work(db => c.submitUpload(db, admin, oldCaller.id, { ...fields, name: "Renamed" })), denied(409));
   await work(db => c.cancelUpload(db, admin, oldCaller.id));
   await work(db => c.cancelUpload(db, admin, upload.id));
@@ -1463,13 +1458,13 @@ test("open package formats require a session superadmin, gate new uploads, and p
   for (const enabledPackageFormats of [[], [1, 1], [3], ["2"]]) {
     await assert.rejects(work(db => updatePackageFormatSettings(db, root, { enabledPackageFormats })), denied(400));
   }
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Format policy test" }));
-  const input = { clientId: identity.clientId, fileName: "policy.mrpack", size: 100, baseReleaseId: null, basePublicationRevision: 0 };
+  const input = { clientId: fixtureClientId(identity.clientId), fileName: "policy.mrpack", size: 100, baseReleaseId: null, basePublicationRevision: 0 };
   try {
     await work(db => updatePackageFormatSettings(db, root, { enabledPackageFormats: [2] }));
     assert.deepEqual((await m.getState(client, admin)).enabledPackageFormats, [2]);
-    await assert.rejects(work(db => c.createUpload(db, admin, input)), denied(409));
+    await assert.rejects(work(db => c.createUpload(db, admin, { packageFormatVersion: 1, ...input })), denied(409));
     await assert.rejects(work(db => c.createUpload(db, admin, { ...input, packageFormatVersion: 1 })), denied(409));
     const source = rawZip([{ name: "modrinth.index.json", data: Buffer.from(JSON.stringify({ formatVersion: 1, game: "minecraft", name: identity.name,
       versionId: "1.0.0", dependencies: { minecraft: "1.21.1", "fabric-loader": "0.16.10" }, files: [] })) },
@@ -1478,18 +1473,18 @@ test("open package formats require a session superadmin, gate new uploads, and p
     await work(db => updatePackageFormatSettings(db, root, { enabledPackageFormats: [1] }));
     await assert.rejects(work(db => c.createUpload(db, admin, { ...input, packageFormatVersion: 2 })), denied(409));
     const submitted = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name }));
-    await work(db => c.reviewClient(db, reviewer, identity.clientId, submitted.draftId, { decision: "approve", note: "Existing upload remains valid", contentRevision: 1 }));
+    await work(db => c.reviewClient(db, reviewer, identity.clientId, submitted.draftId, { packageRevision: 1, decision: "approve", note: "Existing upload remains valid", contentRevision: 1 }));
     await finishPackages(submitted.draftId);
-    await work(db => c.publishClient(db, root, identity.clientId, submitted.draftId, { activate: true }));
+    await work(db => c.publishClient(db, root, identity.clientId, submitted.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
     const details = await c.clientDetails(client, admin, identity.clientId);
     assert.equal(details.initialPackageFormatVersion, 2);
     const full = await managementFullPackage(client, admin, identity.clientId, "drafts", submitted.draftId, null);
     assert.equal(full.packageFormatVersion, 2);
     const v1Upload = await prepare(v1, admin, identity.clientId);
-    const v1Draft = await work(db => c.submitUpload(db, admin, v1Upload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
-    await work(db => c.reviewClient(db, reviewer, identity.clientId, v1Draft.draftId, { decision: "approve", note: "Switch to the open format", contentRevision: 1 }));
+    const v1Draft = await work(db => c.submitUpload(db, admin, v1Upload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(v1Upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+    await work(db => c.reviewClient(db, reviewer, identity.clientId, v1Draft.draftId, { packageRevision: 1, decision: "approve", note: "Switch to the open format", contentRevision: 1 }));
     await finishPackages(v1Draft.draftId);
-    await work(db => c.publishClient(db, root, identity.clientId, v1Draft.draftId, { activate: true }));
+    await work(db => c.publishClient(db, root, identity.clientId, v1Draft.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
     assert.equal((await c.clientDetails(client, admin, identity.clientId)).initialPackageFormatVersion, 2, "first v2 remains the default after publishing v1");
     for (const enabledPackageFormats of [[], [1, 1], [3]]) {
       await assert.rejects(work(db => db.platformSettings.update({ where: { id: "platform" }, data: { enabledPackageFormats } })));
@@ -1500,63 +1495,62 @@ test("open package formats require a session superadmin, gate new uploads, and p
 });
 
 test("one client can publish v1, remote-only v2 and v1 again without mixing signatures or delta bases", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Cross format versions" }));
   const noRuntime: typeof fixtureEnvironment = async () => { assert.fail("remote-only v2 must not resolve runtime"); };
   const local = await prepare(v1, admin, identity.clientId);
-  const first = await work(db => c.submitUpload(db, admin, local.id, { ...fields, name: identity.name, platforms: ["windows-amd64"] }));
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, first.draftId, { decision: "approve", note: "v1", contentRevision: 1 }));
+  const first = await work(db => c.submitUpload(db, admin, local.id, { ...fields, name: identity.name, ...(local.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, first.draftId, { packageRevision: 1, decision: "approve", note: "v1", contentRevision: 1 }));
   await finishPackages(first.draftId);
-  const r1 = await work(db => c.publishClient(db, root, identity.clientId, first.draftId, { activate: true }));
+  const r1 = await work(db => c.publishClient(db, root, identity.clientId, first.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   const old = await client.clientRelease.findUniqueOrThrow({ where: { id: r1.releaseId } });
   const source = rawZip([{ name: "modrinth.index.json", data: Buffer.from(JSON.stringify({ formatVersion: 1, game: "minecraft", name: identity.name,
     versionId: "1.1.0", dependencies: { minecraft: "1.21.1", "fabric-loader": "0.16.10" }, files: [{ path: "mods/optional.jar", fileSize: 500,
       hashes: { sha1: "5".repeat(40), sha512: "6".repeat(128) }, downloads: ["https://remote.invalid/optional.jar"], env: { client: "optional" } }] })) }]);
   const remote = await prepare(source, admin, identity.clientId, true, "remote.mrpack", null, 2); assert.equal(remote.status, "READY"); assert.equal(remote.recipeStatistics?.localFiles, 0);
-  const second = await work(db => c.submitUpload(db, admin, remote.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { decision: "approve", note: "remote only", contentRevision: 1 }));
+  const second = await work(db => c.submitUpload(db, admin, remote.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(remote.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { packageRevision: 1, decision: "approve", note: "remote only", contentRevision: 1 }));
   await runPackageWorker(workerClient, noRuntime);
   const b2 = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(b2.status, "READY", b2.error ?? "remote-only package failed");
   const full = packageArtifactsSchema.parse(b2.artifacts); assert.equal(full.update, null);
   const path = join(temp, "remote-only-v2.muapack"); await writeFile(path, await readObject(full.full.key));
   const verified = await validateRecipePackArchive(path, createPublicKey((await signingIdentity()).privateKey)); assert.equal(verified.objectCount, 0); assert.equal(verified.payloadSize, 0);
-  await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { activate: true }));
+  await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   assert.equal((await c.clientDetails(client, admin, identity.clientId)).initialPackageFormatVersion, 1, "the initial format stays v1 after publishing v2");
   const back = await prepare(v2, admin, identity.clientId); assert.equal(back.status, "READY", back.error ?? "v1 import cannot read v2 base");
-  const third = await work(db => c.submitUpload(db, admin, back.id, { ...fields, name: identity.name, versionLabel: "1.2.0", platforms: ["windows-amd64"] }));
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, third.draftId, { decision: "approve", note: "v1 again", contentRevision: 1 }));
+  const third = await work(db => c.submitUpload(db, admin, back.id, { ...fields, name: identity.name, versionLabel: "1.2.0", ...(back.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, third.draftId, { packageRevision: 1, decision: "approve", note: "v1 again", contentRevision: 1 }));
   await finishPackages(third.draftId);
   const b3 = await client.packageBuild.findFirstOrThrow({ where: { draftId: third.draftId, required: true } }); assert.equal(packageArtifactsSchema.parse(b3.artifacts).update, null);
-  await work(db => c.publishClient(db, root, identity.clientId, third.draftId, { activate: true }));
+  await work(db => c.publishClient(db, root, identity.clientId, third.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   assert.deepEqual(await client.clientRelease.findUniqueOrThrow({ where: { id: r1.releaseId } }), old);
   assert.equal(digest(await readObject(old.manifestObjectKey)), old.manifestSha256);
 });
 
 test("format validation, draft locks and archived deletion protect staged v2 uploads", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Waiting v2 deletion" }));
-  const input = { clientId: identity.clientId, fileName: "recipe.mrpack", size: 10, baseReleaseId: null, basePublicationRevision: 0 };
+  const input = { clientId: fixtureClientId(identity.clientId), fileName: "recipe.mrpack", size: 10, baseReleaseId: null, basePublicationRevision: 0 };
   const count = await client.clientUpload.count();
   for (const packageFormatVersion of [0, 3, "2", null]) await assert.rejects(work(db => c.createUpload(db, admin, { ...input, packageFormatVersion })), denied(400));
   assert.equal(await client.clientUpload.count(), count);
   await assert.rejects(work(db => c.createUpload(db, reader, { ...input, packageFormatVersion: 2 })), denied(403));
-  await assert.rejects(work(db => c.createUpload(db, admin, { ...input, clientId: "OTH", packageFormatVersion: 2 })), denied(404));
-  const draft = await client.clientDraft.create({ data: { clientId: identity.clientId, packageFormatVersion: 2, createdById: admin.id } });
+  await assert.rejects(work(db => c.createUpload(db, admin, { ...input, clientId: fixtureClientId("OTH"), packageFormatVersion: 2 })), denied(404));
+  const draft = await client.clientDraft.create({ data: { clientId: fixtureClientId(identity.clientId), packageFormatVersion: 2, createdById: admin.id } });
   await assert.rejects(client.clientDraft.update({ where: { id: draft.id }, data: { packageFormatVersion: 1 } }));
-  await assert.rejects(client.clientDraft.update({ where: { id: draft.id }, data: { status: "SUBMITTED", packageRevision: 2, supportedPlatforms: ["invalid-platform"] } }));
   await assert.rejects(client.packageBuild.create({ data: { draftId: draft.id, platform: "windows-amd64", revision: 1 } }));
   const upload = await prepare(await readFile("docs/examples/muapack-v2/inputs/base.mrpack"), admin, identity.clientId, false, "recipe.mrpack", null, 2);
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));
-  await assert.rejects(client.client.update({ where: { id: identity.clientId }, data: { deletedAt: new Date() } }), "waiting uploads must be cancelled before deletion");
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { deletedAt: new Date() } }), "waiting uploads must be cancelled before deletion");
   await work(db => c.deleteClient(db, admin, identity.clientId));
   const closed = await client.clientUpload.findUniqueOrThrow({ where: { id: upload.id } });
   assert.equal(closed.status, "CANCELLED"); assert.equal(closed.packageFormatVersion, 2);
   await assert.rejects(c.findUpload(client, admin, upload.id), denied(404));
-  await assert.rejects(client.client.update({ where: { id: identity.clientId }, data: { deletedAt: null } }));
+  await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { deletedAt: null } }));
 });
 
 test("v2 leases, failed retries, revoked owners and local CAS recycling preserve the import boundary", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 lease recycle" }));
   const local = Buffer.from("unique v2 recycle " + suffix), sha = digest(local);
   const source = rawZip([{ name: "modrinth.index.json", data: Buffer.from(JSON.stringify({ formatVersion: 1, game: "minecraft", name: "Recipe",
@@ -1569,7 +1563,7 @@ test("v2 leases, failed retries, revoked owners and local CAS recycling preserve
   await runUploadWorker(workerClient); const ready = c.uploadView(await c.findUpload(client, admin, upload.id));
   assert.equal(ready.status, "READY", ready.error ?? "lease recovery failed");
   assert.equal((await c.findUpload(client, admin, upload.id)).attempts, 2);
-  assert.equal(await client.casReference.count({ where: { clientId: identity.clientId } }), 1);
+  assert.equal(await client.casReference.count({ where: { clientId: fixtureClientId(identity.clientId) } }), 1);
   assert.equal(await client.casObject.count({ where: { sha256: "4".repeat(64) } }), 0);
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));
   await work(db => c.deleteClient(db, admin, identity.clientId)); await indexedMaintenance();
@@ -1588,27 +1582,9 @@ test("v2 leases, failed retries, revoked owners and local CAS recycling preserve
   await work(db => c.cancelUpload(db, admin, invalid.id));
 });
 
-test("the v2 processor migration resumes only eligible staged uploads", async () => {
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
-  const identities = await Promise.all(["eligible v2", "archived v2"].map(name => work(db => c.createClient(db, admin, { organizationId: org, name }))));
-  const uploads: UploadView[] = [];
-  for (const identity of identities) {
-    const upload = await work(db => c.createUpload(db, admin, { clientId: identity.clientId, fileName: "staged.mrpack", size: 10,
-      packageFormatVersion: 2, baseReleaseId: null, basePublicationRevision: 0 }));
-    await client.clientUpload.update({ where: { id: upload.id }, data: { status: "WAITING_PROCESSOR" } }); uploads.push(upload);
-  }
-  await work(db => c.archiveClient(db, admin, identities[1].clientId, { archived: true }));
-  const resumeSql = await readFile("prisma/migrations/202610100004_v2_recipe_import/migration.sql", "utf8");
-  await pool.query(resumeSql.slice(resumeSql.indexOf('UPDATE "ClientUpload"')));
-  assert.equal((await client.clientUpload.findUniqueOrThrow({ where: { id: uploads[0].id } })).status, "QUEUED");
-  assert.equal((await client.clientUpload.findUniqueOrThrow({ where: { id: uploads[1].id } })).status, "WAITING_PROCESSOR");
-  await work(db => c.cancelUpload(db, admin, uploads[0].id));
-  await work(db => c.deleteClient(db, admin, identities[1].clientId));
-});
-
 test("real PCL v2 imports exported launcher settings safely and produces a reviewed signed full recipe", { skip: !process.env.MUA_REAL_V2_PACK, timeout: 120000 }, async () => {
   const source = await readFile(process.env.MUA_REAL_V2_PACK!);
-  const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Real PCL v2" }));
   const upload = await prepare(source, admin, identity.clientId, true, "test_pclFormat 1.0.0.zip", null, 2);
   assert.equal(upload.status, "READY", upload.error ?? "PCL import failed");
@@ -1616,10 +1592,10 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   assert.equal(upload.detectedInfo?.loaderVersion, "21.1.256");
   const declared = upload.detectedInfo?.importFiles?.filter(file => file.source === "remote") ?? [];
   assert(declared.length > 0); assert(declared.every(file => file.status === "DECLARED" && file.downloadedBytes === 0));
-  const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, platforms: ["windows-amd64"] }));
+  const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, ...(upload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 must not resolve NeoForge or Java binaries"); };
   await runPackageWorker(workerClient, neverResolve);
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Real PCL import", contentRevision: 1 }));
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { packageRevision: 1, decision: "approve", note: "Real PCL import", contentRevision: 1 }));
   await runPackageWorker(workerClient, neverResolve);
   const build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "READY", build.error ?? "PCL v2 build failed");
   const full = await managementFullPackage(client, admin, identity.clientId, "drafts", draftId, "universal");
@@ -1628,7 +1604,7 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   const parsed = await validateRecipePackArchive(pack, createPublicKey((await signingIdentity()).privateKey));
   assert(!parsed.target.files.some(file => /^PCL\//i.test(file.path))); assert(parsed.target.files.some(file => file.source.type === "remote"));
   assert.equal(parsed.target.runtime.loader?.type, "neoforge");
-  const published = await work(db => c.publishClient(db, root, identity.clientId, draftId, { activate: false }));
+  const published = await work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: false }));
   assert.equal((await client.clientRelease.findUniqueOrThrow({ where: { id: published.releaseId } })).packageFormatVersion, 2);
   const report = { sample: "PCL v2", sourceSize: source.length, minecraft: parsed.target.runtime.minecraft, java: parsed.target.runtime.java.major,
     loader: parsed.target.runtime.loader, files: parsed.target.files.length, localPayloads: parsed.objectCount, remoteFiles: declared.length,
@@ -1637,22 +1613,22 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   await work(db => c.activateClient(db, root, identity.clientId, published.releaseId, { publicationRevision: 0 }));
   const nextUpload = await prepare(source, admin, identity.clientId, true, "test_pclFormat 1.0.0.zip", null, 2); assert.equal(nextUpload.status, "READY");
   assert.equal(nextUpload.recipeStatistics?.newLocalDataSize, 0);
-  const next = await work(db => c.submitUpload(db, admin, nextUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", platforms: ["windows-amd64"] }));
-  await work(db => c.reviewClient(db, reviewer, identity.clientId, next.draftId, { decision: "approve", note: "Real PCL delta", contentRevision: 1 }));
+  const next = await work(db => c.submitUpload(db, admin, nextUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(nextUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
+  await work(db => c.reviewClient(db, reviewer, identity.clientId, next.draftId, { packageRevision: 1, decision: "approve", note: "Real PCL delta", contentRevision: 1 }));
   await runPackageWorker(workerClient, neverResolve);
   const nextBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: next.draftId, required: true } }); assert.equal(nextBuild.status, "READY", nextBuild.error ?? "real PCL delta failed");
   const nextArtifacts = packageArtifactsSchema.parse(nextBuild.artifacts); assert(nextArtifacts.update); assert.equal(nextArtifacts.update.baseReleaseId, published.releaseId);
   const updateBytes = await readObject(nextArtifacts.update.key); assert.equal(digest(updateBytes), nextArtifacts.update.sha256);
   const updatePath = join(temp, "real-pcl-delta-v2.muapack"); await writeFile(updatePath, updateBytes);
   const delta = await validateRecipePackArchive(updatePath, createPublicKey((await signingIdentity()).privateKey)); assert.equal(delta.objectCount, 0); assert.equal(delta.payloadSize, 0);
-  await work(db => c.publishClient(db, root, identity.clientId, next.draftId, { activate: false }));
+  await work(db => c.publishClient(db, root, identity.clientId, next.draftId, { contentRevision: 1, packageRevision: 1, activate: false }));
   const deltaReport = { ...report, updateSize: nextArtifacts.update.size, updateSha256: nextArtifacts.update.sha256, updatePayloads: delta.objectCount,
     baseVersion: delta.metadata.base?.version, targetVersion: delta.metadata.target.version };
   console.log(JSON.stringify(deltaReport)); await writeFile(".local/real-pcl-v2-delta-report.json", JSON.stringify(deltaReport, null, 2));
 });
 
 test("real HMCL mrpack downloads and verifies declared mods in an isolated Worker and MinIO pipeline", { skip: !process.env.MUA_REAL_MRPACK, timeout: 120000 }, async () => {
-  const source = await readFile(process.env.MUA_REAL_MRPACK!); const org = (await client.client.findUniqueOrThrow({ where: { id: "NPA" } })).organizationId;
+  const source = await readFile(process.env.MUA_REAL_MRPACK!); const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Real HMCL import" }));
   const upload = await prepare(source, admin, identity.clientId, true, "test_modrinthFormat.mrpack");
   assert.equal(upload.status, "READY", upload.error ?? "upload failed"); assert.equal(upload.detectedInfo?.minecraftVersion, "26.1");

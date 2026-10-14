@@ -16,12 +16,12 @@
 - 归档取消 QUEUED／PROCESSING／PREPARED 组包，清除租约并停止调度；READY 产物、完整索引、CAS、源包与审计保留。OSS 回收仍遵循客户端删除及引用保护，不因草稿归档立即执行。
 - 新草稿将所选 `comparisonDraftId` 写入 `replacesDraftId`。新版本成功发布后，在同一事务中归档这条关系可达的未发布祖先，记录 `archiveReason=SUPERSEDED`、`supersededByDraftId` 和 DRAFT_SUPERSEDED 审计。独立提交、无关草稿及已发布历史不归档；发布失败则整笔事务回滚。
 - 首次上传关系由有 DRAFT_ARCHIVE 权限的编辑者确认；发布人员可按已记录关系完成自动归档，无需因此获得手动归档权限。发布确认时改变关系需要额外 DRAFT_ARCHIVE，并提交当前 contentRevision／packageRevision。
-- 发布 API 兼容旧 `{activate}`。新请求可增加 `replacesDraftId`（UUID 或 null）和修订。旧草稿可在发布确认中明确选择替代对象；已发布记录的关系及签名不可追溯改写，遗留未发布草稿可单独归档。
+- 发布 API 必填 activate、contentRevision 和 packageRevision；可选 replacesDraftId（UUID 或 null）。发布确认可明确选择替代对象；已发布记录的关系及签名不可追溯改写，未发布草稿可单独归档。
 - 当前版本在上传后发生变化，仍要求重新提交基于当前发布的上传，不自动改写旧草稿、清单或已签名包。
 
 ## 版本顺序与记录
 
-`versionSequence` 是不可变的内部提交序号，迁移按 createdAt／id 给历史草稿排序；关系外键限制同一客户端，替代对象必须先于新草稿，拒绝循环和未来版本。
+`versionSequence` 是不可变的内部提交序号，关系外键限制同一客户端，替代对象必须先于新草稿，拒绝循环和未来版本。
 
 标准 SemVer 标签（兼容 v 前缀）按数字、预发布规则比较，构建元数据不提高版本优先级。例如 1.10.0 > 1.9.0、1.0.0 > 1.0.0-rc.2。相对选定草稿和已发布基准，标准标签必须递增；回退使用已有发布的启用操作。自定义标签保留兼容，依靠提交序号及明确关系，不推断语义先后。列表全部为标准标签时按语义版本排列，混合标签时统一按内部序号排列，避免不一致的排序比较。
 

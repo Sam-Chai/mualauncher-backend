@@ -19,7 +19,7 @@ test("v2 history shows actual package sizes, unknown environment and bilingual f
     const remote: RecipeFile = { path: "mods/new.jar", size: 8192, policy: "managed", optional: true, executable: false, hashes: { sha1: "2".repeat(40), sha512: "2".repeat(128) }, source: { type: "remote", downloads: ["https://example.invalid/new.jar"] } };
     const stats = recipeDistribution([local, remote], { files: [], reference: { releaseId: "00000000-0000-4000-8000-000000000001", version: "1.0.0", manifestSha256: "3".repeat(64) } }, { full: 16384, update: 6144 });
     const metadata = { name: "Cinema v2", versionLabel: "1.1.0", minecraftVersion: "1.21.1", javaVersion: 21, mods: [], summary: "Browser fixture", description: "Read-only test" };
-    const draft = { id: "00000000-0000-4000-8000-000000000002", packageFormatVersion: 2, supportedPlatforms: [], ...metadata, versionSequence: 2,
+    const draft = { id: "00000000-0000-4000-8000-000000000002", packageFormatVersion: 2, ...metadata, versionSequence: 2,
       replacesDraftId: null, archiveReason: null, supersededByDraftId: null, candidateMetadata: metadata, reviewNote: null, status: "APPROVED", contentRevision: 1, packageRevision: 1,
       archivedAt: null, createdAt: new Date().toISOString(), upload: null, packageBuilds: [] };
     await page.route("**/api/v1/clients", route => route.fulfill({ json: [{ clientId: "fixture", name: "Cinema v2", organizationId: "fixture", organizationName: "Cinema", serverId: null, serverName: "未绑定",

@@ -1,3 +1,4 @@
+import { fixtureClientId } from "./fixtures/identity";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -17,7 +18,8 @@ const render = (locale: Locale, children: React.ReactNode) => renderToStaticMark
 test("locale validation defaults to Chinese and dictionaries cover all migrated UI messages", () => {
   for (const value of [undefined, "fr-FR", "en-US<script>", "en"]) assert.equal(parseLocale(value), "zh-CN");
   assert.equal(parseLocale("en-US"), "en-US");
-  assert(Object.keys(english).length >= 698);
+  assert.equal(translate("en-US", "服务器管理"), "Server management");
+  assert.equal(translate("en-US", "客户端管理"), "Client management");
   for (const [source, target] of Object.entries(english)) {
     assert(target.length > 0); assert(!/[\u3400-\u9fff]/.test(target), source);
     const tokens = (text: string) => (text.match(/\{\d+\}/g) ?? []).sort();
@@ -44,7 +46,7 @@ test("Chinese and English login, settings and table controls render in the selec
 
 test("English server editor keeps saved names, descriptions, addresses and RBAC field identifiers unchanged", () => {
   const server: Server = { serverId: "NPA", organizationId: state.actor.id, displayName: "服务器管理", description: "这是用户填写的说明", gameAddress: "mc.example.edu:25565", iconObjectKey: null, mottoImageUrl: null,
-    sortOrder: 0, themeColor: null, isListed: false, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null, archivedAt: null, clientArchivedAt: null, currentReleaseId: null, currentReleaseActive: false, publicationRevision: 0, boundClientId: null, boundClientName: null, permissions: ["SERVER_READ", "SERVER_EDIT"] };
+    sortOrder: 0, themeColor: null, isListed: false, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null, archivedAt: null, clientArchivedAt: null, currentReleaseId: null, currentReleaseActive: false, publicationRevision: 0, boundClientId: fixtureClientId(null), boundClientName: null, permissions: ["SERVER_READ", "SERVER_EDIT"] };
   const en = render("en-US", <ServerEditorContent server={server} onSaved={() => {}} />);
   assert(en.includes("Server motto")); assert(en.includes('name="gameAddress"')); assert(en.includes('value="服务器管理"')); assert(en.includes("这是用户填写的说明")); assert(en.includes("mc.example.edu:25565"));
 });

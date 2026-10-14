@@ -53,7 +53,7 @@ export const muaFilesSchema = z.array(muaFileSchema).max(100000).superRefine(val
 const environmentRefSchema = z.object({ kind: z.enum(["minecraft", "loader", "java"]), sha256: sha256Schema }).strict();
 const loaderSchema = z.object({ type: z.enum(["fabric", "quilt", "forge", "neoforge"]), version: text }).strict();
 const javaSchema = z.object({ major: z.number().int().min(7).max(Number.MAX_SAFE_INTEGER), vendor: text, version: text, build: text,
-  imageType: z.enum(["jre", "jdk"]).optional(),
+  imageType: z.enum(["jre", "jdk"]),
   manifestSha256: sha256Schema, executable: muaPathSchema }).strict();
 const argumentSchema = z.string().max(4000).refine(value => !/[\x00\r\n]/.test(value), "参数不能含 NUL 或换行");
 const fileLocationSchema = z.object({ root: z.enum(["instance", "java"]), path: muaPathSchema }).strict();
@@ -74,7 +74,7 @@ export const muaLaunchSchema = z.object({
     .refine(value => value.recommendedMiB >= value.minimumMiB, "推荐内存不能低于最低内存"),
   preLaunch: z.array(preLaunchTaskSchema).max(32),
 }).strict();
-const releaseIdentitySchema = z.object({ organizationId: z.string().uuid(), clientId: text, releaseId: z.string().uuid(),
+const releaseIdentitySchema = z.object({ organizationId: z.string().uuid(), clientId: z.string().uuid(), releaseId: z.string().uuid(),
   version: text, name: text, summary: z.string().min(1).max(200), description: z.string().max(20000),
   sourceSha256: sha256Schema, contentRevision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER) }).strict();
 export const muaPlatformManifestSchema = z.object({ format: z.literal("mua-platform-manifest"), formatVersion: z.literal(1),
@@ -126,7 +126,7 @@ export const muaEnvironmentManifestSchema = z.discriminatedUnion("kind", [
     minecraft: text, loader: loaderSchema, sourceMetadataSha256: sha256Schema }).strict(),
   z.object({ ...environmentCommon, kind: z.literal("java"), platform: muaPlatformSchema,
     java: z.object({ major: z.number().int().min(7).max(Number.MAX_SAFE_INTEGER), vendor: text, version: text, build: text,
-      imageType: z.enum(["jre", "jdk"]).optional(),
+      imageType: z.enum(["jre", "jdk"]),
       executable: muaPathSchema, archiveSha256: sha256Schema }).strict() }).strict(),
 ]).superRefine((manifest, ctx) => {
   if (!manifest.files.length || manifest.files.some(file => file.root !== (manifest.kind === "java" ? "java" : "instance") || file.policy !== "managed" || file.optional)) {
@@ -146,7 +146,7 @@ const changePairSchema = z.object({ before: muaFileSchema, after: muaFileSchema 
 export const muaChangesSchema = z.object({ added: muaFilesSchema, modified: z.array(changePairSchema).max(100000),
   removed: muaFilesSchema, policyChanged: z.array(changePairSchema).max(100000) }).strict();
 export type MuaChanges = z.infer<typeof muaChangesSchema>;
-const releaseRefSchema = z.object({ organizationId: z.string().uuid(), clientId: text, releaseId: z.string().uuid(),
+const releaseRefSchema = z.object({ organizationId: z.string().uuid(), clientId: z.string().uuid(), releaseId: z.string().uuid(),
   version: text, manifestSha256: sha256Schema }).strict();
 export const muaObjectSchema = z.object({ sha256: sha256Schema, size: sizeSchema }).strict();
 export const muaPackMetadataSchema = z.object({ format: z.literal("muapack"), formatVersion: z.literal(1),

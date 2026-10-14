@@ -156,7 +156,9 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
   return <Form {...form}><form className="space-y-6" onSubmit={form.handleSubmit(async metadata => {
     if (!upload || upload.status !== "READY") { setError(t("请先上传并等待解析完成")); return; }
     if (current && metadata.versionLabel === current.versionLabel) { form.setError("versionLabel", { message: t("更新必须设置一个新的版本号") }); return; }
-    if (await run(() => api(`/api/v1/clients/uploads/${upload.id}/submit`, "POST", { ...metadata, ...(packageFormatVersion === 1 ? { platforms } : {}) }), t("客户端已提交审核，组包任务将在后台继续"))) onDone();
+    const { mods: _mods, modDetails: _modDetails, ...submission } = metadata;
+    void _mods; void _modDetails;
+    if (await run(() => api(`/api/v1/clients/uploads/${upload.id}/submit`, "POST", { ...submission, ...(packageFormatVersion === 1 ? { platforms } : {}) }), t("客户端已提交审核，组包任务将在后台继续"))) onDone();
   })}>
     <PackageFormatChoice value={packageFormatVersion} onChange={setPackageFormatVersion} enabledFormats={enabledFormats} locked={!!upload} busy={uploading || submitting} />
     <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-organization">{t("所属组织")}</label>
@@ -174,13 +176,12 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
     <button type="button" disabled={!packageFormatVersion || uploading || processing} className={`flex min-h-52 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${dragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/60 hover:bg-muted/40"} disabled:cursor-not-allowed`}
       onClick={() => input.current?.click()} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files[0]); }}>
       {uploading || processing ? <LoaderCircle className="size-10 animate-spin text-primary" /> : upload || file ? <FileArchive className="size-10 text-primary" /> : <UploadCloud className="size-10 text-muted-foreground" />}
-      <span className="font-medium" role="status" aria-live="polite">{!packageFormatVersion ? t("请先选择 v1 或 v2") : uploading ? t("上传中 {0}%", { "0": percent }) : processing || upload?.status === "WAITING_PROCESSOR" ? t(uploadProcessingLabel(upload!)) : upload?.status === "READY" ? t("处理完成 · 点击更换完整整合包") : file?.name ?? t("拖拽 ZIP／mrpack 到这里，或点击选择文件")}</span>
+      <span className="font-medium" role="status" aria-live="polite">{!packageFormatVersion ? t("请先选择 v1 或 v2") : uploading ? t("上传中 {0}%", { "0": percent }) : processing ? t(uploadProcessingLabel(upload!)) : upload?.status === "READY" ? t("处理完成 · 点击更换完整整合包") : file?.name ?? t("拖拽 ZIP／mrpack 到这里，或点击选择文件")}</span>
       <span className="text-sm text-muted-foreground">{upload ? `${upload.fileName} · ${formatBytes(upload.size)}` : t(".minecraft ZIP／Modrinth mrpack／PCL 导出 ZIP · 最大 {0} MB", { "0": state.maxUploadSizeMb })}</span>
       {uploading && <span className="h-2 w-64 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${percent}%` }} /></span>}
     </button>
-    {upload?.status === "WAITING_PROCESSOR" && <Alert><AlertDescription>{t("这是尚未重新排队的历史 v2 上传，请联系管理员检查账号与客户端状态；也可取消后重新上传。已发布版本继续可用。")}</AlertDescription></Alert>}
     {upload?.packageFormatVersion === 2 && upload.status === "READY" && <Alert><AlertDescription>{t("v2 信息识别与本地文件校验完成，远程声明已保存。核对并提交审核后，Worker 会在后台生成跨平台完整 .muapack；审核、签名和产物校验完成后才可发布。")}</AlertDescription></Alert>}
-    {upload && ["UPLOADING", "WAITING_PROCESSOR", "QUEUED", "READY", "FAILED"].includes(upload.status) && !uploading && <Button type="button" variant="outline" onClick={() => void run(async () => {
+    {upload && ["UPLOADING", "QUEUED", "READY", "FAILED"].includes(upload.status) && !uploading && <Button type="button" variant="outline" onClick={() => void run(async () => {
       await api(`/api/v1/clients/uploads/${upload.id}/cancel`, "POST", {});
       selectedUpload.current = null; setUpload(null); setFile(null); setPackageFormatVersion(null); setError(""); if (input.current) input.current.value = "";
     }, t("已取消上传，可以重新选择格式"), false)}>{t("取消上传／重新选择格式")}</Button>}

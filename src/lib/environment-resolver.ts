@@ -43,7 +43,7 @@ const profileSchema = z.object({ id: z.string(), mainClass: z.string(), librarie
   arguments: z.object({ jvm: z.array(argumentSchema).optional(), game: z.array(argumentSchema).optional() }).optional(),
   downloads: z.object({ client: downloadSchema, client_mappings: downloadSchema.optional() }).optional(), assetIndex: downloadSchema.extend({ id: z.string() }).optional() });
 const resolvedSchema = z.object({ minecraft: z.string(), loader: z.object({ type: z.enum(["fabric", "quilt", "forge", "neoforge"]), version: z.string() }).nullable(),
-  java: z.object({ major: z.number().int(), vendor: z.string(), version: z.string(), build: z.string(), imageType: z.enum(["jre", "jdk"]).optional(), executable: z.string(), manifestSha256: z.string() }),
+  java: z.object({ major: z.number().int(), vendor: z.string(), version: z.string(), build: z.string(), imageType: z.enum(["jre", "jdk"]), executable: z.string(), manifestSha256: z.string() }),
   environments: z.array(z.object({ kind: z.enum(["minecraft", "loader", "java"]), sha256: z.string() })), files: z.array(z.object({ root: z.enum(["instance", "java"]), path: z.string(), sha256: z.string(), size: z.number().int(), policy: z.enum(["managed", "preserve"]), executable: z.boolean() })), launch: muaLaunchSchema });
 export type ResolvedEnvironment = z.infer<typeof resolvedSchema>;
 export type EnvironmentRequest = { minecraft: string; javaMajor: number; loader: ResolvedEnvironment["loader"]; platform: MuaPlatform };

@@ -25,7 +25,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
   for (const locale of ["zh-CN", "en-US"]) {
     const response = await page.request.get(`/openapi.json?locale=${locale}`);
     expect(response.status()).toBe(200); expect(response.headers()["content-language"]).toBe(locale);
-    expect(Object.keys((await response.json()).paths)).toHaveLength(5);
+    expect(Object.keys((await response.json()).paths)).toHaveLength(4);
   }
   await page.goto("/admin/api");
   await expect(page).toHaveURL(/\/login$/);
@@ -34,10 +34,13 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
   const sessionCookie = (await page.context().cookies(baseURL!)).find(value => value.name === "mua_session");
   try {
     const internal = await page.request.get("/api/admin/openapi?locale=en-US"); expect(internal.status()).toBe(200);
-    expect(internal.headers()["cache-control"]).toBe("private, no-store"); expect(operationCount(await internal.json())).toBe(69);
+    expect(internal.headers()["cache-control"]).toBe("private, no-store"); expect(operationCount(await internal.json())).toBe(63);
     const state = await page.request.get("/api/admin/state"); expect(state.status()).toBe(200); assertApiResponse("GET", "/api/admin/state", 200, await state.json());
     await page.goto("/admin/api");
     await expect(page.getByRole("link", { name: "API", exact: true }).first()).toBeVisible();
+    for (const href of ["/admin/news", "/admin/events", "/admin/launcher-ui", "/admin/listings", "/admin/servers/status", "/admin/releases/revoked"]) {
+      await expect(page.locator(`a[href="${href}"]`)).toHaveCount(0);
+    }
     await expect(page.getByRole("heading", { name: "API 文档", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Union Link API", exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("获取公开服务器目录", { exact: true }).first()).toBeVisible();
@@ -47,7 +50,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     await page.getByRole("link", { name: "下载 OpenAPI JSON", exact: true }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("union-link.zh-CN.openapi.json");
-    expect(operationCount(JSON.parse(await readFile((await download.path())!, "utf8")))).toBe(69);
+    expect(operationCount(JSON.parse(await readFile((await download.path())!, "utf8")))).toBe(63);
     await page.getByRole("button", { name: "切换黑白主题", exact: true }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expect(page.locator(".dark-mode").first()).toBeVisible();
