@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+
 import { environmentsBucket, casKey, readObject, storageClient, missingObject } from "./storage";
 import { putImmutableBytes, storedHead, downloadStoredFile } from "./package-storage";
 import { createEnvironmentDownloader } from "./environment-download";
@@ -51,8 +51,8 @@ export type EnvironmentResolver = (request: EnvironmentRequest, directory: strin
 async function storeFile(sha256: string, path: string, size: number) {
   const bucket = environmentsBucket(), key = casKey(sha256); const found = await storedHead(bucket, key);
   if (found) { invariant(found.ContentLength === size && found.Metadata?.sha256 === sha256, 422, "环境缓存对象不一致"); return; }
-  try { await storageClient().send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: createReadStream(path), ContentLength: size,
-    Metadata: { sha256 }, ChecksumSHA256: Buffer.from(sha256, "hex").toString("base64"), IfNoneMatch: "*" })); }
+  try { await storageClient().putObject({ Bucket: bucket, Key: key, Body: createReadStream(path), ContentLength: size,
+    Metadata: { sha256 }, ChecksumSHA256: Buffer.from(sha256, "hex").toString("base64"), IfNoneMatch: "*" }); }
   catch (error) { if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 412) throw error; }
 }
 async function mapConcurrent<T>(items: T[], work: (item: T, index: number) => Promise<void>) {

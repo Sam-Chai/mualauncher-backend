@@ -1,4 +1,4 @@
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+
 import { storageClient, environmentsBucket, casKey } from "../../src/lib/storage";
 import { putImmutableBytes } from "../../src/lib/package-storage";
 import { encodeMuaJson, muaDigest } from "../../src/lib/muapack-protocol";
@@ -11,7 +11,7 @@ export const fixtureEnvironment: EnvironmentResolver = async (request, _director
   const files: MuaFile[] = [];
   async function file(root: MuaFile["root"], path: string, content: string, executable = false) {
     const bytes = Buffer.from(content), sha256 = muaDigest(bytes);
-    await storageClient().send(new PutObjectCommand({ Bucket: environmentsBucket(), Key: casKey(sha256), Body: bytes, Metadata: { sha256 } }));
+    await storageClient().putObject({ Bucket: environmentsBucket(), Key: casKey(sha256), Body: bytes, Metadata: { sha256 } });
     const file = { root, path, sha256, size: bytes.length, policy: "managed" as const, executable }; files.push(file); return file;
   }
   const gameFile = await file("instance", `versions/${request.minecraft}/${request.minecraft}.jar`, `synthetic game ${request.minecraft}`);

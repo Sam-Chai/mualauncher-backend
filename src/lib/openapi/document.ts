@@ -45,7 +45,7 @@ export function publicOpenApi(locale: Locale = "zh-CN") {
     } }, ...errors([400, 404, 415, 500, 503]) } });
   const platformDescription = t("v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。");
   const queryDescription = t("acceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。");
-  const downloadDescription = t("返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的 S3 原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；不要改变签名 URL，也不能把 GET URL 用作 HEAD。");
+  const downloadDescription = t("返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的对象存储原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；签名参数由存储供应商决定，不要改变签名 URL，也不能把 GET URL 用作 HEAD。");
   for (const fixed of [false, true]) {
     registry.registerPath({ method: "get", path: fixed ? "/api/v1/servers/{serverId}/releases/{releaseId}/packages" : "/api/v1/servers/{serverId}/packages",
       operationId: fixed ? "refreshReleasePackages" : "getServerPackages", tags: ["Launcher"], security: [],

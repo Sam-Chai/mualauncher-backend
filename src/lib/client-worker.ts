@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
+
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { workerPrisma as prisma } from "./prisma";
 import { locked, type Db } from "./auth";
@@ -67,7 +67,7 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
       previous = manifest.files; previousVersion = release.versionLabel;
       }
     }
-    const source = await storageClient().send(new GetObjectCommand({ Bucket: packagesBucket(), Key: upload.sourceObjectKey }));
+    const source = await storageClient().getObject({ Bucket: packagesBucket(), Key: upload.sourceObjectKey });
     invariant(source.Body && source.ContentLength === Number(upload.size), 422, "源 ZIP 不存在或大小不匹配");
     const hash = createHash("sha256"); let sourceBytes = 0;
     const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) {

@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { HeadObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectCommand, CreateMultipartUploadCommand, UploadPartCopyCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { Db, Actor } from "./auth";
 import { workerPrisma as prisma } from "./prisma";
@@ -15,36 +15,36 @@ import { storageClient, missingObject, casBucket, packagesBucket, casKey, putCas
 const transactionOptions = { maxWait: 10000, timeout: 2 * 60 * 60 * 1000 };
 const trashCasKey = (sha: string) => `recycle/cas/${casKey(sha)}`;
 async function head(bucket: string, key: string) {
-  try { return await storageClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key })); }
+  try { return await storageClient().headObject({ Bucket: bucket, Key: key }); }
   catch (error) { if (missingObject(error)) return null; throw error; }
 }
-async function remove(bucket: string, key: string) { await storageClient().send(new DeleteObjectCommand({ Bucket: bucket, Key: key })); }
+async function remove(bucket: string, key: string) { await storageClient().deleteObject({ Bucket: bucket, Key: key }); }
 
-// ZIPs can exceed S3's 5 GiB single-copy limit. Preserve metadata and pin the source ETag.
+// Each provider has a different single-copy limit. Preserve metadata and pin the source ETag.
 export async function copyStoredObject(bucket: string, source: string, target: string) {
   const found = await head(bucket, source); invariant(found && found.ContentLength !== undefined, 422, "回收文件不存在");
   const s3 = storageClient(); const CopySource = `${encodeURIComponent(bucket)}/${source.split("/").map(encodeURIComponent).join("/")}`;
-  if (found.ContentLength <= 5 * 1024 ** 3) {
-    await s3.send(new CopyObjectCommand({ Bucket: bucket, Key: target, CopySource, CopySourceIfMatch: found.ETag }));
+  if (found.ContentLength <= s3.singleCopyLimitBytes) {
+    await s3.copyObject({ Bucket: bucket, Key: target, CopySource, CopySourceIfMatch: found.ETag });
   } else {
-    const created = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: target, ContentType: found.ContentType, Metadata: found.Metadata }));
+    const created = await s3.createMultipartUpload({ Bucket: bucket, Key: target, ContentType: found.ContentType, Metadata: found.Metadata });
     invariant(created.UploadId, 503, "无法创建回收复制任务");
     const identity = { Bucket: bucket, Key: target, UploadId: created.UploadId }; const parts = [];
     try {
       const partSize = 512 * 1024 ** 2;
       for (let start = 0, number = 1; start < found.ContentLength; start += partSize, number++) {
-        const copied = await s3.send(new UploadPartCopyCommand({ ...identity, PartNumber: number, CopySource, CopySourceIfMatch: found.ETag,
-          CopySourceRange: `bytes=${start}-${Math.min(found.ContentLength - 1, start + partSize - 1)}` }));
+        const copied = await s3.uploadPartCopy({ ...identity, PartNumber: number, CopySource, CopySourceIfMatch: found.ETag,
+          CopySourceRange: `bytes=${start}-${Math.min(found.ContentLength - 1, start + partSize - 1)}` });
         invariant(copied.CopyPartResult?.ETag, 503, "回收复制分片失败"); parts.push({ PartNumber: number, ETag: copied.CopyPartResult.ETag });
       }
-      await s3.send(new CompleteMultipartUploadCommand({ ...identity, MultipartUpload: { Parts: parts } }));
-    } catch (error) { await s3.send(new AbortMultipartUploadCommand(identity)).catch(() => {}); throw error; }
+      await s3.completeMultipartUpload({ ...identity, MultipartUpload: { Parts: parts } });
+    } catch (error) { await s3.abortMultipartUpload(identity).catch(() => {}); throw error; }
   }
   const copied = await head(bucket, target);
   invariant(copied?.ContentLength === found.ContentLength, 422, "回收复制大小校验失败");
 }
 async function verifyCas(key: string, sha: string, size: number) {
-  const object = await storageClient().send(new GetObjectCommand({ Bucket: casBucket(), Key: key }));
+  const object = await storageClient().getObject({ Bucket: casBucket(), Key: key });
   const body = object.Body as (AsyncIterable<Uint8Array> & { destroy?: () => void }) | undefined;
   if (!body || object.ContentLength !== size) body?.destroy?.();
   invariant(object.Body && object.ContentLength === size, 422, "回收站 CAS 大小校验失败");
@@ -144,7 +144,7 @@ export async function maintainRecycleBin(client: PrismaClient = prisma, now = ne
       // Include failed attempts and lease-loss artifacts, not only the winning database pointer.
       let continuation: string | undefined;
       do {
-        const objects = await storageClient().send(new ListObjectsV2Command({ Bucket: packagesBucket(), Prefix: `muapacks/${owner.id}/`, ContinuationToken: continuation }));
+        const objects = await storageClient().listObjects({ Bucket: packagesBucket(), Prefix: `muapacks/${owner.id}/`, ContinuationToken: continuation });
         for (const object of objects.Contents ?? []) if (object.Key) keys.add(object.Key);
         continuation = objects.NextContinuationToken;
       } while (continuation);

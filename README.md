@@ -1,5 +1,7 @@
 # Union Link
 
+对象存储现支持 `.env` 的 `OSS_PROVIDER=minio|aws|s3|ali|tencent|huawei`，三家云服务使用原生 SDK；配置、私有桶／CORS 和部署自检见 [对象存储配置](docs/object-storage.md)。现有 MinIO 的 `S3_*` 配置继续可用。
+
 后台左侧 `API` 打开内嵌 Scalar，OpenAPI 3.1 中英文完整覆盖 66 个操作，可切换 5 个 Launcher 公开接口。[接入与 CI 校验](docs/openapi.md)、[客户端完整流程](docs/api-workflows.md)、[兼容性记录](docs/openapi-changelog.md)；`/openapi.json` 只公开 Launcher，完整 JSON 逐请求检查后台 Cookie。
 
 Union Link 是 MUA 高校联盟启动器后端，使用 Next.js 16、Prisma 7 与 PostgreSQL。后台采用 shadcn/ui dashboard-01、Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod；图表仅使用 Tremor Raw。

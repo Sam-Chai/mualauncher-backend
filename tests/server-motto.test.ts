@@ -1,4 +1,5 @@
 import { fixtureClientId } from "./fixtures/identity";
+import { configureLocalTestStorage } from "./fixtures/local-storage";
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
@@ -10,7 +11,7 @@ import pg from "pg";
 import sharp from "sharp";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { CreateBucketCommand, ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+
 import { AppError } from "../src/lib/errors";
 import { locked, tokenDigest, COOKIE_NAME, type Actor } from "../src/lib/auth";
 import { prisma } from "../src/lib/prisma";
@@ -25,6 +26,7 @@ process.env.DATABASE_SCHEMA = schema;
 const migrationUrl = new URL(process.env.DATABASE_MIGRATION_URL!); migrationUrl.searchParams.delete("options");
 process.env.DATABASE_MIGRATION_URL = migrationUrl.toString();
 process.env.S3_PACKAGES_BUCKET = bucket;
+configureLocalTestStorage();
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: `-c role=mua_owner -c search_path=${schema},pg_catalog`, pipeline: true });
 const client = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
 let created = false, bucketCreated = false;
@@ -37,7 +39,7 @@ before(async () => {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
-  await storageClient().send(new CreateBucketCommand({ Bucket: bucket })); bucketCreated = true;
+  await storageClient().createBucket({ Bucket: bucket }); bucketCreated = true;
   root = await client.account.create({ data: { displayName: "root", isSuperAdmin: true } });
   editor = await client.account.create({ data: { displayName: "editor" } });
   reader = await client.account.create({ data: { displayName: "reader" } });
@@ -61,10 +63,10 @@ after(async () => {
   await pool.end(); await prisma.$disconnect();
   if (bucketCreated) {
     assert.match(bucket, /^mua-motto-test-[a-f0-9]{16}$/);
-    const objects = await storageClient().send(new ListObjectsV2Command({ Bucket: bucket }));
+    const objects = await storageClient().listObjects({ Bucket: bucket });
     assert(!objects.IsTruncated);
-    if (objects.Contents?.length) await storageClient().send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects.Contents.map(object => ({ Key: object.Key! })) } }));
-    await storageClient().send(new DeleteBucketCommand({ Bucket: bucket }));
+    if (objects.Contents?.length) await storageClient().deleteObjects({ Bucket: bucket, Delete: { Objects: objects.Contents.map(object => ({ Key: object.Key! })) } });
+    await storageClient().deleteBucket({ Bucket: bucket });
   }
 });
 
@@ -108,7 +110,7 @@ test("server decodes and crops images, strips metadata and rejects invalid conte
 test("private storage retains source and crop; scoped save and re-crop enforce revision and resource guards", async () => {
   const stored = await storeMottoImage(organizationId, "NPA", await prepareMottoImage(bytes, mottoCrop(610, 400)));
   await locked(db => saveServerMotto(db, editor, "NPA", null, stored), client);
-  const head = await storageClient().send(new HeadObjectCommand({ Bucket: packagesBucket(), Key: stored.key })); assert.equal(head.ContentType, "image/webp");
+  const head = await storageClient().headObject({ Bucket: packagesBucket(), Key: stored.key }); assert.equal(head.ContentType, "image/webp");
   const source = await readServerMotto(stored.key, organizationId, "NPA", "source");
   assert(source.bytes); assert.deepEqual(source.metadata.crop, mottoCrop(610, 400));
   const recropped = await storeMottoImage(organizationId, "NPA", await prepareMottoImage(source.bytes, mottoCrop(610, 400, 0.5), true));

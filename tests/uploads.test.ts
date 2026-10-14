@@ -1,4 +1,5 @@
 import { fixtureClientId } from "./fixtures/identity";
+import { configureLocalTestStorage } from "./fixtures/local-storage";
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
@@ -10,7 +11,7 @@ import pg from "pg";
 import crc32 from "crc-32";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { ListObjectsV2Command, DeleteObjectsCommand, DeleteBucketCommand, ListMultipartUploadsCommand, AbortMultipartUploadCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+
 import { prisma } from "../src/lib/prisma";
 import { locked, tokenDigest, COOKIE_NAME, type Actor, type Db } from "../src/lib/auth";
 import { AppError } from "../src/lib/errors";
@@ -53,6 +54,7 @@ const migrationUrl = new URL(process.env.DATABASE_MIGRATION_URL!); migrationUrl.
 process.env.DATABASE_MIGRATION_URL = migrationUrl.toString();
 process.env.S3_PACKAGES_BUCKET = "mua-upload-test-" + suffix + "-packages"; process.env.S3_CAS_BUCKET = "mua-upload-test-" + suffix + "-cas";
 process.env.S3_ENVIRONMENTS_BUCKET = "mua-upload-test-" + suffix + "-environments";
+configureLocalTestStorage();
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner -c search_path=" + schema + ",pg_catalog", pipeline: true });
 const client = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
 const workerClient = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_WORKER_URL, options: `-c search_path=${schema},pg_catalog`, pipeline: true }, { schema }) });
@@ -141,10 +143,10 @@ after(async () => {
   const s3 = storageClient();
   for (const Bucket of [process.env.S3_PACKAGES_BUCKET!, process.env.S3_CAS_BUCKET!, process.env.S3_ENVIRONMENTS_BUCKET!]) {
     assert.match(Bucket, /^mua-upload-test-[0-9a-f]{16}-(packages|cas|environments)$/);
-    const incomplete = await s3.send(new ListMultipartUploadsCommand({ Bucket }));
-    for (const upload of incomplete.Uploads ?? []) await s3.send(new AbortMultipartUploadCommand({ Bucket, Key: upload.Key, UploadId: upload.UploadId }));
-    for (;;) { const listed = await s3.send(new ListObjectsV2Command({ Bucket })); if (!listed.Contents?.length) break; await s3.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: listed.Contents.map(object => ({ Key: object.Key! })) } })); }
-    await s3.send(new DeleteBucketCommand({ Bucket }));
+    const incomplete = await s3.listMultipartUploads({ Bucket });
+    for (const upload of incomplete.Uploads ?? []) await s3.abortMultipartUpload({ Bucket, Key: upload.Key, UploadId: upload.UploadId });
+    for (;;) { const listed = await s3.listObjects({ Bucket }); if (!listed.Contents?.length) break; await s3.deleteObjects({ Bucket, Delete: { Objects: listed.Contents.map(object => ({ Key: object.Key! })) } }); }
+    await s3.deleteBucket({ Bucket });
   }
   await client.$disconnect(); await workerClient.$disconnect(); await pool.end(); await prisma.$disconnect();
   if (created) { assert.match(schema, /^mua_upload_test_[0-9a-f]{16}$/); const cleanup = new pg.Pool({ connectionString: process.env.DATABASE_MIGRATION_URL, options: "-c role=mua_owner" }); await cleanup.query('DROP SCHEMA "' + schema + '" CASCADE'); await cleanup.query(`DROP SCHEMA IF EXISTS "${schema}_authz" CASCADE`); await cleanup.end(); }
@@ -186,10 +188,10 @@ test("upload size limit covers both formats and API actors, accepts exact limits
         assert.equal(exact.size, cap * UPLOAD_MB);
         await work(db => c.cancelUpload(db, actor, exact.id));
         const count = await client.clientUpload.count();
-        const before = await storageClient().send(new ListMultipartUploadsCommand({ Bucket: packagesBucket() }));
+        const before = await storageClient().listMultipartUploads({ Bucket: packagesBucket() });
         await assert.rejects(work(db => c.createUpload(db, actor, { ...input, packageFormatVersion, size: cap * UPLOAD_MB + 1 })), denied(cap === MAX_UPLOAD_SIZE_MB ? 400 : 413));
         assert.equal(await client.clientUpload.count(), count);
-        const after = await storageClient().send(new ListMultipartUploadsCommand({ Bucket: packagesBucket() }));
+        const after = await storageClient().listMultipartUploads({ Bucket: packagesBucket() });
         assert.deepEqual(after.Uploads ?? [], before.Uploads ?? []);
       }
     }
@@ -342,10 +344,10 @@ test("persistent package jobs require review, retry expired leases, invalidate c
   const completeResponse = await fetch(completeDownload.url); assert.equal(completeResponse.status, 200);
   assert(completeResponse.headers.get("content-disposition")?.includes("filename*=UTF-8''")); assert(completeDownload.fileName.endsWith(".muapack"));
   assert.equal(digest(Buffer.from(await completeResponse.arrayBuffer())), artifacts.full.sha256);
-  const saved = await readObject(artifacts.full.key); await storageClient().send(new DeleteObjectsCommand({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: artifacts.full.key }] } }));
+  const saved = await readObject(artifacts.full.key); await storageClient().deleteObjects({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: artifacts.full.key }] } });
   await assert.rejects(work(db => managementFullPackage(db, admin, identity.clientId, "drafts", draftId, "linux-amd64")), denied(422));
   await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: candidate.packageRevision, activate: false })), denied(422), "missing OSS artifact cannot be published");
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: artifacts.full.key, Body: saved, Metadata: { sha256: artifacts.full.sha256 } }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: artifacts.full.key, Body: saved, Metadata: { sha256: artifacts.full.sha256 } });
   await assert.rejects(client.packageBuild.update({ where: { id: build.id }, data: { targetSha256: "0".repeat(64) } }), "completed build is immutable in the database");
   await work(db => configurePackages(db, admin, identity.clientId, draftId, { platforms: ["linux-amd64", "windows-amd64"] }));
   assert.equal((await client.clientDraft.findUniqueOrThrow({ where: { id: draftId } })).status, "SUBMITTED");
@@ -801,14 +803,14 @@ test("runtime inspection is awaited before the first CAS write; embedded JARs an
     onInspected: async (info, mods) => {
       stages.push("IDENTIFIED"); assert.equal(info.minecraftVersion, "26.1"); assert.equal(info.javaVersion, 25);
       assert.deepEqual(mods, ["versions/test/mods/api.jar"]);
-      assert(!(await storageClient().send(new ListObjectsV2Command({ Bucket: casBucket() }))).Contents?.some(object => object.Key === casKey(digest(mod))), "CAS must wait for the metadata checkpoint");
+      assert(!(await storageClient().listObjects({ Bucket: casBucket() })).Contents?.some(object => object.Key === casKey(digest(mod))), "CAS must wait for the metadata checkpoint");
     },
   });
   assert.deepEqual(stages, ["INSPECTING", "IDENTIFIED"]); assert(parsed);
   assert.equal(parsed.files.find(file => file.path.endsWith("options.txt"))?.policy, "preserve");
   assert.equal(filePolicy("versions/test/saves/world/level.dat"), "preserve");
   assert(!parsed.files.some(file => file.path.includes(".hmcl")));
-  assert((await storageClient().send(new ListObjectsV2Command({ Bucket: casBucket() }))).Contents?.some(object => object.Key === casKey(digest(mod))));
+  assert((await storageClient().listObjects({ Bucket: casBucket() })).Contents?.some(object => object.Key === casKey(digest(mod))));
 });
 
 test("multiple instances pause without CAS, selection enforces ownership and scope, and API submission uses detected runtime", async () => {
@@ -817,11 +819,11 @@ test("multiple instances pause without CAS, selection enforces ownership and sco
   const bytes = rawZip([{ name: "versions/pcl/pcl.json", data: Buffer.from(JSON.stringify({ id: "pcl", clientVersion: "1.21.1", javaVersion: { majorVersion: 21 } })) },
     { name: "versions/hmcl/hmcl.json", data: Buffer.from(JSON.stringify({ id: "hmcl", patches: [{ id: "game", version: "26.1" }] })) },
     { name: "versions/pcl/mods/old.jar", data: randomBytes(81) }, { name: "versions/hmcl/mods/new.jar", data: randomBytes(82) }]);
-  const before = (await storageClient().send(new ListObjectsV2Command({ Bucket: casBucket() }))).KeyCount;
+  const before = (await storageClient().listObjects({ Bucket: casBucket() })).KeyCount;
   const upload = await prepare(bytes, root, identity.clientId);
   assert.equal(upload.status, "QUEUED"); assert.equal(upload.processingPhase, "SELECT_INSTANCE"); assert.equal(upload.detectedInfo?.candidates.length, 2);
   assert.equal(await runUploadWorker(workerClient), false, "paused tasks must not be repeatedly claimed");
-  assert.equal((await storageClient().send(new ListObjectsV2Command({ Bucket: casBucket() }))).KeyCount, before);
+  assert.equal((await storageClient().listObjects({ Bucket: casBucket() })).KeyCount, before);
   await assert.rejects(work(db => c.selectUploadInstance(db, admin, upload.id, { instanceId: "hmcl" })), denied(404));
   await assert.rejects(work(db => c.selectUploadInstance(db, root, upload.id, { instanceId: "outside" })), denied(400));
   await work(db => c.selectUploadInstance(db, root, upload.id, { instanceId: "hmcl" }));
@@ -871,7 +873,7 @@ test("Worker persists the detected runtime for polling while CAS is still proces
 });
 
 async function objectExists(bucket: string, key: string) {
-  try { await storageClient().send(new HeadObjectCommand({ Bucket: bucket, Key: key })); return true; }
+  try { await storageClient().headObject({ Bucket: bucket, Key: key }); return true; }
   catch (error) { if (missingObject(error)) return false; throw error; }
 }
 async function indexedMaintenance(now = new Date()) {
@@ -966,7 +968,7 @@ test("archived published clients can be deleted while immutable history, shared 
   await assert.rejects(work(db => c.deleteClient(db, admin, identity.clientId)), denied(409));
   await assert.rejects(client.client.update({ where: { id: fixtureClientId(identity.clientId) }, data: { deletedAt: new Date() } }));
   const history = await client.clientRelease.findMany({ where: { clientId: fixtureClientId(identity.clientId) }, orderBy: { id: "asc" } });
-  const envBefore = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
+  const envBefore = await storageClient().listObjects({ Bucket: environmentsBucket() });
   const keys = new Set(history.map(release => release.manifestObjectKey));
   for (const build of builds) {
     keys.add(build.targetObjectKey!); const artifacts = packageArtifactsSchema.parse(build.artifacts);
@@ -998,7 +1000,7 @@ test("archived published clients can be deleted while immutable history, shared 
   assert.equal(await objectExists(casBucket(), casKey(sha)), false);
   assert.equal(await objectExists(casBucket(), "recycle/cas/" + casKey(sha)), true);
   assert.equal(await objectExists(casBucket(), casKey(digest(shared))), true);
-  assert.deepEqual((await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }))).Contents, envBefore.Contents);
+  assert.deepEqual((await storageClient().listObjects({ Bucket: environmentsBucket() })).Contents, envBefore.Contents);
   const replacement = await newRecycleClient(identity.name); assert.notEqual(replacement.clientId, identity.clientId);
   const reused = await prepare(zip, admin, replacement.clientId); assert.equal(reused.statistics?.newDataSize, 0);
   await indexedMaintenance(new Date(now.getTime() + 8 * 86400000));
@@ -1033,7 +1035,7 @@ test("corrupted recycled CAS is rejected; settings require MUA superadmin and dr
   const zip = rawZip([{ name: "mods/corrupt.jar", data: bytes }]); await prepare(zip, admin, a.clientId);
   await removeClient(a.clientId); const now = new Date(); await indexedMaintenance(now);
   const trash = "recycle/cas/" + casKey(sha);
-  await storageClient().send(new PutObjectCommand({ Bucket: casBucket(), Key: trash, Body: Buffer.alloc(bytes.length), Metadata: { sha256: sha } }));
+  await storageClient().putObject({ Bucket: casBucket(), Key: trash, Body: Buffer.alloc(bytes.length), Metadata: { sha256: sha } });
   const b = await newRecycleClient("Corrupt restoration"); const failed = await prepare(zip, admin, b.clientId);
   assert.equal(failed.status, "FAILED"); assert(failed.error?.includes("SHA-256")); assert.equal(await objectExists(casBucket(), casKey(sha)), false);
   await work(db => updateRecycleSettings(db, root, { recycleRetentionDays: 1 }));
@@ -1062,12 +1064,12 @@ test("invalid legacy inventories stop recycling; reconciliation catches late com
   const zip = rawZip([{ name: "mods/legacy.jar", data: bytes }]); const upload = await prepare(zip, admin, legacy.clientId);
   const saved = await client.clientUpload.findUniqueOrThrow({ where: { id: upload.id } }); const originalIndex = await readObject(saved.filesObjectKey!);
   await removeClient(legacy.clientId);
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: saved.filesObjectKey!, Body: Buffer.from("{}") }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: saved.filesObjectKey!, Body: Buffer.from("{}") });
   await assert.rejects(indexedMaintenance(), denied(422)); assert.equal(await objectExists(casBucket(), casKey(sha)), true);
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: saved.filesObjectKey!, Body: originalIndex }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: saved.filesObjectKey!, Body: originalIndex });
   await indexedMaintenance(); assert.equal(await objectExists(casBucket(), "recycle/cas/" + casKey(sha)), true);
   // Simulate an S3 completion finishing just after the deletion was first reconciled.
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: saved.sourceObjectKey, Body: zip }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: saved.sourceObjectKey, Body: zip });
   for (let i = 0; i < 10 && await objectExists(packagesBucket(), saved.sourceObjectKey); i++) await maintainRecycleBin(workerClient);
   assert.equal(await objectExists(packagesBucket(), saved.sourceObjectKey), false);
   assert.deepEqual(await readObject(`recycle/clients/${legacy.clientId}/${saved.sourceObjectKey}`), zip);
@@ -1242,7 +1244,7 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 full pipeline", serverId: "VTF", publicationRevision: 0, expectedClientId: fixtureClientId(null) }));
   const upload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), admin, identity.clientId, true, "recipe.mrpack", null, 2);
   assert.equal(upload.status, "READY", upload.error ?? "import failed");
-  const environmentsBefore = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
+  const environmentsBefore = await storageClient().listObjects({ Bucket: environmentsBucket() });
   const importDistribution = await recipeDistributionStats(client, admin, "uploads", upload.id);
   assert.equal(importDistribution.fullPackageBytes, null); assert.equal(importDistribution.remoteFiles, 4);
   await assert.rejects(recipeDistributionStats(client, admin, "drafts", upload.id, "NPA"), denied(404));
@@ -1298,7 +1300,7 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   assert.deepEqual(Buffer.from(await ranged.arrayBuffer()), bytes.subarray(10, 30));
   assert.equal((await fetch(pinned.url, { headers: { "If-Match": '"incorrect-etag"' } })).status, 412);
   await assert.rejects(publicPackage(client, "VTF", null, null, "2", null, released.releaseId, "0".repeat(64)), denied(409));
-  const environmentsAfter = await storageClient().send(new ListObjectsV2Command({ Bucket: environmentsBucket() }));
+  const environmentsAfter = await storageClient().listObjects({ Bucket: environmentsBucket() });
   assert.deepEqual(environmentsAfter.Contents, environmentsBefore.Contents, "v2 never creates cached runtime objects");
   await assert.rejects(client.clientRelease.update({ where: { id: released.releaseId }, data: { manifestSha256: "0".repeat(64) } }));
   await work(db => c.archiveClient(db, admin, identity.clientId, { archived: true }));
@@ -1327,10 +1329,10 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   const base = await client.clientRelease.findUniqueOrThrow({ where: { id: first } }), baseBytes = await readObject(base.manifestObjectKey);
   const draftId = await submit(source, "1.1.0", ["windows-amd64", "linux-amd64"]);
   // A corrupted published baseline must fail, rather than silently signing an unrelated full/update pair.
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: Buffer.from("{}") }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: Buffer.from("{}") });
   await runPackageWorker(workerClient, neverResolve);
   let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "FAILED"); assert.match(build.error!, /基准.*摘要/);
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: baseBytes, Metadata: { sha256: base.manifestSha256 } }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: baseBytes, Metadata: { sha256: base.manifestSha256 } });
   await work(db => retryPackages(db, admin, identity.clientId, draftId)); await runPackageWorker(workerClient, neverResolve);
   build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "delta build failed");
   const artifacts = packageArtifactsSchema.parse(build.artifacts); assert(artifacts.update); assert.equal(artifacts.update.baseReleaseId, base.id); assert.equal(artifacts.update.baseManifestSha256, base.manifestSha256);
@@ -1351,9 +1353,9 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   assert.equal(distribution.knownNetworkBytes, artifacts.update.size + distribution.remoteDownloadBytes);
   const before = await publicPackage(client, "VTD", "windows-amd64", null, "2"); assert.equal(before.releaseId, first, "built candidates remain private until published");
   const removed = artifacts.update.key;
-  await storageClient().send(new DeleteObjectsCommand({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: removed }] } }));
+  await storageClient().deleteObjects({ Bucket: packagesBucket(), Delete: { Objects: [{ Key: removed }] } });
   await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(422));
-  await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: removed, Body: updateBytes, Metadata: { sha256: artifacts.update.sha256 } }));
+  await storageClient().putObject({ Bucket: packagesBucket(), Key: removed, Body: updateBytes, Metadata: { sha256: artifacts.update.sha256 } });
   await work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   const chosen = await publicPackage(client, "VTD", "windows-amd64", first, "1,2", base.manifestSha256);
   assert.equal(chosen.packageType, "update"); assert.equal(chosen.baseReleaseId, first); assert.equal(chosen.baseManifestSha256, base.manifestSha256);

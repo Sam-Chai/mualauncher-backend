@@ -1,7 +1,7 @@
 import "server-only";
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+
 import type { Actor, Db } from "./auth";
 import { AppError, invariant } from "./errors";
 import { requireServer } from "./rbac";
@@ -38,8 +38,8 @@ export async function storeMottoImage(organizationId: string, serverId: string, 
   // Separate immutable versions preserve the source for re-cropping and avoid overwriting a concurrent editor.
   for (const [file, bytes, contentType] of [["source.webp", prepared.source, "image/webp"], ["image.webp", prepared.image, "image/webp"],
     ["metadata.json", Buffer.from(JSON.stringify(prepared.metadata)), "application/json"]] as const) {
-    await storageClient().send(new PutObjectCommand({ Bucket: packagesBucket(), Key: `${directory}/${file}`, Body: bytes, ContentType: contentType,
-      Metadata: { sha256: digest(bytes) }, ChecksumSHA256: Buffer.from(digest(bytes), "hex").toString("base64"), IfNoneMatch: "*" }));
+    await storageClient().putObject({ Bucket: packagesBucket(), Key: `${directory}/${file}`, Body: bytes, ContentType: contentType,
+      Metadata: { sha256: digest(bytes) }, ChecksumSHA256: Buffer.from(digest(bytes), "hex").toString("base64"), IfNoneMatch: "*" });
   }
   return { key: `${directory}/image.webp`, metadata: prepared.metadata };
 }

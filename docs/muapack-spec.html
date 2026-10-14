@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="MUA muapack v1 and v2 bilingual specification: containers, manifests, signing, full and incremental distribution, and installation semantics.">
-  <title>MUA Package Specification 1 &amp; 2 · MUA 整合包规范</title>
+  <meta name="description" content="Union Link 的 .muapack 格式规范，涵盖 v1 与 v2 的容器、清单、签名、完整包、更新包和安装要求。">
+  <title>Union Link · .muapack 格式规范</title>
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -16,13 +16,11 @@
     a:focus-visible { outline: 2px solid #003c99; outline-offset: 3px; }
     h1, h2, h3, h4 { line-height: 1.35; font-weight: bold; scroll-margin-top: 1rem; }
     h1 { font-size: 2rem; margin: 1.4rem 0 .7rem; }
-    h1 span { display: block; font-size: .8em; margin-top: .3rem; }
     h2 { font-size: 1.5rem; margin: 2.8rem 0 1rem; border-bottom: 1px solid #bbb; padding-bottom: .35rem; }
     h3 { font-size: 1.15rem; margin: 1.8rem 0 .65rem; }
     p { margin: .6rem 0; }
-    .en { color: #383838; margin-top: .2rem; }
-    .pair { margin: 1rem 0; }
-    .pair p { margin-top: .2rem; margin-bottom: .2rem; }
+    .paragraph { margin: 1rem 0; }
+    .paragraph p { margin-top: .2rem; margin-bottom: .2rem; }
     .small, nav, footer { font-size: .88em; }
     .subtitle { color: #444; }
     hr { border: 0; border-top: 1px solid #999; margin: 1.5rem 0; }
@@ -35,7 +33,6 @@
     caption { text-align: left; font-weight: bold; margin-bottom: .5rem; }
     th, td { border: 1px solid #aaa; padding: .55rem .65rem; text-align: left; vertical-align: top; }
     th { background: #ededed; }
-    td .en { display: block; margin-top: .3rem; }
     td:first-child > code { white-space: nowrap; }
     dt { font-weight: bold; margin-top: .9rem; }
     dd { margin: .3rem 0 .9rem 1.5rem; }
@@ -53,7 +50,7 @@
     }
     @media print {
       body { max-width: none; margin: 0; padding: 0; font-size: 10pt; }
-      h2, h3 { break-after: avoid; } tr, .pair { break-inside: avoid; }
+      h2, h3 { break-after: avoid; } tr, .paragraph { break-inside: avoid; }
       a, a:visited { color: black; } pre { white-space: pre-wrap; overflow-wrap: anywhere; }
       nav, .back { display: none; } .table-wrap { overflow: visible; }
     }
@@ -61,364 +58,369 @@
   </style>
 </head>
 <body>
-<nav aria-label="Document navigation"><a href="#top">Union Link</a> : <a href="#contents">目录 / Contents</a> : <a href="#v1">/spec/1</a> : <a href="#v2">/spec/2</a> : <a href="#references">参考 / References</a></nav>
+<nav aria-label="文档导航"><a href="#top">Union Link</a> : <a href="#contents">目录</a> : <a href="#v1">v1</a> : <a href="#v2">v2</a> : <a href="#references">参考</a></nav>
 <hr>
 <header id="top">
-  <h1><span lang="en">MUA Package Specification 1 &amp; 2</span><span>MUA 整合包规范 1 与 2</span></h1>
-  <p class="subtitle">协议快照：2026-10-12 · 中文 / English · 文件扩展名：<code>.muapack</code><br><span lang="en">Protocol snapshot: 12 October 2026 · Chinese / English · File extension: <code>.muapack</code></span></p>
-  <div class="pair"><p>本文件将现有 v1、v2 协议文档与当前实现契约整理为统一规范。两种格式并存；v2 不废弃 v1。本快照不是新的协议修订，不改变既有已签名内容。</p><p class="en" lang="en">This document consolidates the existing v1 and v2 documents and current implementation contracts into one specification. Both formats coexist; v2 does not retire v1. This snapshot is not a new protocol revision and does not alter previously signed content.</p></div>
+  <h1>.muapack 格式规范</h1>
+  <p class="subtitle">Union Link · v1 与 v2 · 文档更新：2026-10-14 · 文件扩展名：<code>.muapack</code></p>
+  <div class="paragraph"><p>本文档说明 Union Link 的 .muapack v1 与 v2 格式，包括容器结构、文件清单、签名、分发和安装要求。内容已对齐 2026-10-14 的首发契约。两种格式均保留；本次整理不增加协议修订，也不改写已签名内容。</p></div>
 </header>
 
 <section id="contents" class="toc" aria-labelledby="contents-title">
-<h2 id="contents-title">目录 / <span lang="en">Contents</span></h2>
+<h2 id="contents-title">目录</h2>
 <ol>
-  <li><a href="#introduction">引言与规范用语 / Introduction and requirement language</a></li>
-  <li><a href="#types">基础类型、身份与平台 / Data types, identity and platforms</a></li>
-  <li><a href="#syntax">公共编码与容器 / Common encoding and container syntax</a></li>
-  <li><a href="#v1">muapack v1</a><ol><li><a href="#v1-layout">容器布局 / Layout</a></li><li><a href="#v1-metadata">包元数据 / Package metadata</a></li><li><a href="#v1-target">目标清单与文件 / Target manifest and files</a></li><li><a href="#v1-environment">环境清单 / Environment manifests</a></li></ol></li>
-  <li><a href="#v2">muapack v2</a><ol><li><a href="#v2-layout">容器布局 / Layout</a></li><li><a href="#v2-metadata">包元数据 / Package metadata</a></li><li><a href="#v2-target">配方清单与文件 / Recipe manifest and files</a></li><li><a href="#v2-index">Modrinth 索引 / Modrinth index</a></li><li><a href="#v2-runtime">端侧环境解析 / Launcher runtime resolution</a></li></ol></li>
-  <li><a href="#launch">启动配置 / Launch configuration</a></li>
-  <li><a href="#updates">整包、增量与安装语义 / Full packages, deltas and installation</a></li>
-  <li><a href="#signing">摘要、签名与信任 / Digests, signatures and trust</a></li>
-  <li><a href="#distribution">分发 API / Distribution API</a></li>
-  <li><a href="#validation">安全与符合性校验 / Security and conformance validation</a></li>
-  <li><a href="#examples">示例与校验工具 / Examples and validation tools</a></li>
-  <li><a href="#status">实现范围 / Implementation status</a></li>
-  <li><a href="#references">参考与实现契约 / References and implementation contracts</a></li>
+  <li><a href="#introduction">引言与规范用语</a></li>
+  <li><a href="#types">基础类型、身份与平台</a></li>
+  <li><a href="#syntax">公共编码与容器</a></li>
+  <li><a href="#v1">muapack v1</a><ol><li><a href="#v1-layout">容器布局</a></li><li><a href="#v1-metadata">包元数据</a></li><li><a href="#v1-target">目标清单与文件</a></li><li><a href="#v1-environment">环境清单</a></li></ol></li>
+  <li><a href="#v2">muapack v2</a><ol><li><a href="#v2-layout">容器布局</a></li><li><a href="#v2-metadata">包元数据</a></li><li><a href="#v2-target">配方清单与文件</a></li><li><a href="#v2-index">Modrinth 索引</a></li><li><a href="#v2-runtime">启动器环境解析</a></li></ol></li>
+  <li><a href="#launch">启动配置</a></li>
+  <li><a href="#updates">完整包、更新包与安装要求</a></li>
+  <li><a href="#signing">摘要、签名与信任</a></li>
+  <li><a href="#distribution">分发 API</a></li>
+  <li><a href="#validation">安全与符合性校验</a></li>
+  <li><a href="#examples">示例与校验工具</a></li>
+  <li><a href="#status">实现范围</a></li>
+  <li><a href="#references">参考与实现契约</a></li>
 </ol>
 </section>
 
 <section id="introduction">
-<h2>1. 引言与规范用语 / <span lang="en">Introduction and requirement language</span></h2>
-<div class="pair"><p><code>.muapack</code> 是 MUA 管理平台面向 Minecraft Launcher 的签名客户端发布容器。每个包明确表示一个完整目标发布，或从一个明确基准发布到目标发布的更新。发布内容、客户端身份与服务器绑定相互独立。</p><p class="en" lang="en"><code>.muapack</code> is a signed client-release container produced by the MUA management platform for Minecraft launchers. A package represents either a complete target release or an update from one explicit base release to that target. Release content, client identity and server binding are separate concepts.</p></div>
-<div class="table-wrap"><table><caption>两种格式的职责 / <span lang="en">Responsibilities of the two formats</span></caption><thead><tr><th>项目 / Item</th><th>v1</th><th>v2</th></tr></thead><tbody>
-<tr><td>本地配置、资源与模组 / Local configuration, resources and mods</td><td>包内文件字节<span class="en" lang="en">File bytes in the package</span></td><td>包内 <code>overrides/</code> 文件字节<span class="en" lang="en">File bytes under <code>overrides/</code></span></td></tr>
-<tr><td>mrpack 远程文件 / Remote mrpack files</td><td>Worker 下载、校验并打包<span class="en" lang="en">Downloaded, verified and packaged by the Worker</span></td><td>只携带下载声明；Launcher 下载与校验<span class="en" lang="en">Declarations only; downloaded and verified by the Launcher</span></td></tr>
-<tr><td>Minecraft / Java / loader</td><td>Worker 准备精确环境，按平台打包<span class="en" lang="en">Exact environments prepared by the Worker and packaged per platform</span></td><td>声明要求；Launcher 解析、缓存与安装<span class="en" lang="en">Requirements resolved, cached and installed by the Launcher</span></td></tr>
-<tr><td>完整包与更新包 / Full and update packages</td><td>支持 / Supported</td><td>支持 / Supported</td></tr>
-<tr><td>审核、签名和发布 / Review, signing and publication</td><td colspan="2">同一发布体系；已发布内容不可原地编辑<span class="en" lang="en">The same release system; published content cannot be edited in place</span></td></tr>
+<h2>1. 引言与规范用语</h2>
+<div class="paragraph"><p><code>.muapack</code> 是 Union Link 面向 Minecraft 启动器的带签名的客户端发布包。每个包明确表示一个完整目标发布，或从一个明确基准发布到目标发布的更新。发布内容、客户端身份与服务器绑定相互独立。</p></div>
+<div class="table-wrap"><table><caption>两种格式的职责</caption><thead><tr><th>项目</th><th>v1</th><th>v2</th></tr></thead><tbody>
+<tr><td>本地配置、资源与模组</td><td>包内文件字节</td><td>包内 <code>overrides/</code> 下的本地文件字节</td></tr>
+<tr><td>mrpack 远程文件</td><td>Worker 下载、校验并打包</td><td>只携带下载声明；启动器下载与校验</td></tr>
+<tr><td>Minecraft、Java 与加载器</td><td>Worker 准备精确环境，按平台打包</td><td>声明要求；启动器解析、缓存与安装</td></tr>
+<tr><td>完整包与更新包</td><td>支持</td><td>支持</td></tr>
+<tr><td>审核、签名和发布</td><td colspan="2">同一发布体系；已发布内容不可原地编辑</td></tr>
 </tbody></table></div>
-<h3>1.1 规范词汇 / <span lang="en">Requirement vocabulary</span></h3>
-<div class="pair"><p><strong>必须（MUST）</strong>和<strong>不得（MUST NOT）</strong>表示符合协议的必要条件；<strong>应当（SHOULD）</strong>表示除非存在明确理由，否则应遵循的建议；<strong>可以（MAY）</strong>表示可选行为。协议字段、枚举和路径均区分大小写，除非明确说明。中英文描述表达同一规则，JSON 标识符不翻译。</p><p class="en" lang="en"><strong>MUST</strong> and <strong>MUST NOT</strong> express requirements for conformance. <strong>SHOULD</strong> expresses a recommendation that should be followed unless there is a specific reason not to. <strong>MAY</strong> expresses optional behavior. Fields, enumerations and paths are case-sensitive unless stated otherwise. Chinese and English describe the same rules; JSON identifiers are not translated.</p></div>
-<div class="note"><p><strong>实现边界：</strong>下文对 Launcher 的要求是安装器的实现契约，不表示当前 Launcher 已完成安装、增量恢复、optional 选择或真实游戏启动验收。</p><p class="en" lang="en"><strong>Implementation boundary:</strong> requirements for the Launcher below are an installer contract, not a claim that installation, delta recovery, optional selection or actual game-launch acceptance is already implemented.</p></div>
-<h3>1.2 术语 / <span lang="en">Terminology</span></h3>
+<h3>1.1 规范词汇</h3>
+<div class="paragraph"><p><strong>必须</strong>和<strong>不得</strong>表示符合协议的必要条件；<strong>应当</strong>表示除非存在明确理由，否则应遵循的建议；<strong>可以</strong>表示可选行为。协议字段、枚举和路径均区分大小写，除非明确说明。字段名、枚举值、路径及代码示例保留协议原文。</p></div>
+<div class="note"><p><strong>实现边界：</strong>下文对启动器的要求是安装器的实现契约，不表示当前启动器已完成安装、更新恢复、可选文件选择或真实游戏启动验收。</p></div>
+<h3>1.2 术语</h3>
 <dl>
-<dt>Release / 发布</dt><dd>不可变的客户端版本事实，由 <code>releaseId</code> 标识；版本标签不是内容摘要。<span class="en" lang="en">An immutable client-version record identified by <code>releaseId</code>; its version label is not a content digest.</span></dd>
-<dt>Target manifest / 目标清单</dt><dd>目标发布的完整文件及环境描述，整包与更新包均必须携带。<span class="en" lang="en">The complete target inventory and runtime description, required in both full and update packages.</span></dd>
-<dt>Base manifest / 基准清单</dt><dd>更新包对应的完整旧发布描述，以身份及精确字节摘要绑定。<span class="en" lang="en">The complete prior release description for an update, bound by identity and the digest of its exact bytes.</span></dd>
-<dt>Payload / 载荷</dt><dd>本包实际携带的文件原始字节；不包含仅声明的 v2 远程文件。<span class="en" lang="en">The file bytes physically carried by this package; declared v2 remote files are not payload.</span></dd>
-<dt>CAS / 内容寻址存储</dt><dd>后台按已校验 SHA-256 复用相同文件字节。去重不合并客户端身份、权限或发布历史。<span class="en" lang="en">Backend storage that reuses identical bytes by verified SHA-256. Deduplication does not merge client identity, authorization or release history.</span></dd>
+<dt>启动器</dt><dd>面向玩家的 Minecraft 客户端安装与启动程序；本文规定其应实现的行为，实际完成范围见第 12 节。</dd>
+<dt>Worker</dt><dd>后台独立执行导入、校验和组包任务的进程。</dd>
+<dt>完整包与更新包</dt><dd>完整包的 packageType 为 full；更新包为 update，固定基准发布与目标发布。更新包可用与否取决于实际基准，而非版本标签相邻。</dd>
+<dt>发布</dt><dd>不可变的客户端版本事实，由 <code>releaseId</code> 标识；版本标签不是内容摘要。</dd>
+<dt>目标清单</dt><dd>目标发布的完整文件及环境描述，完整包与更新包均必须携带。</dd>
+<dt>基准清单</dt><dd>更新包对应的完整旧发布描述，以身份及精确字节摘要绑定。</dd>
+<dt>载荷</dt><dd>本包实际携带的文件原始字节；不包含仅声明的 v2 远程文件。</dd>
+<dt>内容寻址存储（CAS）</dt><dd>后台按已校验 SHA-256 复用相同文件字节。去重不合并客户端身份、权限或发布历史。</dd>
 </dl>
 </section>
 
 <section id="types">
-<h2>2. 基础类型、身份与平台 / <span lang="en">Data types, identity and platforms</span></h2>
-<h3>2.1 基础类型 / <span lang="en">Atomic data types</span></h3>
-<div class="table-wrap"><table><thead><tr><th>类型 / Type</th><th>表示与约束 / Representation and constraints</th></tr></thead><tbody>
-<tr><td><code>Integer</code></td><td>JSON 安全整数；无浮点数。大小为非负字节数。MiB = 2<sup>20</sup> 字节，GiB = 2<sup>30</sup> 字节。<span class="en" lang="en">A JSON safe integer; no floating-point values. Sizes are nonnegative byte counts. MiB = 2<sup>20</sup> bytes and GiB = 2<sup>30</sup> bytes.</span></td></tr>
-<tr><td><code>Boolean / Null</code></td><td>JSON <code>true</code>、<code>false</code>、<code>null</code>；必需 nullable 字段不能以缺省代替 null。<span class="en" lang="en">JSON <code>true</code>, <code>false</code> and <code>null</code>; a required nullable field cannot be omitted in place of null.</span></td></tr>
-<tr><td><code>Text</code></td><td>有效 Unicode 字符串；通用身份文本 1–200 个 UTF-16 代码单元，不含 U+0000–001F 或 U+007F。<span class="en" lang="en">A valid Unicode string; general identity text is 1–200 UTF-16 code units, excluding U+0000–001F and U+007F.</span></td></tr>
-<tr><td><code>UUID</code></td><td>organizationId、releaseId 和 clientId 均为 UUID 字符串。<span class="en" lang="en">organizationId, releaseId and clientId are UUID strings.</span></td></tr>
-<tr><td><code>SHA-256 / SHA-1 / SHA-512</code></td><td>分别为 64 / 40 / 128 个小写十六进制字符。摘要针对原始文件字节，不针对压缩字节。<span class="en" lang="en">Respectively 64 / 40 / 128 lowercase hexadecimal characters. File digests cover raw file bytes, not compressed bytes.</span></td></tr>
-<tr><td><code>Path</code></td><td>1–1000 个 UTF-16 代码单元的 NFC 安全相对路径，分隔符为 <code>/</code>，规则见第 3 节。<span class="en" lang="en">An NFC safe relative path of 1–1000 UTF-16 code units using <code>/</code>; see Section 3.</span></td></tr>
-<tr><td><code>Signature</code></td><td>64 字节 Ed25519 签名的规范 Base64，88 字符并以 <code>==</code> 结尾。<span class="en" lang="en">Canonical Base64 of a 64-byte Ed25519 signature: 88 characters ending in <code>==</code>.</span></td></tr>
+<h2>2. 基础类型、身份与平台</h2>
+<h3>2.1 基础类型</h3>
+<div class="table-wrap"><table><thead><tr><th>类型</th><th>表示与约束</th></tr></thead><tbody>
+<tr><td>整数</td><td>JSON 安全整数；无浮点数。大小为非负字节数。MiB = 2<sup>20</sup> 字节，GiB = 2<sup>30</sup> 字节。</td></tr>
+<tr><td>布尔值／空值</td><td>JSON <code>true</code>、<code>false</code>、<code>null</code>；允许为空的必需字段也不得省略；空值须明确写为 null。</td></tr>
+<tr><td>文本（Text）</td><td>有效 Unicode 字符串；通用身份文本 1–200 个 UTF-16 代码单元，不含 U+0000–001F 或 U+007F。</td></tr>
+<tr><td><code>UUID</code></td><td>organizationId、releaseId 和 clientId 均为 UUID 字符串。</td></tr>
+<tr><td><code>SHA-256 / SHA-1 / SHA-512</code></td><td>分别为 64／40／128 个小写十六进制字符。摘要针对原始文件字节，不针对压缩字节。</td></tr>
+<tr><td>路径（Path）</td><td>1–1000 个 UTF-16 代码单元的 NFC 安全相对路径，分隔符为 <code>/</code>，规则见第 3 节。</td></tr>
+<tr><td>签名</td><td>64 字节 Ed25519 签名的规范 Base64，88 字符并以 <code>==</code> 结尾。</td></tr>
 </tbody></table></div>
-<h3>2.2 发布身份 / <span lang="en">Release identity</span></h3>
-<div class="table-wrap"><table><caption><code>release</code> 对象 / <span lang="en">The <code>release</code> object</span></caption><thead><tr><th>字段 / Field</th><th>类型 / Type</th><th>含义 / Meaning</th></tr></thead><tbody>
-<tr><td><code>organizationId</code></td><td>UUID</td><td>组织内部身份 / Internal organization identity</td></tr>
-<tr><td><code>clientId</code></td><td>Text</td><td>客户端身份，不由名称或服务器别名推导 / Client identity, not derived from a name or server alias</td></tr>
-<tr><td><code>releaseId</code></td><td>UUID</td><td>本次不可变发布 / This immutable release</td></tr>
-<tr><td><code>version</code></td><td>Text</td><td>管理员提交的客户端版本标签，不等于 MC 或 loader 版本 / The administrator's client-version label, distinct from MC or loader versions</td></tr>
-<tr><td><code>name</code></td><td>Text</td><td>客户端名称 / Client name</td></tr>
-<tr><td><code>summary</code></td><td>String, 1–200</td><td>提交标题 / Submission title</td></tr>
-<tr><td><code>description</code></td><td>String, 0–20000</td><td>Markdown 说明；展示时必须安全渲染 / Markdown description; display MUST be rendered safely</td></tr>
-<tr><td><code>sourceSha256</code></td><td>SHA-256</td><td>原始上传包摘要，不是目标包摘要 / Source-upload digest, not the target-package digest</td></tr>
-<tr><td><code>contentRevision</code></td><td>Positive integer</td><td>构建与审核固定的内容修订 / The content revision locked for build and review</td></tr>
+<h3>2.2 发布身份</h3>
+<div class="table-wrap"><table><caption><code>release</code> 对象</caption><thead><tr><th>字段</th><th>类型</th><th>含义</th></tr></thead><tbody>
+<tr><td><code>organizationId</code></td><td>UUID</td><td>组织内部身份</td></tr>
+<tr><td><code>clientId</code></td><td>UUID</td><td>客户端身份，不由名称或服务器别名推导</td></tr>
+<tr><td><code>releaseId</code></td><td>UUID</td><td>本次不可变发布</td></tr>
+<tr><td><code>version</code></td><td>文本（Text）</td><td>管理员提交的客户端版本标签，不等于 Minecraft 或加载器版本</td></tr>
+<tr><td><code>name</code></td><td>文本（Text）</td><td>客户端名称</td></tr>
+<tr><td><code>summary</code></td><td>字符串，1–200 个 UTF-16 代码单元</td><td>提交标题</td></tr>
+<tr><td><code>description</code></td><td>字符串，0–20000 个 UTF-16 代码单元</td><td>Markdown 说明；展示时必须安全渲染</td></tr>
+<tr><td><code>sourceSha256</code></td><td>SHA-256</td><td>原始上传包的 SHA-256，区别于目标 .muapack 的 SHA-256</td></tr>
+<tr><td><code>contentRevision</code></td><td>正整数</td><td>构建与审核固定的内容修订</td></tr>
 </tbody></table></div>
-<div class="pair"><p>包中的发布引用 <code>ReleaseRef</code> 只包含 <code>{organizationId, clientId, releaseId, version, manifestSha256}</code>。<code>manifestSha256</code> 是对应完整清单精确字节的 SHA-256。服务器的 3–5 位纯英文 MUA server ID 与别名由目录／绑定 API 表达，不固定写入包清单；绑定变更不得改写发布签名。</p><p class="en" lang="en">A package <code>ReleaseRef</code> contains only <code>{organizationId, clientId, releaseId, version, manifestSha256}</code>. <code>manifestSha256</code> is SHA-256 of the corresponding complete manifest's exact bytes. The 3–5-letter MUA server ID and display alias are expressed by catalog and binding APIs, not fixed in the package manifest; rebinding MUST NOT rewrite release signatures.</p></div>
-<h3>2.3 平台 / <span lang="en">Platforms</span></h3>
+<div class="paragraph"><p>包中的发布引用 <code>ReleaseRef</code> 只包含 <code>{organizationId, clientId, releaseId, version, manifestSha256}</code>。<code>manifestSha256</code> 是对应完整清单精确字节的 SHA-256。服务器的 3–5 位纯英文 MUA 服务器 ID 与别名由目录／绑定 API 表达，不固定写入包清单；绑定变更不得改写发布签名。</p></div>
+<h3>2.3 平台</h3>
 <pre><code>windows-amd64
 windows-aarch64
 linux-amd64
 linux-aarch64
 macos-amd64
 macos-aarch64</code></pre>
-<div class="pair"><p>六平台枚举用于 v1。v2 protocolRevision:2 不声明发布平台集合，环境由 Launcher 按本机系统和架构解析。</p><p class="en" lang="en">The six-platform enum applies to v1. v2 protocolRevision:2 has no publication platform list; the Launcher resolves runtime for the local system and architecture.</p></div>
-<div class="note"><p>v1 默认五平台，Linux ARM 控件保留。v2 无架构选择器或平台声明，universal 仅为内部任务标识。首发只接受 protocolRevision:2；环境支持由 Launcher 判断。</p><p class="en" lang="en">v1 defaults to five platforms and retains Linux ARM controls. v2 has no architecture selector or platform declaration; universal is an internal task identity. The first release accepts only protocolRevision:2; runtime support is evaluated by the Launcher.</p></div>
-<h3>2.4 相互独立的版本字段 / <span lang="en">Independent version fields</span></h3>
-<div class="table-wrap"><table><thead><tr><th>文档 / Document</th><th>标识 / Identifier</th><th>版本字段 / Version field</th></tr></thead><tbody>
-<tr><td>包元数据 / Package metadata</td><td><code>format: muapack</code></td><td><code>formatVersion: 1 | 2</code></td></tr>
-<tr><td>v1 平台清单 / v1 platform manifest</td><td><code>format: mua-platform-manifest</code></td><td><code>formatVersion: 1</code></td></tr>
-<tr><td>v2 配方清单 / v2 recipe manifest</td><td><code>format: mua-recipe-manifest</code></td><td><code>formatVersion: 2</code></td></tr>
-<tr><td>v1 环境清单 / v1 environment manifest</td><td><code>format: mua-environment-manifest</code></td><td><code>formatVersion: 1</code></td></tr>
-<tr><td>包签名 / Package signature</td><td><code>format: mua-pack-signature</code></td><td>与包格式一致 / Matches package format</td></tr>
-<tr><td>Modrinth 索引 / Modrinth index</td><td><code>game: minecraft</code></td><td><code>formatVersion: 1</code>（包括 muapack v2 / including muapack v2）</td></tr>
-<tr><td>旧客户端清单 / Legacy client manifest</td><td><code>format: mua-client-manifest</code></td><td><code>schemaVersion: 1 | 2</code>；不是包格式 / Not the package format</td></tr>
-<tr><td>上传／草稿／发布记录 / Upload, draft and release records</td><td><code>packageFormatVersion</code></td><td><code>1 | 2</code>；选择分发格式 / Selects distribution format</td></tr>
+<div class="paragraph"><p>六平台枚举用于 v1。v2 protocolRevision:2 不声明发布平台集合，环境由启动器按本机操作系统和架构解析。</p></div>
+<div class="note"><p>v1 默认选择除 linux-aarch64 外的五个平台。后台禁用新增 Linux ARM 选择，已有草稿仍可取消该选项；协议保留六个平台标识。v2 不选择架构，不声明平台集合；universal 仅为后台任务标识，不写入分发清单。运行环境是否兼容，由启动器判断。</p></div>
+<h3>2.4 相互独立的版本字段</h3>
+<div class="table-wrap"><table><thead><tr><th>文档</th><th>标识</th><th>版本字段</th></tr></thead><tbody>
+<tr><td>包元数据</td><td><code>format: muapack</code></td><td><code>formatVersion: 1 | 2</code></td></tr>
+<tr><td>v1 平台清单</td><td><code>format: mua-platform-manifest</code></td><td><code>formatVersion: 1</code></td></tr>
+<tr><td>v2 配方清单</td><td><code>format: mua-recipe-manifest</code></td><td><code>formatVersion: 2</code></td></tr>
+<tr><td>v1 环境清单</td><td><code>format: mua-environment-manifest</code></td><td><code>formatVersion: 1</code></td></tr>
+<tr><td>包签名</td><td><code>format: mua-pack-signature</code></td><td>与包格式一致</td></tr>
+<tr><td>Modrinth 索引</td><td><code>game: minecraft</code></td><td><code>formatVersion: 1</code>（包括 muapack v2）</td></tr>
+<tr><td>v1 客户端发布清单</td><td><code>format: mua-client-manifest</code></td><td><code>schemaVersion: 2</code>；与包格式版本相互独立</td></tr>
+<tr><td>v2 协议修订</td><td><code>protocolRevision</code></td><td>固定为 <code>2</code>；只用于 v2 包元数据和配方清单</td></tr>
+<tr><td>上传／草稿／发布记录</td><td><code>packageFormatVersion</code></td><td><code>1 | 2</code>；选择分发格式</td></tr>
 </tbody></table></div>
+<p>创建上传必须提交 packageFormatVersion，创建后不可修改。后台会按首个已发布版本预选格式；没有发布历史时沿用最近草稿，上传前可以改选。预选不会替代 API 的必填字段。</p>
 </section>
 
 <section id="syntax">
-<h2>3. 公共编码与容器 / <span lang="en">Common encoding and container syntax</span></h2>
-<h3>3.1 确定 JSON 编码 / <span lang="en">Deterministic JSON encoding</span></h3>
+<h2>3. 公共编码与容器</h2>
+<h3>3.1 确定 JSON 编码</h3>
 <ol>
-<li>协议 JSON 必须为 UTF-8，无 BOM、缩进、多余空白或结尾换行。<p class="en" lang="en">Protocol JSON MUST be UTF-8, without a BOM, indentation, extra whitespace or a trailing newline.</p></li>
-<li>对象键必须按 JavaScript 字符串比较的 UTF-16 代码单元顺序排序，包括数字形式的键；数组顺序保持不变。<p class="en" lang="en">Object keys MUST be sorted by JavaScript string comparison of UTF-16 code units, including numeric-looking keys; array order is preserved.</p></li>
-<li>字符串、整数、布尔与 null 采用 <code>JSON.stringify</code> 标量编码；对象以 <code>:</code>、<code>,</code> 连接，不加空白。不得含未配对代理项、非安全整数、重复键或未知契约字段。<p class="en" lang="en">Strings, integers, booleans and null use <code>JSON.stringify</code> scalar encoding; objects use <code>:</code> and <code>,</code> without whitespace. Unpaired surrogates, unsafe integers, duplicate keys and unknown contract fields MUST NOT occur.</p></li>
-<li>每份 JSON 最大 16 MiB，根节点深度为 0，递归深度不得超过 32。读取器必须用精确原始字节验证摘要与签名；不能格式化后再验签。<p class="en" lang="en">Each JSON document is limited to 16 MiB. Root depth is 0 and recursive depth MUST NOT exceed 32. Readers MUST verify digests and signatures over exact original bytes, not reformatted JSON.</p></li>
+<li>协议 JSON 必须为 UTF-8，无 BOM、缩进、多余空白或结尾换行。</li>
+<li>对象键必须按 JavaScript 字符串比较的 UTF-16 代码单元顺序排序，包括数字形式的键；数组顺序保持不变。</li>
+<li>字符串、整数、布尔与 null 采用 <code>JSON.stringify</code> 标量编码；对象以 <code>:</code>、<code>,</code> 连接，不加空白。不得含未配对代理项、非安全整数、重复键或未知契约字段。</li>
+<li>每份 JSON 最大 16 MiB，根节点深度为 0，递归深度不得超过 32。读取器必须用精确原始字节验证摘要与签名；不能格式化后再验签。</li>
 </ol>
-<p>确定编码示例 / <span lang="en">Deterministic encoding example:</span></p>
+<p>确定编码示例</p>
 <pre><code class="json-example">{"a":[true,null],"b":2}</code></pre>
-<div class="pair"><p>该示例的最后一个字节是 <code>}</code>，不是换行。此编码是 MUA 契约，不声称为其他 JSON canonicalization 标准。HTML 中便于阅读的缩进示例不是签名原始字节。</p><p class="en" lang="en">The last byte of this example is <code>}</code>, not a newline. This encoding is the MUA contract and does not claim conformance to another JSON canonicalization standard. Indented examples in this HTML are readable views, not the original signed bytes.</p></div>
-<h3>3.2 ZIP 与路径 / <span lang="en">ZIP and paths</span></h3>
-<div class="pair"><p>容器必须为 ZIP／ZIP64，仅使用 Store（0）或 Deflate（8）。不得使用加密、符号链接、显式目录条目、重复条目或未声明的附加文件。目录由文件路径隐含表示。必须核对解压大小、CRC-32 和内容摘要；CRC 不代替密码学摘要。</p><p class="en" lang="en">The container MUST be ZIP/ZIP64 using only Store (0) or Deflate (8). Encryption, symbolic links, explicit directory entries, duplicate entries and undeclared extra files are forbidden. File paths imply directories. Uncompressed size, CRC-32 and content digests MUST be checked; CRC does not replace cryptographic digests.</p></div>
-<div class="pair"><p>路径必须已是 NFC 相对路径，不以 <code>/</code> 开始，不含反斜杠、空段、<code>.</code> 或 <code>..</code>。路径段不得含控制字符或 <code>&lt; &gt; : &quot; | ? *</code>，不得以点／空格结尾，不得使用 CON、PRN、AUX、NUL、COM1–9、LPT1–9（包括扩展名形式）。清单必须拒绝大小写冲突与文件／目录冲突。所有实际写入还必须验证解析后的目标位于指定根目录内。</p><p class="en" lang="en">Paths MUST already be NFC relative paths, without a leading <code>/</code>, backslashes, empty segments, <code>.</code> or <code>..</code>. Segments MUST NOT contain control characters or <code>&lt; &gt; : &quot; | ? *</code>, end in a dot or space, or use CON, PRN, AUX, NUL, COM1–9 or LPT1–9, including forms with extensions. Inventories MUST reject case collisions and file/directory conflicts. Actual writes MUST also confirm that the resolved destination remains within its designated root.</p></div>
-<div class="table-wrap"><table><caption>资源上限 / <span lang="en">Resource limits</span></caption><thead><tr><th>项 / Item</th><th>上限 / Limit</th></tr></thead><tbody>
-<tr><td>目标文件数 / Target files</td><td>100000；v2 至少 1 项 / v2 requires at least 1</td></tr>
-<tr><td>单文件原始大小 / Raw file size</td><td>2 GiB</td></tr>
-<tr><td>目标清单文件大小总和 / Sum of target file sizes</td><td>40 GiB；v2 包括本地与远程声明，不包括端侧环境 / v2 includes local and declared remote files, excluding Launcher runtimes</td></tr>
-<tr><td>每份 JSON / Each JSON document</td><td>16 MiB；深度 32 / depth 32</td></tr>
-<tr><td>ZIP 条目数 / ZIP entries</td><td>v1 ≤ 100007；v2 ≤ 100005</td></tr>
-<tr><td>ZIP 条目展开大小总和 / Sum of ZIP entry uncompressed sizes</td><td>v1 ≤ 40 GiB + 7 × 16 MiB；v2 ≤ 40 GiB + 5 × 16 MiB</td></tr>
-<tr><td>异常压缩比 / Excessive compression ratio</td><td>展开大小 ≥ 1 MiB 时，不得超过 <code>max(1, compressedSize) × 1000</code> / For entries ≥ 1 MiB, uncompressed size MUST NOT exceed <code>max(1, compressedSize) × 1000</code></td></tr>
+<div class="paragraph"><p>该示例的最后一个字节是 <code>}</code>，不是换行。此编码是 MUA 契约，不等同于其他 JSON 规范化标准。HTML 中便于阅读的缩进示例不是签名原始字节。</p></div>
+<h3>3.2 ZIP 与路径</h3>
+<div class="paragraph"><p>容器必须为 ZIP／ZIP64，仅使用不压缩（Store，0）或 Deflate 压缩（8）。不得使用加密、符号链接、显式目录条目、重复条目或未声明的附加文件。目录由文件路径隐含表示。必须核对解压大小、CRC-32 和内容摘要；CRC 不代替密码学摘要。</p></div>
+<div class="paragraph"><p>路径必须已是 NFC 相对路径，不以 <code>/</code> 开始，不含反斜杠、空段、<code>.</code> 或 <code>..</code>。路径段不得含控制字符或 <code>&lt; &gt; : &quot; | ? *</code>，不得以点／空格结尾，不得使用 CON、PRN、AUX、NUL、COM1–9、LPT1–9（包括扩展名形式）。清单必须拒绝大小写冲突与文件／目录冲突。所有实际写入还必须验证解析后的目标位于指定根目录内。</p></div>
+<div class="table-wrap"><table><caption>资源上限</caption><thead><tr><th>项</th><th>上限</th></tr></thead><tbody>
+<tr><td>目标文件数</td><td>100000；v2 至少 1 项</td></tr>
+<tr><td>单文件原始大小</td><td>2 GiB</td></tr>
+<tr><td>目标清单文件大小总和</td><td>40 GiB；v2 包括本地与远程声明，不包括启动器环境</td></tr>
+<tr><td>每份 JSON</td><td>16 MiB；深度 32</td></tr>
+<tr><td>ZIP 条目数</td><td>v1 ≤ 100007；v2 ≤ 100005</td></tr>
+<tr><td>ZIP 条目展开大小总和</td><td>v1 ≤ 40 GiB + 7 × 16 MiB；v2 ≤ 40 GiB + 5 × 16 MiB</td></tr>
+<tr><td>异常压缩比</td><td>展开大小 ≥ 1 MiB 时，不得超过 <code>max(1, compressedSize) × 1000</code></td></tr>
 </tbody></table></div>
 </section>
 
 <section id="v1">
 <h2>4. muapack v1</h2>
-<div class="pair"><p>v1 是带完整预安装文件与精确运行环境的单平台容器。包内内容以 SHA-256 对象存储；安装位置由目标平台清单决定，不由对象 ZIP 路径决定。</p><p class="en" lang="en">v1 is a single-platform container of prepared files and exact runtimes. Content is stored as SHA-256 objects; the target platform manifest, not an object's ZIP path, determines its installation destination.</p></div>
-<h3 id="v1-layout">4.1 容器布局 / <span lang="en">Container layout</span></h3>
+<div class="paragraph"><p>v1 是带完整预安装文件与精确运行环境的单平台容器。包内内容以 SHA-256 对象存储；安装位置由目标平台清单决定，不由对象 ZIP 路径决定。</p></div>
+<h3 id="v1-layout">4.1 容器布局</h3>
 <pre><code>client-1.4.3-windows-amd64.muapack
 ├── mua-pack.json
 ├── metadata/target-manifest.json
-├── metadata/base-manifest.json             [update only / 仅更新包]
+├── metadata/base-manifest.json             [仅更新包]
 ├── metadata/signature.json
-├── metadata/environments/&lt;sha256&gt;.json     [target environments / 目标环境]
-└── objects/sha256/&lt;sha256&gt;                 [raw file bytes / 原始文件字节]</code></pre>
-<div class="pair"><p>必须携带目标引用的全部环境清单，不要求携带旧基准的环境清单。每个载荷摘要仅对应一个对象条目；同字节文件可复用同一对象。未声明图标、许可证或变更说明不得作为额外 ZIP 文件添加；需要分发时，应纳入目标清单文件或已定义字段。</p><p class="en" lang="en">All environment manifests referenced by the target MUST be included; old base environment manifests are not required. Each payload digest maps to exactly one object entry, reusable by files with identical bytes. Undeclared icons, licenses or changelogs MUST NOT be added as extra ZIP files; distributed content must be represented by target files or defined fields.</p></div>
+├── metadata/environments/&lt;sha256&gt;.json     [目标环境]
+└── objects/sha256/&lt;sha256&gt;                 [原始文件字节]</code></pre>
+<div class="paragraph"><p>必须携带目标引用的全部环境清单，不要求携带旧基准的环境清单。每个载荷摘要仅对应一个对象条目；同字节文件可复用同一对象。未声明图标、许可证或变更说明不得作为额外 ZIP 文件添加；需要分发时，应纳入目标清单文件或已定义字段。</p></div>
 <h3 id="v1-metadata">4.2 <code>mua-pack.json</code></h3>
-<div class="table-wrap"><table><thead><tr><th>必需字段 / Required field</th><th>类型及规则 / Type and rule</th></tr></thead><tbody>
+<div class="table-wrap"><table><thead><tr><th>必需字段</th><th>类型及规则</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"muapack" / 1</code></td></tr>
 <tr><td><code>packageType</code></td><td><code>"full" | "update"</code></td></tr>
-<tr><td><code>platform</code></td><td>规范平台值 / Canonical platform</td></tr>
-<tr><td><code>target / base</code></td><td><code>ReleaseRef / ReleaseRef | null</code>；full 的 base 必须 null / full MUST have base=null</td></tr>
-<tr><td><code>changes</code></td><td><code>{added, modified, removed, policyChanged}</code>；全为数组 / All are arrays</td></tr>
-<tr><td><code>payload</code></td><td><code>[{sha256, size}]</code>；摘要唯一，按摘要排序 / Unique digests, sorted by digest</td></tr>
-<tr><td><code>removalPolicy</code></td><td><code>"retain" | "backup-managed"</code>；必须明确指定 / MUST be explicit</td></tr>
+<tr><td><code>platform</code></td><td>规范平台值</td></tr>
+<tr><td><code>target / base</code></td><td><code>ReleaseRef / ReleaseRef | null</code>；full 的 base 必须 null</td></tr>
+<tr><td><code>changes</code></td><td><code>{added, modified, removed, policyChanged}</code>；均为数组</td></tr>
+<tr><td><code>payload</code></td><td><code>[{sha256, size}]</code>；摘要唯一，按摘要排序</td></tr>
+<tr><td><code>removalPolicy</code></td><td><code>"retain" | "backup-managed"</code>；必须明确指定</td></tr>
 </tbody></table></div>
-<h3 id="v1-target">4.3 目标平台完整清单 / <span lang="en">Complete target platform manifest</span></h3>
-<div class="table-wrap"><table><caption><code>metadata/target-manifest.json</code></caption><thead><tr><th>必需字段 / Required field</th><th>类型及规则 / Type and rule</th></tr></thead><tbody>
+<h3 id="v1-target">4.3 目标平台完整清单</h3>
+<div class="table-wrap"><table><caption><code>metadata/target-manifest.json</code></caption><thead><tr><th>必需字段</th><th>类型及规则</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"mua-platform-manifest" / 1</code></td></tr>
-<tr><td><code>release</code></td><td>第 2.2 节完整身份 / Complete identity from Section 2.2</td></tr>
-<tr><td><code>platform</code></td><td>必须与包平台一致 / MUST match package platform</td></tr>
-<tr><td><code>runtime.minecraft</code></td><td>精确游戏版本 Text / Exact game version, Text</td></tr>
-<tr><td><code>runtime.loader</code></td><td><code>null | {type, version}</code>；type = fabric / quilt / forge / neoforge；版本为 Text / version is Text</td></tr>
-<tr><td><code>runtime.java</code></td><td><code>{major, vendor, version, build, manifestSha256, executable, imageType?}</code>；major 为 ≥7 的安全整数，vendor／version／build 为 Text，executable 为 Path，imageType 可选 jre／jdk / major is a safe integer ≥7; vendor/version/build are Text; executable is a Path; imageType optionally jre/jdk</td></tr>
-<tr><td><code>environments</code></td><td><code>[{kind, sha256}]</code>；minecraft 和 java 各一个，使用 loader 时再加一个，不得重复 / Exactly one minecraft and one java, plus one loader when used; no duplicates</td></tr>
-<tr><td><code>launch</code></td><td>含主类和 classpath 的 v1 启动对象，见第 6 节 / v1 launch object including main class and classpath; Section 6</td></tr>
-<tr><td><code>mods</code></td><td>最多 2000 项 <code>{path, name, version, optional?}</code>；name／version 为 Text 或 null，不得伪造；path 唯一且对应 instance JAR，optional 与文件一致，缺省 false / At most 2000 entries; name/version are Text or null, not fabricated; unique paths reference instance JARs; optional matches the file and defaults to false</td></tr>
-<tr><td><code>files</code></td><td>完整目标 <code>MuaFile[]</code> / Complete target <code>MuaFile[]</code></td></tr>
+<tr><td><code>release</code></td><td>第 2.2 节完整身份</td></tr>
+<tr><td><code>platform</code></td><td>必须与包平台一致</td></tr>
+<tr><td><code>runtime.minecraft</code></td><td>精确游戏版本文本（Text）</td></tr>
+<tr><td><code>runtime.loader</code></td><td><code>null | {type, version}</code>；type 为 fabric、quilt、forge 或 neoforge；version 为文本（Text）</td></tr>
+<tr><td><code>runtime.java</code></td><td><code>{major, vendor, version, build, manifestSha256, executable, imageType}</code>；major 为 ≥7 的安全整数，vendor／version／build 为文本（Text），executable 为安全相对路径（Path），imageType 必需，值为 jre／jdk</td></tr>
+<tr><td><code>environments</code></td><td><code>[{kind, sha256}]</code>；minecraft 和 java 各一个，使用加载器时再加一个，不得重复</td></tr>
+<tr><td><code>launch</code></td><td>含主类和 classpath 的 v1 启动对象，见第 6 节</td></tr>
+<tr><td><code>mods</code></td><td>最多 2000 项 <code>{path, name, version, optional?}</code>；name／version 为文本（Text） 或 null，不得伪造；path 唯一且对应 instance JAR，optional 与文件一致，默认 false</td></tr>
+<tr><td><code>files</code></td><td>完整目标文件数组 <code>MuaFile[]</code></td></tr>
 </tbody></table></div>
-<div class="table-wrap"><table><caption>v1 文件描述 / <span lang="en">v1 file descriptor: <code>MuaFile</code></span></caption><thead><tr><th>字段 / Field</th><th>类型及语义 / Type and semantics</th></tr></thead><tbody>
-<tr><td><code>root</code></td><td><code>"instance" | "java"</code>；实例目录或由 Java 环境摘要锁定的共享缓存目录 / Instance directory or a shared Java cache directory locked by its environment digest</td></tr>
-<tr><td><code>path</code></td><td>相对所属 root 的安全 Path / Safe Path relative to its root</td></tr>
-<tr><td><code>sha256 / size</code></td><td>原始字节摘要／大小；同摘要大小必须一致 / Raw-byte digest and size; the same digest MUST imply the same size</td></tr>
-<tr><td><code>policy</code></td><td><code>"managed" | "preserve"</code>；java 必须 managed / java MUST be managed</td></tr>
-<tr><td><code>executable</code></td><td>Boolean；POSIX 安装设置执行权限，Java 可执行入口必须 true / Boolean; sets POSIX execute permission; Java executable MUST be true</td></tr>
-<tr><td><code>optional</code></td><td>可选 Boolean，缺省 false；环境文件不得 optional / Optional Boolean, default false; environment files MUST NOT be optional</td></tr>
+<div class="table-wrap"><table><caption>v1 文件描述</caption><thead><tr><th>字段</th><th>类型及语义</th></tr></thead><tbody>
+<tr><td><code>root</code></td><td><code>"instance" | "java"</code>；实例目录或由 Java 环境摘要锁定的共享缓存目录</td></tr>
+<tr><td><code>path</code></td><td>相对所属 root 的安全相对路径（Path）</td></tr>
+<tr><td><code>sha256 / size</code></td><td>原始字节摘要／大小；同摘要大小必须一致</td></tr>
+<tr><td><code>policy</code></td><td><code>"managed" | "preserve"</code>；java 必须 managed</td></tr>
+<tr><td><code>executable</code></td><td>布尔值；POSIX 安装设置执行权限，Java 可执行入口必须 true</td></tr>
+<tr><td><code>optional</code></td><td>可选布尔值，默认 false；环境文件不得 optional</td></tr>
 </tbody></table></div>
-<div class="pair"><p>文件身份键为 <code>root + "/" + path</code>。账号文件 <code>launcher_accounts.json</code>、<code>launcher_profiles.json</code> 与实例 <code>.mua</code> 状态不得分发。Java 可执行入口和所有 classpath 条目必须对应 managed 文件；所有 Java 文件必须属于锁定环境。不得直接将 UUID 或其他身份文本拼接成本地路径。</p><p class="en" lang="en">The file identity key is <code>root + "/" + path</code>. Account files <code>launcher_accounts.json</code>, <code>launcher_profiles.json</code> and instance <code>.mua</code> state MUST NOT be distributed. The Java executable and every classpath entry MUST reference managed files; all Java files MUST belong to the locked environment. UUIDs or other identity text MUST NOT be used directly to construct local paths.</p></div>
-<h3 id="v1-environment">4.4 环境清单 / <span lang="en">Environment manifests</span></h3>
-<div class="pair"><p>每个环境文档必须包含 <code>{format:"mua-environment-manifest", formatVersion:1, kind, platform, resolverVersion, files}</code>。<code>resolverVersion</code> 为 Text，files 非空、均为 managed 且非 optional。minecraft／loader 文件使用 instance root，java 文件使用 java root。</p><p class="en" lang="en">Each environment document MUST contain <code>{format:"mua-environment-manifest", formatVersion:1, kind, platform, resolverVersion, files}</code>. <code>resolverVersion</code> is Text; files are nonempty, managed and non-optional. minecraft/loader files use the instance root; java files use the java root.</p></div>
-<div class="table-wrap"><table><thead><tr><th><code>kind</code></th><th>额外必需字段 / Additional required fields</th></tr></thead><tbody>
-<tr><td><code>minecraft</code></td><td><code>minecraft</code>（精确版本 / exact version）、<code>sourceMetadataSha256</code></td></tr>
+<div class="paragraph"><p>文件身份键为 <code>root + "/" + path</code>。账号文件 <code>launcher_accounts.json</code>、<code>launcher_profiles.json</code> 与实例 <code>.mua</code> 状态不得分发。Java 可执行入口和所有 classpath 条目必须对应 managed 文件；所有 Java 文件必须属于锁定环境，Java 可执行入口与 classpath 文件还必须是非可选文件。不得直接将 UUID 或其他身份文本拼接成本地路径。</p></div>
+<h3 id="v1-environment">4.4 环境清单</h3>
+<div class="paragraph"><p>每个环境文档必须包含 <code>{format:"mua-environment-manifest", formatVersion:1, kind, platform, resolverVersion, files}</code>。<code>resolverVersion</code> 为文本（Text），files 非空、均为 managed 且非 optional。minecraft／loader 文件使用 instance root，java 文件使用 java root。</p></div>
+<div class="table-wrap"><table><thead><tr><th><code>kind</code></th><th>额外必需字段</th></tr></thead><tbody>
+<tr><td><code>minecraft</code></td><td><code>minecraft</code>（精确版本）、<code>sourceMetadataSha256</code></td></tr>
 <tr><td><code>loader</code></td><td><code>minecraft</code>、<code>loader:{type,version}</code>、<code>sourceMetadataSha256</code></td></tr>
-<tr><td><code>java</code></td><td><code>java:{major,vendor,version,build,executable,archiveSha256,imageType?}</code>；可执行入口必须存在且 executable=true / The executable MUST exist and have executable=true</td></tr>
+<tr><td><code>java</code></td><td><code>java:{major,vendor,version,build,executable,archiveSha256,imageType}</code>；可执行入口必须存在且 executable=true</td></tr>
 </tbody></table></div>
-<div class="pair"><p>环境内容身份为整份确定编码环境清单的 SHA-256；平台、精确版本、来源元数据／归档摘要、resolverVersion 与显式 imageType 均参与身份。镜像偏好不改变内容身份。目标环境引用、精确版本和每个环境文件必须匹配。旧签名允许 imageType 缺省，不得据此断言旧环境为 JRE；新环境明确记录 imageType。</p><p class="en" lang="en">Environment identity is SHA-256 of the entire deterministically encoded environment manifest, binding platform, exact versions, source-metadata/archive digests, resolverVersion and explicit imageType. Mirror preferences do not change content identity. Target references, exact versions and every environment file MUST match. Legacy signatures allow imageType to be absent; absence MUST NOT be interpreted as proof of a JRE. New environments record imageType explicitly.</p></div>
-<a class="back" href="#contents">返回目录 / Contents ↑</a>
+<div class="paragraph"><p>环境内容身份为整份确定编码环境清单的 SHA-256；平台、精确版本、来源元数据／归档摘要、resolverVersion 与显式 imageType 均参与身份。镜像偏好不改变内容身份。目标环境引用、精确版本和每个环境文件必须匹配。当前 v1 清单必须明确记录 imageType，不接受省略该字段的旧结构。默认选择 JRE，JDK 仅由超管选择；缺少 JRE 时明确失败。</p></div>
+<a class="back" href="#contents">返回目录</a>
 </section>
 
 <section id="v2">
 <h2>5. muapack v2</h2>
-<div class="pair"><p>v2 是基于 mrpack 的签名下载配方容器：MUA 保留本地 overrides 字节及完整发布／更新信息，Launcher 负责远程文件和运行环境。v2 不是 v1 的预安装包，也不是只含 URL 的空包；本地模组、配置和资源仍被保留。</p><p class="en" lang="en">v2 is a signed mrpack-based download-recipe container: MUA retains local override bytes and complete release/update information, while the Launcher obtains remote files and runtimes. v2 is neither a v1 prepared installation nor an empty URL-only package; local mods, configuration and resources remain included.</p></div>
-<div class="note"><p>2026-10-12 修订：mua-pack.json 与 target-manifest 必须为 protocolRevision:2，严格拒绝旧平台字段、未知修订及混用。签名域和算法不变；包修订直接绑定签名字节，目标修订由清单摘要绑定。没有修订号的原 v2 作为历史结构严格读取，旧 bytes／签名不改写。</p><p class="en" lang="en">Revision dated 12 October 2026: mua-pack.json and target manifests require protocolRevision:2 and strictly reject legacy platform fields, unknown revisions and mixed shapes. Signing domain and algorithm are unchanged: metadata revision is directly signed and target revision is bound by the manifest digest. Original v2 without a revision remains strictly readable as a legacy structure without rewriting signed bytes.</p></div>
-<h3 id="v2-layout">5.1 容器布局 / <span lang="en">Container layout</span></h3>
+<div class="paragraph"><p>v2 是基于 mrpack 的签名下载配方容器。Union Link 保存本地模组、配置和资源的 overrides 字节，以及完整发布与更新信息；启动器按声明下载远程文件，并解析、安装运行环境。</p></div>
+<div class="note"><p>当前 v2 的 mua-pack.json、目标清单及更新包基准清单必须包含 protocolRevision:2。不接受省略修订号的旧结构、supportedPlatforms、platformsChanged 或未知修订。包元数据中的修订号直接参与签名，清单中的修订号通过清单摘要绑定；签名域与算法见第 8 节。</p></div>
+<h3 id="v2-layout">5.1 容器布局</h3>
 <pre><code>client-1.4.3.muapack
 ├── mua-pack.json
 ├── modrinth.index.json
 ├── metadata/target-manifest.json
-├── metadata/base-manifest.json             [update only / 仅更新包]
+├── metadata/base-manifest.json             [仅更新包]
 ├── metadata/signature.json
-└── overrides/&lt;path&gt;                       [local payload / 本地载荷]</code></pre>
-<div class="pair"><p>当前输入支持标准 mrpack 与已验证的 PCL 内包封装。普通 <code>.minecraft</code> ZIP 不能通过猜测远程地址成为 v2。上传前显式选择分发格式；输入格式不决定输出版本。归一化按远程声明→overrides→client-overrides 叠加，本地覆盖同路径远程文件并继承 optional；server-overrides 与 client unsupported 文件不进入客户端。</p><p class="en" lang="en">Current inputs are standard mrpack and the verified PCL nested-package wrapper. A plain <code>.minecraft</code> ZIP cannot become v2 by guessing remote URLs. Distribution format is chosen explicitly before upload; input format does not determine output version. Normalization layers remote declarations→overrides→client-overrides; a local file shadows a same-path remote declaration and inherits optional. server-overrides and client-unsupported files are excluded.</p></div>
+└── overrides/&lt;path&gt;                       [本地载荷]</code></pre>
+<div class="paragraph"><p>当前输入支持标准 mrpack 与已验证的 PCL 内包封装。普通 <code>.minecraft</code> ZIP 不能通过猜测远程地址成为 v2。上传前显式选择分发格式；输入格式不决定输出版本。归一化按远程声明→overrides→client-overrides 叠加，本地覆盖同路径远程文件并继承 optional；server-overrides 与标记为 client:unsupported 的文件不进入客户端。</p></div>
 <h3 id="v2-metadata">5.2 <code>mua-pack.json</code></h3>
-<div class="table-wrap"><table><thead><tr><th>必需字段 / Required field</th><th>类型及规则 / Type and rule</th></tr></thead><tbody>
+<div class="table-wrap"><table><thead><tr><th>必需字段</th><th>类型及规则</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"muapack" / 2</code></td></tr>
-<tr><td><code>protocolRevision</code></td><td>固定 2，与目标一致；修订号参与签名字节 / Fixed 2, matching the target; included in signed bytes</td></tr>
+<tr><td><code>protocolRevision</code></td><td>固定 2，与目标一致；修订号参与签名字节</td></tr>
 <tr><td><code>packageType</code></td><td><code>"full" | "update"</code></td></tr>
-<tr><td><code>target / base</code></td><td><code>ReleaseRef / ReleaseRef | null</code>；full 的 base 必须 null / full MUST have base=null</td></tr>
-<tr><td><code>indexSha256</code></td><td><code>modrinth.index.json</code> 精确字节 SHA-256 / SHA-256 of exact index bytes</td></tr>
-<tr><td><code>changes</code></td><td><code>{added, modified, removed, policyChanged, sourceChanged, runtimeChanged, launchChanged}</code>；详见第 7 节 / See Section 7</td></tr>
-<tr><td><code>payload</code></td><td><code>[{entry, sha256, size}]</code>；只含实际本地载荷，entry 唯一并排序 / Only actual local payload; entries unique and sorted</td></tr>
-<tr><td><code>removalPolicy</code></td><td><code>"retain" | "backup-managed"</code>；必须明确指定 / MUST be explicit</td></tr>
-<tr><td><code>minimumLauncherProtocol</code></td><td><code>2</code>；能力等级，不是 Launcher 软件版本 / A capability level, not a Launcher software version</td></tr>
+<tr><td><code>target / base</code></td><td><code>ReleaseRef / ReleaseRef | null</code>；full 的 base 必须 null</td></tr>
+<tr><td><code>indexSha256</code></td><td><code>modrinth.index.json</code> 精确字节 SHA-256</td></tr>
+<tr><td><code>changes</code></td><td><code>{added, modified, removed, policyChanged, sourceChanged, runtimeChanged, launchChanged}</code>；详见第 7 节</td></tr>
+<tr><td><code>payload</code></td><td><code>[{entry, sha256, size}]</code>；只含实际本地载荷，entry 唯一并排序</td></tr>
+<tr><td><code>removalPolicy</code></td><td><code>"retain" | "backup-managed"</code>；必须明确指定</td></tr>
+<tr><td><code>minimumLauncherProtocol</code></td><td><code>2</code>；能力等级，不是启动器软件版本</td></tr>
 </tbody></table></div>
-<h3 id="v2-target">5.3 完整配方清单与文件 / <span lang="en">Complete recipe manifest and files</span></h3>
-<div class="table-wrap"><table><caption><code>metadata/target-manifest.json</code></caption><thead><tr><th>必需字段 / Required field</th><th>类型及规则 / Type and rule</th></tr></thead><tbody>
+<h3 id="v2-target">5.3 完整配方清单与文件</h3>
+<div class="table-wrap"><table><caption><code>metadata/target-manifest.json</code></caption><thead><tr><th>必需字段</th><th>类型及规则</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"mua-recipe-manifest" / 2</code></td></tr>
-<tr><td><code>release</code></td><td>第 2.2 节完整身份 / Complete identity from Section 2.2</td></tr>
-<tr><td><code>protocolRevision</code></td><td>固定 2；无发布平台名单 / Fixed 2; no publication platform list</td></tr>
-<tr><td><code>runtime</code></td><td><code>{minecraft, loader, java, resolverVersion}</code>；详见第 5.5 节 / See Section 5.5</td></tr>
-<tr><td><code>launch</code></td><td><code>{jvmArgs, gameArgs, memory, preLaunch}</code>；没有固定 mainClass／classpath / No fixed mainClass/classpath</td></tr>
-<tr><td><code>files</code></td><td>1–100000 个 <code>RecipeFile</code>，按 path 的 UTF-16 顺序严格升序；全部属于实例 / 1–100000 RecipeFiles strictly ascending by UTF-16 path order, all within the instance</td></tr>
+<tr><td><code>release</code></td><td>第 2.2 节完整身份</td></tr>
+<tr><td><code>protocolRevision</code></td><td>固定 2；无发布平台名单</td></tr>
+<tr><td><code>runtime</code></td><td><code>{minecraft, loader, java, resolverVersion}</code>；详见第 5.5 节</td></tr>
+<tr><td><code>launch</code></td><td><code>{jvmArgs, gameArgs, memory, preLaunch}</code>；没有固定 mainClass／classpath</td></tr>
+<tr><td><code>files</code></td><td>1–100000 个 <code>RecipeFile</code>，按 path 的 UTF-16 顺序严格升序；全部属于实例</td></tr>
 </tbody></table></div>
-<div class="table-wrap"><table><caption>v2 文件描述 / <span lang="en">v2 file descriptor: <code>RecipeFile</code></span></caption><thead><tr><th>字段 / Field</th><th>本地 / Local</th><th>远程 / Remote</th></tr></thead><tbody>
-<tr><td><code>path</code></td><td colspan="2">唯一实例 Path；不含 overrides 前缀 / Unique instance Path, without an overrides prefix</td></tr>
-<tr><td><code>size</code></td><td>已校验原始大小 / Verified raw size</td><td>声明原始大小，后台未下载不标为字节已验证 / Declared raw size, not backend byte verification</td></tr>
-<tr><td><code>hashes</code></td><td><code>{sha256}</code></td><td><code>{sha1, sha512, sha256?}</code>；SHA-1 和 SHA-512 均必需 / Both SHA-1 and SHA-512 required</td></tr>
-<tr><td><code>source</code></td><td><code>{type:"local", entry:"overrides/" + path}</code></td><td><code>{type:"remote", downloads:[HTTPS URL, ...]}</code>；1–10 项，每项最长 4000 字符 / 1–10 URLs, at most 4000 characters each</td></tr>
+<div class="table-wrap"><table><caption>v2 文件描述</caption><thead><tr><th>字段</th><th>本地</th><th>远程</th></tr></thead><tbody>
+<tr><td><code>path</code></td><td colspan="2">唯一的实例相对路径（Path）；不含 overrides 前缀</td></tr>
+<tr><td><code>size</code></td><td>已校验原始大小</td><td>声明原始大小，后台未下载不标为字节已验证</td></tr>
+<tr><td><code>hashes</code></td><td><code>{sha256}</code></td><td><code>{sha1, sha512, sha256?}</code>；SHA-1 和 SHA-512 均必需</td></tr>
+<tr><td><code>source</code></td><td><code>{type:"local", entry:"overrides/" + path}</code></td><td><code>{type:"remote", downloads:[HTTPS URL, ...]}</code>；1–10 项，每项最长 4000 字符</td></tr>
 <tr><td><code>policy</code></td><td colspan="2"><code>"managed" | "preserve"</code></td></tr>
-<tr><td><code>optional / executable</code></td><td colspan="2">必需 Boolean，不得省略；optional 与 policy 独立 / Required Booleans, not omitted; optional is independent of policy</td></tr>
+<tr><td><code>optional / executable</code></td><td colspan="2">必需布尔值，不得省略；optional 与 policy 独立</td></tr>
 </tbody></table></div>
-<div class="pair"><p>所有 v2 文件必须位于实例根目录；不得覆盖 <code>versions/</code>、<code>libraries/</code>、<code>assets/</code>、<code>natives/</code>、<code>runtime/</code>、<code>.mua/</code>、<code>.launcher/</code>、<code>.hmcl/</code> 或 <code>PCL/</code>（含同名根文件），以及 <code>launcher_accounts.json</code>、<code>launcher_profiles.json</code>、<code>accounts.json</code>、<code>usercache.json</code>、<code>usernamecache.json</code>。导入器可以过滤已识别的启动器私有输入，不能放宽分发路径保护。</p><p class="en" lang="en">All v2 files MUST be within the instance. They MUST NOT overwrite <code>versions/</code>, <code>libraries/</code>, <code>assets/</code>, <code>natives/</code>, <code>runtime/</code>, <code>.mua/</code>, <code>.launcher/</code>, <code>.hmcl/</code> or <code>PCL/</code>, including identically named root files, or <code>launcher_accounts.json</code>, <code>launcher_profiles.json</code>, <code>accounts.json</code>, <code>usercache.json</code> or <code>usernamecache.json</code>. Importers may filter recognized private Launcher input, but MUST NOT relax distribution-path protection.</p></div>
-<div class="pair"><p>远程地址必须为持久公开 HTTPS URL，无账号凭据、片段、非 443 显式端口或临时签名令牌；不得含 signature、token、credential、expires、x-amz-、x-goog- 等查询参数，不得指向私有地址或本地域名。Launcher 下载后必须验证全部声明哈希及大小，以 SHA-512 为主要远程内容身份，不得仅凭 SHA-1 复用。</p><p class="en" lang="en">Remote URLs MUST be persistent public HTTPS URLs, without credentials, fragments, explicit ports other than 443 or temporary signing tokens. Query parameters containing signature, token, credential, expires, x-amz- or x-goog- are forbidden, as are private addresses and local hostnames. After download the Launcher MUST verify every declared hash and size, using SHA-512 as the primary remote content identity; SHA-1 alone MUST NOT authorize reuse.</p></div>
-<div class="pair"><p>同一本地 SHA-256 或远程 SHA-512 的大小声明必须一致。未经实际字节校验不得断言本地／远程哈希表示同一内容；Launcher 可在校验后建立 SHA-512→SHA-256 缓存映射。<code>mods/**/*.jar</code> 模组信息由文件清单派生，未知名称／版本为 null；v2 清单不另设可独立编辑的 mods 数组。</p><p class="en" lang="en">A repeated local SHA-256 or remote SHA-512 MUST have consistent size declarations. Local and remote hashes MUST NOT be assumed to identify identical bytes without verification; the Launcher MAY establish a SHA-512→SHA-256 cache mapping after verification. Mod information for <code>mods/**/*.jar</code> is derived from the file inventory, with unknown names/versions set to null; the v2 manifest has no independently editable mods array.</p></div>
-<h3 id="v2-index">5.4 Modrinth 索引 / <span lang="en">Modrinth index</span></h3>
-<div class="pair"><p><code>modrinth.index.json</code> 必须从完整目标清单派生，并与确定编码的预期字节一致。即使是更新包，也必须列出全部目标远程文件，不得只列变化项。本地文件不伪造下载 URL。</p><p class="en" lang="en"><code>modrinth.index.json</code> MUST be derived from the complete target manifest and match its expected deterministic bytes. Even in an update it MUST list all target remote files, not only changed files. Local files MUST NOT be assigned fabricated download URLs.</p></div>
-<div class="table-wrap"><table><thead><tr><th>索引字段 / Index field</th><th>映射 / Mapping</th></tr></thead><tbody>
+<div class="paragraph"><p>所有 v2 文件必须位于实例根目录；不得覆盖 <code>versions/</code>、<code>libraries/</code>、<code>assets/</code>、<code>natives/</code>、<code>runtime/</code>、<code>.mua/</code>、<code>.launcher/</code>、<code>.hmcl/</code> 或 <code>PCL/</code>（含同名根文件），以及 <code>launcher_accounts.json</code>、<code>launcher_profiles.json</code>、<code>accounts.json</code>、<code>usercache.json</code>、<code>usernamecache.json</code>。导入器可以过滤已识别的启动器私有输入，不能放宽分发路径保护。</p></div>
+<div class="paragraph"><p>远程地址必须为持久公开 HTTPS URL，无账号凭据、片段、非 443 显式端口或临时签名令牌；不得含 signature、token、credential、expires、x-amz-、x-goog- 等查询参数，不得指向私有地址或本地域名。启动器下载后必须验证全部声明哈希及大小，以 SHA-512 为主要远程内容身份，不得仅凭 SHA-1 复用。</p></div>
+<div class="paragraph"><p>同一本地 SHA-256 或远程 SHA-512 的大小声明必须一致。未经实际字节校验不得断言本地／远程哈希表示同一内容；启动器可在校验后建立 SHA-512→SHA-256 缓存映射。<code>mods/**/*.jar</code> 模组信息由文件清单派生，未知名称／版本为 null；v2 清单不另设可独立编辑的 mods 数组。</p></div>
+<h3 id="v2-index">5.4 Modrinth 索引</h3>
+<div class="paragraph"><p><code>modrinth.index.json</code> 必须从完整目标清单派生，并与确定编码的预期字节一致。即使是更新包，也必须列出全部目标远程文件，不得只列变化项。本地文件不伪造下载 URL。</p></div>
+<div class="table-wrap"><table><thead><tr><th>索引字段</th><th>映射</th></tr></thead><tbody>
 <tr><td><code>formatVersion / game</code></td><td><code>1 / "minecraft"</code></td></tr>
 <tr><td><code>versionId / name / summary</code></td><td><code>release.version / release.name / release.summary</code></td></tr>
 <tr><td><code>dependencies.minecraft</code></td><td><code>runtime.minecraft</code></td></tr>
-<tr><td>加载器依赖键 / Loader dependency key</td><td>fabric→<code>fabric-loader</code>；quilt→<code>quilt-loader</code>；forge→<code>forge</code>；neoforge→<code>neoforge</code>；值为精确版本，无 loader 时省略 / Exact version; omitted when loader is null</td></tr>
-<tr><td><code>files</code></td><td>只含 source.remote，按 path 排序 / Only source.remote, sorted by path</td></tr>
-<tr><td>索引文件项 / Index file entry</td><td><code>{path, hashes, fileSize:size, downloads:source.downloads, env:{client:optional?"optional":"required", server:"unsupported"}}</code></td></tr>
+<tr><td>加载器依赖键</td><td>fabric→<code>fabric-loader</code>；quilt→<code>quilt-loader</code>；forge→<code>forge</code>；neoforge→<code>neoforge</code>；值为精确版本，不使用加载器时省略</td></tr>
+<tr><td><code>files</code></td><td>只包含 source.type 为 remote 的远程文件，按 path 排序</td></tr>
+<tr><td>索引文件项</td><td><code>{path, hashes, fileSize:size, downloads:source.downloads, env:{client:optional?"optional":"required", server:"unsupported"}}</code></td></tr>
 </tbody></table></div>
-<div class="pair"><p>Java 要求和启动配置只在 MUA 清单中表达，不塞入 mrpack dependencies。本地 optional 由 MUA 清单标记，普通 mrpack overrides 无法表达此能力。完整包可导出普通 mrpack 内容，但普通安装器不提供 MUA 验签、文件策略与更新保证；更新包的 overrides 不完整，不得当作普通完整 mrpack 安装。</p><p class="en" lang="en">Java requirements and launch configuration belong to the MUA manifest, not mrpack dependencies. Local optional state is expressed by the MUA manifest, which ordinary mrpack overrides cannot represent. A full package can be exported as ordinary mrpack content, but an ordinary installer provides no MUA signature, policy or update guarantees. An update's overrides are incomplete and MUST NOT be installed as a complete ordinary mrpack.</p></div>
-<h3 id="v2-runtime">5.5 环境解析与锁定 / <span lang="en">Runtime resolution and locking</span></h3>
+<div class="paragraph"><p>Java 要求和启动配置只在 MUA 清单中表达，不写入 mrpack 的 dependencies。本地 optional 由 MUA 清单标记，普通 mrpack overrides 无法表达此能力。完整包可导出普通 mrpack 内容，但普通安装器不提供 MUA 验签、文件策略与更新保证；更新包的 overrides 不完整，不得当作普通完整 mrpack 安装。</p></div>
+<h3 id="v2-runtime">5.5 环境解析与锁定</h3>
 <pre><code class="json-example">{
   "java": { "imageType": "jre", "major": 21, "vendor": "adoptium" },
   "loader": { "type": "fabric", "version": "0.16.10" },
   "minecraft": "1.21.1",
   "resolverVersion": "mua-runtime-resolver-1"
 }</code></pre>
-<div class="pair"><p>上例为 <code>runtime</code> 子对象的可读示例，不是可独立安装的清单。minecraft 与 loader 版本必须精确，loader 可为 null。java.major 为 7–25 的整数，vendor 固定 adoptium，imageType 为 jre／jdk；默认 JRE，后台 JDK 选项仅超管可选。缺少 JRE 不得静默改用 JDK。</p><p class="en" lang="en">The example is a readable <code>runtime</code> subobject, not an independently installable manifest. minecraft and loader versions MUST be exact; loader may be null. java.major is an integer from 7 to 25, vendor is adoptium, and imageType is jre/jdk. JRE is the default; only a super administrator may select JDK in the backend. Missing JRE availability MUST NOT silently cause a switch to JDK.</p></div>
-<div class="pair"><p><code>resolverVersion</code> 固定为 <code>mua-runtime-resolver-1</code>；未知规则版本必须拒绝。Launcher 首次安装选择满足要求的 Java 精确构建，校验可信上游元数据和文件，并在 <code>.mua/runtime-lock.json</code> 记录平台、解析器版本、vendor、imageType、Java build／归档摘要、MC／loader 元数据摘要及最终环境清单。该文件由 Launcher 维护，不是包载荷；其端侧格式尚需实现。</p><p class="en" lang="en"><code>resolverVersion</code> is <code>mua-runtime-resolver-1</code>; unknown rule versions MUST be rejected. On first installation, the Launcher selects an exact qualifying Java build, validates trusted upstream metadata and files, and records platform, resolver version, vendor, imageType, Java build/archive digest, MC/loader metadata digests and the resolved environment inventory in <code>.mua/runtime-lock.json</code>. This file belongs to the Launcher, not package payload; its client-side format still requires implementation.</p></div>
-<div class="pair"><p>后续启动必须复用已校验的锁定环境，不追随 latest 自动替换；升级／修复须明确重新解析并记录。两台机器首次安装时间不同可能选择不同 Java 安全构建，v2 不承诺 v1 式逐字节环境可重现。Forge／NeoForge 需要 Launcher 自身具备安装器与受信处理器能力；Worker 对 v1 的支持不能替代端侧实现。</p><p class="en" lang="en">Subsequent launches MUST reuse the verified locked environment rather than automatically following latest; upgrades or repairs require explicit re-resolution and recording. Different initial installation dates may select different Java security builds, so v2 does not promise v1-style byte-for-byte runtime reproducibility. Forge/NeoForge require installer and trusted-processor capabilities in the Launcher itself; v1 Worker support does not substitute for client-side implementation.</p></div>
-<a class="back" href="#contents">返回目录 / Contents ↑</a>
+<div class="paragraph"><p>上例为 <code>runtime</code> 子对象的可读示例，不是可独立安装的清单。Minecraft 与加载器版本必须精确，loader 可为 null。java.major 为 7–25 的整数，vendor 固定 adoptium，imageType 为 jre／jdk；默认 JRE，后台 JDK 选项仅超管可选。缺少 JRE 不得静默改用 JDK。</p></div>
+<div class="paragraph"><p><code>resolverVersion</code> 固定为 <code>mua-runtime-resolver-1</code>；未知规则版本必须拒绝。启动器首次安装选择满足要求的 Java 精确构建，校验可信上游元数据和文件，并在 <code>.mua/runtime-lock.json</code> 记录平台、解析器版本、vendor、imageType、Java 构建版本与归档摘要、Minecraft 与加载器元数据摘要及最终环境清单。该文件由启动器维护，不是包载荷；该文件的格式与持久化机制仍待启动器实现。</p></div>
+<div class="paragraph"><p>后续启动必须复用已校验的锁定环境，不随上游最新版本自动替换；升级／修复须明确重新解析并记录。两台机器首次安装时间不同可能选择不同 Java 安全构建，v2 不承诺 v1 式运行环境逐字节一致。Forge／NeoForge 需要启动器自身具备安装器与受信处理器能力；Worker 对 v1 的支持不能替代启动器实现。</p></div>
+<a class="back" href="#contents">返回目录</a>
 </section>
 
 <section id="launch">
-<h2>6. 启动配置 / <span lang="en">Launch configuration</span></h2>
-<div class="table-wrap"><table><thead><tr><th>字段 / Field</th><th>规则 / Rule</th></tr></thead><tbody>
-<tr><td><code>mainClass</code>（v1）</td><td>点分 Java 类名；由 v1 环境准备固定 / Dotted Java class name, fixed by v1 environment preparation</td></tr>
-<tr><td><code>classpath</code>（v1）</td><td>1–10000 个 instance 相对路径，均对应 managed 文件 / 1–10000 instance-relative paths, all referencing managed files</td></tr>
-<tr><td><code>jvmArgs / gameArgs</code></td><td>每个数组最多 256 项，每项最多 4000 个 UTF-16 代码单元，无 NUL／CR／LF；每项是一个 argv 参数，不拼接 shell 命令 / At most 256 entries each, at most 4000 UTF-16 code units per entry, no NUL/CR/LF; each entry is one argv argument, not a shell command</td></tr>
-<tr><td><code>memory</code></td><td><code>{mode:"auto", minimumMiB, recommendedMiB}</code>；两者为 256–1048576 整数，推荐值 ≥ 最低值 / Both integers from 256 to 1048576; recommended ≥ minimum</td></tr>
-<tr><td><code>preLaunch</code></td><td>最多 32 个 mkdir／copy／exec 声明 / At most 32 mkdir/copy/exec declarations</td></tr>
+<h2>6. 启动配置</h2>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>规则</th></tr></thead><tbody>
+<tr><td><code>mainClass</code>（v1）</td><td>点分 Java 类名；由 v1 环境准备固定</td></tr>
+<tr><td><code>classpath</code>（v1）</td><td>1–10000 个 instance 相对路径，均对应 managed 文件</td></tr>
+<tr><td><code>jvmArgs / gameArgs</code></td><td>每个数组最多 256 项，每项最多 4000 个 UTF-16 代码单元，无 NUL／CR／LF；每项是一个 argv 参数，不拼接 shell 命令</td></tr>
+<tr><td><code>memory</code></td><td><code>{mode:"auto", minimumMiB, recommendedMiB}</code>；两者为 256–1048576 整数，推荐值 ≥ 最低值</td></tr>
+<tr><td><code>preLaunch</code></td><td>最多 32 个 mkdir／copy／exec 声明</td></tr>
 </tbody></table></div>
-<div class="pair"><p>两种格式的 jvmArgs 都不得携带 <code>-Xms</code>／<code>-Xmx</code>；实际内存由 Launcher 根据本机资源与玩家设置生成。v1 的环境参数可包含需与 Launcher 联调的账号／路径占位符，但不得携带真实账号或令牌。v2 参数只是追加项，没有主类和 classpath，不接受发行方占位符；不得用 JVM 参数覆盖 classpath、module-path、主 JAR，不得用游戏参数覆盖 username、uuid、accessToken、gameDir、assetsDir、assetIndex、version。身份参数只由可信端侧环境生成。</p><p class="en" lang="en">Neither format's jvmArgs may contain <code>-Xms</code>/<code>-Xmx</code>; the Launcher determines actual memory from local resources and player settings. v1 environment arguments may use identity/path placeholders requiring Launcher integration, but MUST NOT include real accounts or tokens. v2 arguments are additions only, with no main class or classpath and no publisher-provided placeholders. JVM arguments MUST NOT replace classpath, module-path or the main JAR; game arguments MUST NOT replace username, uuid, accessToken, gameDir, assetsDir, assetIndex or version. Identity arguments come only from the trusted client-side runtime.</p></div>
-<h3>6.1 启动前操作 / <span lang="en">Pre-launch operations</span></h3>
-<div class="table-wrap"><table><thead><tr><th><code>type</code></th><th>必需字段 / Required fields</th></tr></thead><tbody>
-<tr><td><code>mkdir</code></td><td><code>path</code>：instance 安全相对路径 / Safe instance-relative path</td></tr>
+<div class="paragraph"><p>两种格式的 jvmArgs 都不得携带 <code>-Xms</code>／<code>-Xmx</code>；实际内存由启动器根据本机资源与玩家设置生成。v1 的环境参数可包含需与启动器联调的账号／路径占位符，但不得携带真实账号或令牌。v2 参数只是追加项，没有主类和 classpath，不接受发行方占位符；不得用 JVM 参数覆盖 classpath、module-path、主 JAR，不得用游戏参数覆盖 username、uuid、accessToken、gameDir、assetsDir、assetIndex、version。身份参数只由可信启动器环境生成。</p></div>
+<h3>6.1 启动前操作</h3>
+<div class="table-wrap"><table><thead><tr><th><code>type</code></th><th>必需字段</th></tr></thead><tbody>
+<tr><td><code>mkdir</code></td><td><code>path</code>：instance 安全相对路径</td></tr>
 <tr><td><code>copy</code></td><td><code>from:{root,path}, to:Path, ifMissing:true</code></td></tr>
 <tr><td><code>exec</code></td><td><code>executable:{root,path}, args:String[], workingDirectory:Path|null, requiresConsent:true, timeoutSeconds:1..300, onFailure:"abort"|"continue"</code></td></tr>
 </tbody></table></div>
-<div class="pair"><p>v1 的文件位置 root 可为 instance／java；v2 只能 instance。copy／exec 来源必须为签名清单中的 managed 文件；exec 入口必须 executable=true。v2 来源还必须 local 且非 optional。mkdir／copy 不得覆盖 managed 文件或内部状态；copy 只在目标不存在时创建。exec 必须经过发布审核并取得 Launcher 显式授权，不能直接执行导入包中的私有命令。当前离线校验器只验证声明，不执行命令。</p><p class="en" lang="en">v1 file locations may use instance/java roots; v2 allows only instance. copy/exec sources MUST be managed files in the signed inventory, and exec MUST reference an executable=true file. v2 additionally requires a local, non-optional source. mkdir/copy MUST NOT overwrite managed files or internal state; copy creates only a missing destination. exec requires publication review and explicit Launcher consent; imported private commands MUST NOT be executed automatically. Current offline validators check declarations but do not execute commands.</p></div>
+<div class="paragraph"><p>v1 的文件位置 root 可为 instance／java；v2 只能 instance。copy／exec 来源必须为签名清单中的 managed 文件；exec 入口必须 executable=true。v2 来源还必须是本地、非可选文件。mkdir／copy 不得覆盖 managed 文件或内部状态；copy 只在目标不存在时创建。exec 必须经过发布审核并取得启动器显式授权，不能直接执行导入包中的私有命令。当前离线校验器只验证声明，不执行命令。</p></div>
 </section>
 
 <section id="updates">
-<h2>7. 整包、增量与安装语义 / <span lang="en">Full packages, deltas and installation</span></h2>
-<h3>7.1 基准关系 / <span lang="en">Base relationship</span></h3>
-<div class="pair"><p>full 必须 base=null，文件变化数组为空，runtimeChanged／launchChanged 为 null。update 必须携带完整原始基准与目标，同组织／客户端、不同 releaseId 和版本标签，不跨 v1／v2。v1 平台相同；新 v2 不检查平台集合，允许精确绑定历史 v2 基准。历史目标只接受历史基准并保留旧平台门槛。</p><p class="en" lang="en">Full packages require base=null, empty file-change arrays and null runtimeChanged/launchChanged. Updates carry complete original base and target bytes for the same organization/client and different release IDs and labels, without crossing v1/v2. v1 platforms match. New v2 has no platform gate and accepts an exact legacy v2 baseline; legacy targets retain legacy-only baselines and platform checks.</p></div>
-<div class="pair"><p>差异必须从完整清单重新计算，不能凭版本标签或手填计数判断。后台当前只生成相对于上传时固定已发布基准的一个更新，不自动组合历史更新链；未发布草稿对比不代替玩家已发布基准。无合适基准或跨格式时生成／返回目标 full；无共同平台仅影响 v1 与历史 v2 目标。版本标签相同内容不同也不能绕过新发布要求。</p><p class="en" lang="en">Differences MUST be recomputed from complete inventories, not inferred from version labels or supplied counts. The backend currently builds one update against the published base fixed at upload time, without composing historical update chains. Unpublished draft comparison does not replace the player's published base. No suitable base or a format transition results in target full; no common platform affects only v1 and legacy v2 targets. Version labels cannot bypass the requirement for a new release when content changes.</p></div>
-<h3>7.2 变化清单 / <span lang="en">Change lists</span></h3>
-<div class="table-wrap"><table><thead><tr><th>字段 / Field</th><th>v1</th><th>v2</th></tr></thead><tbody>
-<tr><td><code>added / removed</code></td><td colspan="2">新增／移除的完整文件描述 / Complete descriptors of added/removed files</td></tr>
-<tr><td><code>modified</code></td><td><code>{before,after}</code>；SHA-256、大小或 executable 改变 / SHA-256, size or executable changed</td><td><code>{before,after}</code>；source 类型、完整 hashes、大小或 executable 改变 / Source type, complete hashes, size or executable changed</td></tr>
-<tr><td><code>policyChanged</code></td><td colspan="2"><code>{before,after}</code>；policy 或 optional 改变，可与 modified 重叠 / Policy or optional changed; may overlap modified</td></tr>
-<tr><td><code>sourceChanged</code></td><td>无此字段 / Not present</td><td><code>{before,after}</code>；两者均 remote，内容未修改但 downloads 数组改变 / Both remote, content unchanged but downloads array changed</td></tr>
-<tr><td><code>runtimeChanged / launchChanged</code></td><td>无此字段；目标仍绑定环境与启动信息 / Not present; target binds runtime and launch information</td><td><code>null | {before,after}</code>；新修订没有 platformsChanged / No platformsChanged in the new revision</td></tr>
+<h2>7. 完整包、更新包与安装要求</h2>
+<h3>7.1 基准关系</h3>
+<div class="paragraph"><p>完整包（full）的 base 必须为 null，文件变化数组必须为空；v2 的 runtimeChanged 和 launchChanged 也必须为 null，v1 不包含这两个字段。更新包（update）必须携带基准与目标清单的完整原始字节。两份清单必须属于同一组织、同一客户端，releaseId 和版本标签不同，且包格式相同。v1 的平台必须相同；v2 的基准与目标均须使用 protocolRevision:2，不检查平台集合。</p></div>
+<div class="paragraph"><p>差异必须从完整清单重新计算。后台针对上传时固定的已发布基准生成更新包，不自动组合历史更新链，也不把未发布草稿对比用作玩家更新基准。没有已发布基准、包格式不同，或 v1 在对应平台没有基准时，只生成完整包。已选定基准损坏时构建必须失败，不能忽略错误继续生成更新包。内容变化必须创建新版本。</p></div>
+<h3>7.2 变化清单</h3>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>v1</th><th>v2</th></tr></thead><tbody>
+<tr><td><code>added / removed</code></td><td colspan="2">新增／移除的完整文件描述</td></tr>
+<tr><td><code>modified</code></td><td><code>{before,after}</code>；SHA-256、大小或 executable 改变</td><td><code>{before,after}</code>；source 类型、完整 hashes、大小或 executable 改变</td></tr>
+<tr><td><code>policyChanged</code></td><td colspan="2"><code>{before,after}</code>；policy 或 optional 改变，可与 modified 重叠</td></tr>
+<tr><td><code>sourceChanged</code></td><td>无此字段</td><td><code>{before,after}</code>；前后均为远程文件，内容未修改但 downloads 数组改变</td></tr>
+<tr><td><code>runtimeChanged / launchChanged</code></td><td>无此字段；目标仍绑定环境与启动信息</td><td><code>null | {before,after}</code>；当前 v2 不允许 platformsChanged</td></tr>
 </tbody></table></div>
-<div class="pair"><p>v1 文件键为 root/path，变化列表按此键排序；v2 文件键为 path，变化列表按 path 排序。每一类内不得重复；before／after 的键必须相同。重命名表达为 removed+added，不猜测名称相近的文件是同一个文件。来源 URL 变化仍改变签名发布内容，但本身不代表需要重下载已校验的相同字节。</p><p class="en" lang="en">v1 file keys and change ordering use root/path; v2 uses path. Each category MUST be duplicate-free, and before/after keys MUST match. A rename is removed+added, not an inferred identity based on similar names. A source URL change still changes signed release content but does not itself require re-downloading already verified identical bytes.</p></div>
-<h3>7.3 载荷选择 / <span lang="en">Payload selection</span></h3>
-<div class="table-wrap"><table><thead><tr><th>包 / Package</th><th>v1</th><th>v2</th></tr></thead><tbody>
-<tr><td><code>full</code></td><td>全部目标文件的唯一 SHA-256 对象 / Unique SHA-256 objects for all target files</td><td>全部目标 local 文件，包含 optional / All target local files, including optional</td></tr>
-<tr><td><code>update</code></td><td>added、modified.after、policyChanged.after 的目标对象，按摘要去重 / Target objects from added, modified.after and policyChanged.after, deduplicated by digest</td><td>同三类中的 local 目标文件，按路径去重；remote 永远不作为字节载荷 / Local target files from the same three categories, deduplicated by path; remote bytes are never payload</td></tr>
+<div class="paragraph"><p>v1 文件键为 root/path，变化列表按此键排序；v2 文件键为 path，变化列表按 path 排序。每一类内不得重复；before／after 的键必须相同。重命名表达为 removed+added，不猜测名称相近的文件是同一个文件。来源 URL 变化仍改变签名发布内容，但本身不代表需要重下载已校验的相同字节。</p></div>
+<h3>7.3 载荷选择</h3>
+<div class="table-wrap"><table><thead><tr><th>包</th><th>v1</th><th>v2</th></tr></thead><tbody>
+<tr><td><code>full</code></td><td>全部目标文件的唯一 SHA-256 对象</td><td>全部目标本地文件，包含可选文件</td></tr>
+<tr><td><code>update</code></td><td>added、modified.after、policyChanged.after 的目标对象，按摘要去重</td><td>同三类中的本地目标文件，按路径去重；远程文件不作为包内载荷</td></tr>
 </tbody></table></div>
-<div class="pair"><p>变化后的 preserve 初始字节仍可包含在载荷中，以便目标文件不存在时初始化。v2 包内相同字节可在多个 overrides 路径重复保存，后台仍可 CAS 去重。零载荷更新合法；只有版本或声明变化时，更新包仍携带元数据、清单及签名，大小不保证小于 full。ZIP 大小、实际新 CAS 数据和玩家预计下载量是不同指标。</p><p class="en" lang="en">Changed preserve initial bytes may remain in payload to initialize a missing destination. v2 may repeat identical bytes at different overrides paths while the backend deduplicates them in CAS. Zero-payload updates are valid. A version- or declaration-only update still carries metadata, manifests and a signature, and is not guaranteed to be smaller than full. ZIP size, new CAS data and expected player download volume are different metrics.</p></div>
-<h3>7.4 文件策略与 optional / <span lang="en">File policy and optional</span></h3>
+<div class="paragraph"><p>变化后的 preserve 初始字节仍可包含在载荷中，以便目标文件不存在时初始化。v2 包内相同字节可在多个 overrides 路径重复保存，后台仍可 CAS 去重。零载荷更新合法；只有版本或声明变化时，更新包仍携带元数据、清单及签名，大小不保证小于 full。ZIP 大小、实际新 CAS 数据和玩家预计下载量是不同指标。</p></div>
+<h3>7.4 文件策略与可选文件</h3>
 <dl>
-<dt><code>managed</code></dt><dd>文件缺失或哈希不符时必须安装目标字节；可以复用经过目标哈希校验的缓存。<span class="en" lang="en">If missing or hash-mismatched, target bytes MUST be installed; a cache verified against the target hash MAY be reused.</span></dd>
-<dt><code>preserve</code></dt><dd>不存在时创建；已存在时不得覆盖，也不得因 removed 自动删除。<span class="en" lang="en">Create only if absent; an existing file MUST NOT be overwritten or automatically deleted because it appears in removed.</span></dd>
-<dt><code>optional</code></dt><dd>完整包包含全部本地 optional；v1 也包含已下载的远程 optional，v2 保留其远程声明。Launcher 按 clientId+path 记忆选择，同路径更新沿用，重命名重新确认。关闭的本地 JAR 应保存在缓存／实例外，不留在游戏扫描的 mods 目录；选择不改变发布清单。<span class="en" lang="en">Full packages contain all local optional files; v1 also contains downloaded remote optional files, while v2 retains their declarations. The Launcher remembers choices by clientId+path, preserves them for same-path updates and reconfirms renames. Disabled local JARs SHOULD remain in cache/outside the instance, not in game-scanned mods directories. Choices do not alter the published manifest.</span></dd>
+<dt><code>managed</code></dt><dd>文件缺失或哈希不符时必须安装目标字节；可以复用经过目标哈希校验的缓存。</dd>
+<dt><code>preserve</code></dt><dd>不存在时创建；已存在时不得覆盖，也不得因 removed 自动删除。</dd>
+<dt>可选文件（<code>optional</code>）</dt><dd>完整包包含全部本地可选文件；v1 也包含已下载的远程可选文件，v2 保留其远程声明。启动器按 clientId+path 记忆选择，同路径更新沿用，重命名重新确认。关闭的本地 JAR 应保存在缓存／实例外，不留在游戏扫描的 mods 目录；选择不改变发布清单。</dd>
 </dl>
-<h3>7.5 安装、修复与删除 / <span lang="en">Installation, repair and removal</span></h3>
+<h3>7.5 安装、修复与删除</h3>
 <ol>
-<li>验证可信签名、清单关系和全部载荷；核对 v1 平台、真实本地基准 releaseId 及清单摘要。v2 环境由 Launcher 解析。<p class="en" lang="en">Verify trusted signatures, manifest relationships, all payload, the v1 platform and actual installed baseline identity/digest. The Launcher resolves v2 runtime.</p></li>
-<li>准备目标文件与环境；未变化文件也必须校验存在与内容。缺失 v2 remote 文件按目标声明下载；缺失未携带的 v2 local 文件从同目标摘要的 full 修复；v1 复用已校验对象或从目标完整包修复。<p class="en" lang="en">Prepare target files and runtimes; unchanged files also require presence and content checks. Fetch missing v2 remote files from target declarations; repair missing, omitted v2 local files from full with the same target digest. v1 reuses verified objects or repairs from target full.</p></li>
-<li>新 Java 环境应形成完整的新摘要目录，可复用旧环境相同字节，不得原地修改其他客户端共享的旧环境。<p class="en" lang="en">A new Java environment SHOULD form a complete new digest-addressed directory, reusing identical verified old bytes without modifying an old environment shared by other clients.</p></li>
-<li>成功后原子提交 releaseId、目标清单摘要、平台、文件记录及 v2 环境锁定；失败保留上一安装状态。事务与崩溃恢复须由 Launcher 实现。<p class="en" lang="en">After success, atomically commit releaseId, target digest, platform, file records and the v2 runtime lock. Failure preserves the prior installation state. Transactions and crash recovery require Launcher implementation.</p></li>
+<li>验证可信签名、清单关系和全部载荷；核对 v1 平台、真实本地基准 releaseId 及清单摘要。v2 环境由启动器解析。</li>
+<li>准备目标文件与环境；未变化文件也必须校验存在与内容。缺失的 v2 远程文件按目标声明下载；缺失且更新包未携带的 v2 本地文件从同目标摘要的 full 修复；v1 复用已校验对象或从目标完整包修复。</li>
+<li>新 Java 环境应形成完整的新摘要目录，可复用旧环境相同字节，不得原地修改其他客户端共享的旧环境。</li>
+<li>成功后原子提交 releaseId、目标清单摘要、平台、文件记录及 v2 环境锁定；失败保留上一安装状态。事务与崩溃恢复须由启动器实现。</li>
 </ol>
-<div class="pair"><p><code>retain</code> 只记录移除，不自动清理旧文件；当前生产组包使用 retain。协议也允许 <code>backup-managed</code>：仅对基准明确管理的 instance 文件先备份后移出启用目录，不删除 preserve、玩家自建文件或共享环境。文件被玩家改动时不得假装已保存原字节，应保留冲突与备份记录。当前没有执行端侧删除的代码。</p><p class="en" lang="en"><code>retain</code> records removals without automatically cleaning old files; current production builds use retain. The protocol also permits <code>backup-managed</code>: back up and move out of use only instance files explicitly managed by the base, never preserve files, player-created files or shared runtimes. If a player changed a file, the installer MUST NOT pretend to retain its original bytes and SHOULD retain conflict/backup records. Client-side removal execution is not implemented yet.</p></div>
-<div class="pair"><p>基准不符时回退 full；full 安装仍须遵循 preserve／optional，可逐文件复用缓存，不表示无条件覆盖目录。远程源失效且无有效缓存时必须失败。预计玩家下载量包括实际需要的包／远程／环境流量；环境未知时显示待解析，不以 CAS 复用率代替玩家节省率。</p><p class="en" lang="en">A base mismatch falls back to full. Full installation still obeys preserve/optional and may reuse verified cache; it does not imply blindly replacing the directory. An unavailable remote source without a valid cache MUST fail. Expected player download volume includes required package/remote/runtime traffic; unresolved runtime volume is shown as pending, not replaced by CAS reuse percentage.</p></div>
+<div class="paragraph"><p><code>retain</code> 只记录移除，不自动清理旧文件；当前后台组包使用 retain。协议也允许 <code>backup-managed</code>：仅对基准明确管理的 instance 文件先备份后移出启用目录，不删除 preserve、玩家自建文件或共享环境。文件被玩家改动时不得假装已保存原字节，应保留冲突与备份记录。启动器的文件移除功能仍待实现。</p></div>
+<div class="paragraph"><p>基准不符时回退 full；full 安装仍须遵循 preserve／optional，可逐文件复用缓存，不表示无条件覆盖目录。远程源失效且无有效缓存时必须失败。预计玩家下载量包括实际需要的包／远程／环境流量；环境未知时显示待解析，不以 CAS 复用率代替玩家节省率。</p></div>
 </section>
 
 <section id="signing">
-<h2>8. 摘要、签名与信任 / <span lang="en">Digests, signatures and trust</span></h2>
-<h3>8.1 签名文档 / <span lang="en">Signature document</span></h3>
-<div class="table-wrap"><table><caption><code>metadata/signature.json</code></caption><thead><tr><th>字段 / Field</th><th>规则 / Rule</th></tr></thead><tbody>
+<h2>8. 摘要、签名与信任</h2>
+<h3>8.1 签名文档</h3>
+<div class="table-wrap"><table><caption><code>metadata/signature.json</code></caption><thead><tr><th>字段</th><th>规则</th></tr></thead><tbody>
 <tr><td><code>format</code></td><td><code>"mua-pack-signature"</code></td></tr>
-<tr><td><code>formatVersion</code></td><td><code>1</code> 或 <code>2</code>，必须匹配包格式 / MUST match the package format</td></tr>
+<tr><td><code>formatVersion</code></td><td><code>1</code> 或 <code>2</code>，必须匹配包格式</td></tr>
 <tr><td><code>algorithm</code></td><td><code>"Ed25519"</code></td></tr>
-<tr><td><code>keyId</code></td><td>受信公钥 SPKI DER 的 SHA-256 前 24 个小写十六进制字符 / First 24 lowercase hexadecimal characters of SHA-256 of the trusted public key's SPKI DER</td></tr>
-<tr><td><code>metadataSha256</code></td><td><code>mua-pack.json</code> 精确字节的 SHA-256 / SHA-256 of exact metadata bytes</td></tr>
-<tr><td><code>signature</code></td><td>规范 Base64 Ed25519 签名 / Canonical Base64 Ed25519 signature</td></tr>
+<tr><td><code>keyId</code></td><td>受信公钥 SPKI DER 的 SHA-256 前 24 个小写十六进制字符</td></tr>
+<tr><td><code>metadataSha256</code></td><td><code>mua-pack.json</code> 精确字节的 SHA-256</td></tr>
+<tr><td><code>signature</code></td><td>规范 Base64 Ed25519 签名</td></tr>
 </tbody></table></div>
-<pre><code>v1 signed message = ASCII("MUA-MUAPACK-V1") || 0x00 || bytes(mua-pack.json)
-v2 signed message = ASCII("MUA-MUAPACK-V2") || 0x00 || bytes(mua-pack.json)
+<pre><code>v1 签名消息 = ASCII("MUA-MUAPACK-V1") || 0x00 || bytes(mua-pack.json)
+v2 签名消息 = ASCII("MUA-MUAPACK-V2") || 0x00 || bytes(mua-pack.json)
 keyId             = hex(SHA256(SPKI_DER(publicKey)))[0:24]</code></pre>
-<div class="pair"><p><code>||</code> 表示字节连接；<code>0x00</code> 是一个 NUL 字节，不是两个文本字符。签名使用完整消息，不先将消息哈希再交给 Ed25519。可信公钥必须通过包外信任机制提供；同包公钥、keyId 或 OSS URL 本身不能建立生产信任。未知密钥／签名域／协议版本必须拒绝。</p><p class="en" lang="en"><code>||</code> denotes byte concatenation. <code>0x00</code> is one NUL byte, not a textual escape. Ed25519 signs the complete message, not a separately pre-hashed substitute. Trusted public keys MUST come from an external trust mechanism; a same-package key, keyId or OSS URL does not establish production trust. Unknown keys, signature domains and protocol versions MUST be rejected.</p></div>
-<h3>8.2 绑定链 / <span lang="en">Binding chain</span></h3>
-<pre><code>trusted public key / 受信公钥
-  → signature.json → exact mua-pack.json bytes / 精确元数据字节
-    → target/base manifest digests / 目标与基准清单摘要
-    → changes + payload digests / 变化与载荷摘要
-    → v1 environment manifests → environment files / v1 环境及文件
-    → v2 index + remote hashes/URLs + runtime recipe / v2 索引与下载配方</code></pre>
-<div class="pair"><p>ZIP 自身的 SHA-256 与大小由 OSS／数据库产物记录及分发 API 提供，不写入 ZIP 自身，避免循环引用。ZIP 摘要与包内签名作用不同，二者均须校验。v2 远程 URL、optional、环境及启动要求都被目标清单绑定；仅更换发布声明中的 URL 也必须新建发布，不能改旧签名。可信镜像传输只能获取同哈希内容。</p><p class="en" lang="en">The ZIP's own SHA-256 and size live in OSS/database artifact records and distribution API responses, not inside the ZIP, avoiding a circular reference. Archive digests and internal signatures serve different purposes; both MUST be verified. v2 target manifests bind remote URLs, optional state, runtime and launch requirements. Even changing only a declared URL requires a new release, not editing an old signature. Trusted mirror transport may only retrieve matching hashed content.</p></div>
-<div class="note"><p>公开 <code>/manifest</code> 接口的发布签名签署原始清单字节，不使用上述包签名域；不得将该 HTTP 签名当作 <code>signature.json</code> 的签名，反之亦然。构建签名不是上线证明：还需审核、修订锁、READY 产物及发布事务。</p><p class="en" lang="en">The public <code>/manifest</code> release signature signs raw manifest bytes without the package domain above. It MUST NOT be substituted for the <code>signature.json</code> signature, or vice versa. A build signature is not proof of publication: review, revision locking, READY artifacts and the publication transaction are also required.</p></div>
+<div class="paragraph"><p><code>||</code> 表示字节连接；<code>0x00</code> 是一个 NUL 字节，不是两个文本字符。签名使用完整消息，不先将消息哈希再交给 Ed25519。可信公钥必须通过包外信任机制提供；同包公钥、keyId 或 OSS URL 本身不能建立生产信任。未知密钥／签名域／协议版本必须拒绝。</p></div>
+<h3>8.2 绑定链</h3>
+<pre><code>受信公钥
+  → signature.json → mua-pack.json 精确字节
+    → 目标与基准清单摘要
+    → 变化与载荷摘要
+    → v1 环境清单 → 环境文件
+    → v2 索引、远程文件哈希与地址、环境要求</code></pre>
+<div class="paragraph"><p>ZIP 自身的 SHA-256 与大小由 OSS／数据库产物记录及分发 API 提供，不写入 ZIP 自身，避免循环引用。ZIP 摘要与包内签名作用不同，二者均须校验。v2 远程 URL、optional、环境及启动要求都被目标清单绑定；仅更换发布声明中的 URL 也必须新建发布，不能改旧签名。可信镜像传输只能获取同哈希内容。</p></div>
+<div class="note"><p>公开 <code>/manifest</code> 接口的发布签名签署原始清单字节，不使用上述包签名域；不得将该 HTTP 签名当作 <code>signature.json</code> 的签名，反之亦然。构建签名不是上线证明：还需审核、修订锁、READY 产物及发布事务。</p></div>
 </section>
 
 <section id="distribution">
-<h2>9. 分发 API / <span lang="en">Distribution API</span></h2>
-<div class="pair"><p>此节描述当前后端 REST 分发契约，作为容器协议的传输配置。公开请求仅分发当前已上线、有效绑定、未归档的发布。管理下载另行检查 DRAFT_READ／RELEASE_READ 与资源归属，始终下载完整包。</p><p class="en" lang="en">This section describes the current backend REST distribution contract as a transport profile for the container protocol. Public requests distribute only the current live, validly bound, unarchived release. Management downloads separately check DRAFT_READ/RELEASE_READ and ownership, and always return full packages.</p></div>
-<h3>9.1 包选择 / <span lang="en">Package selection</span></h3>
+<h2>9. 分发 API</h2>
+<div class="paragraph"><p>本节说明后端 REST 分发接口。普通包查询选择当前发布；固定发布刷新可读取当前绑定客户端的未归档历史发布。两者均要求服务器已上架、组织和客户端未归档、绑定有效。服务器展示时间只影响目录可见性，到期不会关闭下载。后台下载逐请求检查 DRAFT_READ／RELEASE_READ 与资源归属，始终返回完整包。</p></div>
+<h3>9.1 包选择</h3>
 <pre><code>GET /api/v1/servers/{serverId}/packages
     ?platform=windows-amd64
     &amp;acceptedFormatVersions=1,2
     &amp;baseReleaseId={installed-release-uuid}
     &amp;baseManifestSha256={installed-manifest-sha256}</code></pre>
-<div class="table-wrap"><table><thead><tr><th>查询参数 / Query</th><th>规则 / Rule</th></tr></thead><tbody>
-<tr><td><code>platform</code></td><td>v1 必需规范平台；新 v2 不需要且忽略旧参数，历史 v2 保留原检查 / Required canonical value for v1; unnecessary and ignored for new v2; legacy v2 retains original checks</td></tr>
-<tr><td><code>acceptedFormatVersions</code></td><td>可选 <code>1</code>、<code>2</code>、<code>1,2</code> 或 <code>2,1</code>；缺省只接受 1；不允许重复或其他值 / Optional listed values; defaults to 1 only; duplicates and other values invalid</td></tr>
-<tr><td><code>baseReleaseId</code></td><td>可选已安装发布 UUID；只有匹配预构建基准才选择 update / Optional installed release UUID; update requires the prebuilt base</td></tr>
-<tr><td><code>baseManifestSha256</code></td><td>可选小写 SHA-256，提供时必须有 baseReleaseId；建议端侧提供。v1／v2 摘要不符回退 full / Optional lowercase SHA-256, requires baseReleaseId; recommended; v1/v2 mismatch falls back to full</td></tr>
+<div class="table-wrap"><table><thead><tr><th>查询参数</th><th>规则</th></tr></thead><tbody>
+<tr><td><code>platform</code></td><td>v1 必须提供第 2.3 节的平台值；v2 不需要此参数，提供时不用于筛选或限制分发</td></tr>
+<tr><td><code>acceptedFormatVersions</code></td><td>必须明确提供 <code>1</code>、<code>2</code>、<code>1,2</code> 或 <code>2,1</code>；省略、重复或其他值返回 400。当前发布格式不在列表中时返回 415</td></tr>
+<tr><td><code>baseReleaseId</code></td><td>可选已安装发布 UUID；只有匹配预构建基准才选择 update</td></tr>
+<tr><td><code>baseManifestSha256</code></td><td>可选小写 SHA-256，提供时必须有 baseReleaseId；建议启动器提供。v1／v2 摘要不符回退 full</td></tr>
 </tbody></table></div>
-<div class="pair"><p>基准 ID／摘要不匹配时回退同目标 full。仅 v1 检查平台；v2 只接受 protocolRevision:2 基准与目标。更新产物必须记录 baseManifestSha256，不提供历史推导。</p><p class="en" lang="en">Baseline identity/digest mismatches select full for the same target. Only v1 checks platforms. v2 requires protocolRevision:2 for baseline and target. Update artifacts must store baseManifestSha256.</p></div>
-<h3>9.2 成功响应 / <span lang="en">Successful response</span></h3>
-<div class="table-wrap"><table><thead><tr><th>字段 / Field</th><th>规则 / Rule</th></tr></thead><tbody>
+<div class="paragraph"><p>基准 ID／摘要不匹配时回退同目标 full。仅 v1 检查平台；v2 只接受 protocolRevision:2 基准与目标。更新产物必须记录 baseManifestSha256，不提供历史推导。</p></div>
+<h3>9.2 成功响应</h3>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>规则</th></tr></thead><tbody>
 <tr><td><code>format / formatVersion</code></td><td><code>"muapack" / 1|2</code></td></tr>
-<tr><td><code>releaseId / version</code></td><td>目标身份／版本；仅 v1 返回 platform / Target identity and version; only v1 returns platform</td></tr>
-<tr><td><code>packageType / baseReleaseId</code></td><td><code>full|update</code>；full 基准 ID 为 null / full has a null base ID</td></tr>
-<tr><td><code>sha256 / size / url / expiresIn / expiresAt</code></td><td>所选 ZIP 摘要、字节大小、S3 GET 预签名 URL、有效秒数（300）及 UTC 到期时间 / Selected ZIP digest, byte size, S3 presigned GET URL, lifetime (300 seconds) and UTC expiry</td></tr>
-<tr><td><code>etag / refreshUrl / baseManifestSha256</code></td><td>S3 原始 ETag（可为 null）、固定 releaseId／包摘要的相对刷新地址、update 的精确基准清单摘要（full 为 null） / Opaque S3 ETag (nullable), relative renewal URL pinned to releaseId/package digest, and exact update base-manifest digest (null for full)</td></tr>
-<tr><td><code>targetManifestSha256 / signingKeyId</code></td><td>目标清单摘要及包签名密钥标识 / Target manifest digest and package signing key identifier</td></tr>
-<tr><td><code>full</code></td><td><code>{sha256,size,etag,url,expiresIn,expiresAt,refreshUrl}</code>；始终指向同目标完整包，刷新不带更新基准 / Always the same target's full package, renewed without an update base</td></tr>
-<tr><td><code>mods</code></td><td>含路径、名称／版本及显式 optional；v2 另含 source=local|remote 和 hashes / Includes path, name/version and explicit optional; v2 also includes source=local|remote and hashes</td></tr>
-<tr><td>v2 额外字段 / Additional v2 fields</td><td><code>minimumLauncherProtocol:2</code>、<code>protocolRevision:2</code>、<code>runtime</code></td></tr>
+<tr><td><code>releaseId / version</code></td><td>目标身份／版本；仅 v1 返回 platform</td></tr>
+<tr><td><code>packageType / baseReleaseId</code></td><td><code>full|update</code>；full 基准 ID 为 null</td></tr>
+<tr><td><code>sha256 / size / url / expiresIn / expiresAt</code></td><td>所选 ZIP 摘要、字节大小、OSS 签名 GET 下载地址、有效秒数（300）及 UTC 到期时间</td></tr>
+<tr><td><code>etag / refreshUrl / baseManifestSha256</code></td><td>OSS 服务商返回的原始 ETag（可为 null）、固定 releaseId／包摘要的相对刷新地址、update 的精确基准清单摘要（full 为 null）</td></tr>
+<tr><td><code>targetManifestSha256 / signingKeyId</code></td><td>目标清单摘要及包签名密钥标识</td></tr>
+<tr><td><code>full</code></td><td><code>{sha256,size,etag,url,expiresIn,expiresAt,refreshUrl}</code>；始终指向同目标完整包，刷新不带更新基准</td></tr>
+<tr><td><code>mods</code></td><td>含路径、名称／版本及显式 optional；v2 另含 source=local|remote 和 hashes</td></tr>
+<tr><td>v2 额外字段</td><td><code>minimumLauncherProtocol:2</code>、<code>protocolRevision:2</code>、<code>runtime</code></td></tr>
 </tbody></table></div>
-<h3 id="download-renewal">9.3 固定发布刷新与 S3 续传 / <span lang="en">Pinned release renewal and S3 resumption</span></h3>
+<h3 id="download-renewal">9.3 固定发布刷新与断点续传</h3>
 <pre><code>GET /api/v1/servers/{serverId}/releases/{releaseId}/packages
     ?acceptedFormatVersions=2
     &amp;baseReleaseId={installed-release-uuid}
@@ -428,10 +430,10 @@ keyId             = hex(SHA256(SPKI_DER(publicKey)))[0:24]</code></pre>
 GET {presigned-url}
 Range: bytes=1048576-
 If-Match: "{opaque-etag}"</code></pre>
-<div class="pair"><p>Launcher 应保存并调用响应的 refreshUrl。该接口固定目标 releaseId，不随着最新版本切换；当前绑定客户端的未归档历史发布可刷新，草稿、跨客户端及下架资源不可访问。packageSha256 可选，但生成地址始终携带；若原更新不可提供而只能返回完整包，摘要不符返回 409，不能续传到其他字节。full.refreshUrl 另提供明确的完整包入口。JSON 响应不缓存。</p><p class="en" lang="en">The Launcher SHOULD persist and request refreshUrl. Renewal pins the target releaseId rather than following new publications. Unarchived published history of the currently bound client is accessible; drafts, other clients and unlisted resources are not. packageSha256 is optional but always present in generated renewal URLs. If only full is available instead of the original update, a digest mismatch returns 409, preventing continuation with different bytes. full.refreshUrl explicitly selects full. JSON responses are not cached.</p></div>
-<div class="pair"><p>预签名 URL 使用 AWS SDK SigV4 GetObject，未绑定 Range，支持一个请求一个字节范围。续传必须核对 206、Content-Range、总大小和 ETag；不能把 200 的完整响应直接追加。ETag 是不透明身份，不代替 SHA-256；错误 If-Match 返回 412。过期后刷新固定地址再续传，正在传输的请求无需因到期主动中断。GET 签名 URL 不可改用 HEAD，不可改写域名或查询。完成后验证整个 ZIP SHA-256、可信签名及全部载荷。Launcher 的实际下载／安装仍待接入。</p><p class="en" lang="en">AWS SDK SigV4 GetObject URLs leave Range unsigned and support one byte range per request. Resumption MUST check 206, Content-Range, total size and ETag; a full 200 response MUST NOT be appended. ETag is opaque identity, not SHA-256; a failed If-Match returns 412. Renew the pinned link for a new request after expiry; an active transfer need not stop at expiry. A signed GET URL cannot be used as HEAD or rewritten. Finally verify the whole ZIP SHA-256, trusted signature and all payload. Actual Launcher download/installation remains pending.</p></div>
-<p>实现契约 / <span lang="en">Implementation contract:</span> <a href="launcher-download-api.md">Launcher 下载与刷新 / Download and renewal API</a> · <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html">AWS GetObject</a> · <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html">AWS presigned URLs</a></p>
-<h3>9.4 清单、错误与下架 / <span lang="en">Manifest, errors and unlisting</span></h3>
+<div class="paragraph"><p>启动器应保存并调用响应的 refreshUrl。该接口固定目标 releaseId，不随着最新版本切换；当前绑定客户端的未归档历史发布可刷新，草稿、跨客户端及下架资源不可访问。packageSha256 可选，但生成地址始终携带；若原更新不可提供而只能返回完整包，摘要不符返回 409，不能续传到其他字节。full.refreshUrl 另提供明确的完整包入口。JSON 响应不缓存。</p></div>
+<div class="paragraph"><p>下载地址由当前 OSS 适配器签发。MinIO、AWS S3 与通用 S3 使用 SigV4，阿里云 OSS、腾讯云 COS、华为云 OBS 使用各自签名机制。启动器必须将整个地址视为不透明的 GET URL。断点续传使用包含单个区间的 Range 请求，并在 ETag 可用时携带服务商返回的完整原值作为 If-Match；实际云端行为仍须按服务商验收。续传必须核对 206、Content-Range、总大小和 ETag；不能把 200 的完整响应直接追加。ETag 是不透明身份，不代替 SHA-256；错误 If-Match 返回 412。过期后刷新固定地址再续传，正在传输的请求无需因到期主动中断。GET 签名 URL 不可改用 HEAD，不可改写域名或查询。完成后验证整个 ZIP SHA-256、可信签名及全部载荷。启动器的实际下载／安装仍待接入。</p></div>
+<p>实现契约：<a href="launcher-download-api.md">启动器下载与刷新</a> · <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html">AWS S3 对象读取接口</a> · <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html">AWS S3 预签名地址</a></p>
+<h3>9.4 清单、错误与下架</h3>
 <pre><code>GET /api/v1/servers/{serverId}/manifest?acceptedFormatVersions=1,2
 
 X-MUA-Manifest-Sha256: ...
@@ -439,84 +441,84 @@ X-MUA-Signing-Key: ...
 X-MUA-Signature: ...
 X-MUA-Signature-Algorithm: Ed25519
 Cache-Control: no-store</code></pre>
-<div class="pair"><p>Manifest 返回精确签名字节。v1 为 mua-client-manifest schemaVersion:2，v2 为 mua-recipe-manifest。公开 CAS 单文件入口已删除；本地修复使用同目标 full。目录返回格式及带 acceptedFormatVersions 的链接。</p><p class="en" lang="en">Manifest responses preserve signed bytes: v1 uses mua-client-manifest schemaVersion:2 and v2 uses mua-recipe-manifest. The public CAS file endpoint has been removed. Repair uses full for the same target. Directory links include acceptedFormatVersions.</p></div>
-<div class="table-wrap"><table><thead><tr><th>HTTP</th><th>含义 / Meaning</th></tr></thead><tbody>
-<tr><td><code>400</code></td><td>无效平台／能力列表／基准摘要，或只有摘要没有 ID / Invalid platform, capabilities or base digest; digest without ID</td></tr>
-<tr><td><code>404</code></td><td>资源未上线、已归档、无有效绑定，或目标不支持请求平台／必需平台构建未 READY / Resource not live, archived, not validly bound, target platform unsupported or required platform build not READY</td></tr>
-<tr><td><code>409</code></td><td>固定下载包摘要不匹配，禁止静默替换续传文件 / Pinned package digest mismatch; no silent object replacement during resumption</td></tr>
-<tr><td><code>415</code></td><td>端侧未声明支持当前发布格式；不得偷偷改发历史发布 / Client does not accept the current format; no silent historical-release substitution</td></tr>
-<tr><td><code>503</code></td><td>v1／v2 清单／产物／基准关系校验失败，或存储产物缺失、大小／摘要不符 / v1/v2 manifest/artifact/base verification failure, or missing stored objects or size/digest mismatch</td></tr>
+<div class="paragraph"><p>清单接口返回用于发布签名的精确原始字节。v1 为 mua-client-manifest schemaVersion:2，v2 为 mua-recipe-manifest。公开 CAS 单文件入口已删除；本地修复使用同目标 full。目录返回格式及带 acceptedFormatVersions 的链接。</p></div>
+<div class="table-wrap"><table><thead><tr><th>HTTP</th><th>含义</th></tr></thead><tbody>
+<tr><td><code>400</code></td><td>缺少或无效的 acceptedFormatVersions、无效的 v1 平台／基准摘要，或只有基准摘要没有基准 ID</td></tr>
+<tr><td><code>404</code></td><td>资源未上线、已归档、无有效绑定，或目标不支持请求平台／必需平台构建未 READY</td></tr>
+<tr><td><code>409</code></td><td>固定下载包摘要不匹配，禁止静默替换续传文件</td></tr>
+<tr><td><code>415</code></td><td>启动器未声明支持当前发布格式；不得改为分发其他历史发布</td></tr>
+<tr><td><code>503</code></td><td>v1／v2 清单／产物／基准关系校验失败，或存储产物缺失、大小／摘要不符</td></tr>
 </tbody></table></div>
-<div class="pair"><p>归档下架阻止新的公开目录与分发请求，不撤回已签发短期 OSS URL 的剩余有效期。已保存的包仍必须通过 Launcher 信任策略。管理历史读取不等于玩家重新上线。生产 CDN、鉴权及公钥信任分发需另行部署，不能由 ZIP 格式自动提供。</p><p class="en" lang="en">Archiving/unlisting blocks new public catalog and distribution requests but does not revoke the remaining lifetime of already-issued short-lived OSS URLs. Saved packages remain subject to Launcher trust policy. Reading management history does not relist a client. Production CDN, authorization and trusted-key distribution require separate deployment, not just the ZIP format.</p></div>
+<div class="paragraph"><p>归档或下架阻止新的公开目录与分发请求，不撤回已签发短期 OSS URL 的剩余有效期。已保存的包仍必须通过启动器信任策略。后台可以读取历史包，但这不会重新开放玩家分发。生产 CDN、鉴权及公钥信任分发需另行部署，不能由 ZIP 格式自动提供。</p></div>
 </section>
 
 <section id="validation">
-<h2>10. 安全与符合性校验 / <span lang="en">Security and conformance validation</span></h2>
+<h2>10. 安全与符合性校验</h2>
 <ol>
-<li>先限制 ZIP 条目数、压缩方式、展开大小与安全路径；识别 formatVersion 只用于选择校验器，不建立信任。<p class="en" lang="en">First constrain ZIP entry count, compression, uncompressed size and safe paths. Detecting formatVersion only selects a validator; it establishes no trust.</p></li>
-<li>严格解码协议 JSON，检查已知字段、类型、身份、平台、文件冲突、资源上限与 protected 路径。<p class="en" lang="en">Strictly decode protocol JSON; validate known fields, types, identity, platform, file conflicts, limits and protected paths.</p></li>
-<li>从包外获取受信公钥，检查 keyId、元数据摘要和正确版本签名域。<p class="en" lang="en">Obtain a trusted key externally and verify keyId, metadata digest and the correct version's signature domain.</p></li>
-<li>核对目标／基准摘要及关系；从完整清单重算变化和载荷，要求与元数据完全一致。<p class="en" lang="en">Check target/base digests and relationships; recompute changes and payload from complete inventories and require exact metadata agreement.</p></li>
-<li>v1 核对所有目标环境引用及文件；v2 重新生成完整 mrpack 索引，并逐字节核对索引及摘要。<p class="en" lang="en">For v1, verify every target environment reference and file. For v2, regenerate the complete mrpack index and compare its bytes and digest.</p></li>
-<li>核对条目集合恰好等于协议文档与声明载荷，拒绝缺失／额外／重复文件；流式检查全部载荷大小、CRC 和 SHA-256。<p class="en" lang="en">Require the entry set to equal exactly the protocol documents and declared payload, rejecting missing/extra/duplicate files; stream-verify all payload sizes, CRCs and SHA-256 digests.</p></li>
-<li>校验完成后才进行安装、网络下载或命令授权；网络必须逐跳 HTTPS、校验公开地址并固定已核验 DNS 地址，代理不得绕过保护。校验远程实际大小和所有声明哈希后才进入缓存／启用目录。<p class="en" lang="en">Only after validation proceed to installation, network fetching or command consent. Network requests MUST enforce HTTPS at every hop, public-address checks and pinned validated DNS addresses; proxies MUST NOT bypass protection. Validate actual remote size and every declared hash before caching or activation.</p></li>
+<li>先限制 ZIP 条目数、压缩方式、展开大小与安全路径；识别 formatVersion 只用于选择校验器，不建立信任。</li>
+<li>严格解码协议 JSON，检查已知字段、类型、身份、平台、文件冲突、资源上限与受保护路径。</li>
+<li>从包外获取受信公钥，检查 keyId、元数据摘要和正确版本签名域。</li>
+<li>核对目标／基准摘要及关系；从完整清单重算变化和载荷，要求与元数据完全一致。</li>
+<li>v1 核对所有目标环境引用及文件；v2 重新生成完整 mrpack 索引，并逐字节核对索引及摘要。</li>
+<li>核对条目集合恰好等于协议文档与声明载荷，拒绝缺失／额外／重复文件；流式检查全部载荷大小、CRC 和 SHA-256。</li>
+<li>校验完成后才进行安装、网络下载或命令授权；网络必须逐跳 HTTPS、校验公开地址并固定已核验 DNS 地址，代理不得绕过保护。校验远程实际大小和所有声明哈希后才进入缓存／启用目录。</li>
 </ol>
-<div class="pair"><p>整合包来源白名单当前由超管管理，默认关闭；关闭不关闭 HTTPS、SSRF、重定向、大小与哈希保护。v2 后台校验下载声明不证明远程字节已下载／验收，也不证明环境可启动。mrpack 不应被视作可直接信任的执行脚本。</p><p class="en" lang="en">The current super-admin-managed pack-source allowlist defaults to disabled. Disabled does not disable HTTPS, SSRF, redirect, size or hash protections. Backend v2 declaration validation is not proof that remote bytes were downloaded/accepted or that runtimes launch. mrpack must not be treated as a directly trusted execution script.</p></div>
+<div class="paragraph"><p>整合包来源白名单当前由超管管理，默认关闭；停用白名单不会停用 HTTPS、SSRF、重定向、大小与哈希保护。v2 后台校验下载声明不证明远程字节已下载／验收，也不证明环境可启动。mrpack 不应被视作可直接信任的执行脚本。</p></div>
 </section>
 
 <section id="examples">
-<h2>11. 示例与校验工具 / <span lang="en">Examples and validation tools</span></h2>
-<div class="pair"><p>以下链接与本 HTML 同在仓库 docs 中，可离线查看。示例使用合成字节，不是可启动游戏；示例 ID、Java 与 loader 版本不构成运行环境推荐。</p><p class="en" lang="en">The following links are in the repository's docs directory alongside this HTML and can be read offline. Examples use synthetic bytes and are not launchable games. Example IDs and Java/loader versions are not runtime recommendations.</p></div>
-<h3>11.1 v1 示例 / <span lang="en">v1 examples</span></h3>
+<h2>11. 示例与校验工具</h2>
+<div class="paragraph"><p>以下链接与本 HTML 同在仓库 docs 中，可离线查看。示例使用合成字节，不是可启动游戏；示例 ID、Java 与加载器版本不构成运行环境推荐。</p></div>
+<h3>11.1 v1 示例</h3>
 <ul>
-<li><a href="examples/muapack/README.md">说明 / README</a> · <a href="examples/muapack/full/mua-pack.json">full mua-pack.json</a> · <a href="examples/muapack/full/metadata/target-manifest.json">full target-manifest.json</a></li>
-<li><a href="examples/muapack/update/mua-pack.json">update mua-pack.json</a> · <a href="examples/muapack/update/metadata/base-manifest.json">base-manifest.json</a> · <a href="examples/muapack/update/metadata/target-manifest.json">target-manifest.json</a></li>
+<li><a href="examples/muapack/README.md">说明</a> · <a href="examples/muapack/full/mua-pack.json">完整包元数据</a> · <a href="examples/muapack/full/metadata/target-manifest.json">完整包目标清单</a></li>
+<li><a href="examples/muapack/update/mua-pack.json">更新包元数据</a> · <a href="examples/muapack/update/metadata/base-manifest.json">基准清单</a> · <a href="examples/muapack/update/metadata/target-manifest.json">目标清单</a></li>
 </ul>
-<div class="pair"><p>v1 示例目录不保存载荷对象或签名，不能直接压缩成为有效包；测试会生成临时密钥与真正的签名 ZIP。</p><p class="en" lang="en">The v1 example directories omit payload objects and signatures and cannot be directly zipped into valid packages; tests generate temporary keys and actual signed ZIPs.</p></div>
-<h3>11.2 v2 示例 / <span lang="en">v2 examples</span></h3>
+<div class="paragraph"><p>v1 示例目录不保存载荷对象或签名，不能直接压缩成为有效包；测试会生成临时密钥与真正的签名 ZIP。</p></div>
+<h3>11.2 v2 示例</h3>
 <ul>
-<li><a href="examples/muapack-v2/README.md">说明 / README</a> · <a href="examples/muapack-v2/base-full.muapack">base-full.muapack</a> · <a href="examples/muapack-v2/target-full.muapack">target-full.muapack</a> · <a href="examples/muapack-v2/update.muapack">update.muapack</a></li>
-<li><a href="examples/muapack-v2/target-full/mua-pack.json">full mua-pack.json</a> · <a href="examples/muapack-v2/target-full/metadata/target-manifest.json">target-manifest.json</a> · <a href="examples/muapack-v2/target-full/modrinth.index.json">modrinth.index.json</a></li>
-<li><a href="examples/muapack-v2/update/mua-pack.json">update mua-pack.json</a> · <a href="examples/muapack-v2/test-public-key.json">包外测试公钥 / External test public key</a> · <a href="examples/muapack-v2/verification-report.json">校验记录 / Verification report</a></li>
+<li><a href="examples/muapack-v2/README.md">说明</a> · <a href="examples/muapack-v2/base-full.muapack">基准完整包</a> · <a href="examples/muapack-v2/target-full.muapack">目标完整包</a> · <a href="examples/muapack-v2/update.muapack">更新包</a></li>
+<li><a href="examples/muapack-v2/target-full/mua-pack.json">完整包元数据</a> · <a href="examples/muapack-v2/target-full/metadata/target-manifest.json">目标清单</a> · <a href="examples/muapack-v2/target-full/modrinth.index.json">Modrinth 索引</a></li>
+<li><a href="examples/muapack-v2/update/mua-pack.json">更新包元数据</a> · <a href="examples/muapack-v2/test-public-key.json">包外测试公钥</a> · <a href="examples/muapack-v2/verification-report.json">校验记录</a></li>
 </ul>
-<div class="pair"><p>v2 目标示例为 5 个本地文件、4 个远程声明；更新包只携带 3 个本地载荷，并保留完整基准／目标／索引。下载地址采用 <code>.invalid</code>，独立工具不访问网络。测试公钥只对示例有效，不能作为生产信任根。</p><p class="en" lang="en">The v2 target example has 5 local files and 4 remote declarations. Its update carries only 3 local payloads while retaining complete base/target/index documents. URLs use <code>.invalid</code>; the independent tool does not access the network. The test key is for fixtures only and is not a production trust root.</p></div>
-<h3>11.3 只读校验 / <span lang="en">Read-only validation</span></h3>
+<div class="paragraph"><p>v2 目标示例为 5 个本地文件、4 个远程声明；更新包只携带 3 个本地载荷，并保留完整基准／目标／索引。下载地址采用 <code>.invalid</code>，独立工具不访问网络。测试公钥仅用于校验示例，不能作为生产信任根。</p></div>
+<h3>11.3 只读校验</h3>
+<p>在仓库根目录执行以下命令。<code>test:muapack</code> 运行 v1 测试；v2 示例使用最后一条命令独立校验。</p>
 <pre><code>npm run test:muapack
 npm run muapack:validate -- client.muapack trusted-public-key.pem
 
 node --conditions=react-server --import tsx docs/examples/muapack-v2/fixtures.mjs --check</code></pre>
-<div class="pair"><p>工具检查协议、签名、完整清单、差异、ZIP 与字节摘要，失败以非零状态退出；不会安装文件、下载依赖或执行启动操作。校验成功只证明对应协议事实，不证明真实游戏可启动。</p><p class="en" lang="en">The tools check protocol structure, signatures, complete inventories, changes, ZIP structure and byte digests, failing with a nonzero exit status. They do not install files, download dependencies or execute launch operations. Passing proves protocol facts, not that a real game will launch.</p></div>
+<div class="paragraph"><p>工具检查协议、签名、完整清单、差异、ZIP 与字节摘要，失败以非零状态退出；不会安装文件、下载游戏依赖或执行启动操作。校验成功只证明对应协议事实，不证明真实游戏可启动。</p></div>
 </section>
 
 <section id="status">
-<h2>12. 实现范围 / <span lang="en">Implementation status</span></h2>
-<p>截至 2026-10-12 的后台快照；不是平台启动兼容认证。<br><span class="en" lang="en">Backend snapshot as of 12 October 2026; not a platform launch-compatibility certification.</span></p>
-<div class="table-wrap"><table><thead><tr><th>能力 / Capability</th><th>状态 / Status</th></tr></thead><tbody>
-<tr><td>v1 多平台环境准备、缓存、完整／更新组包 / v1 platform runtimes, cache, full/update builds</td><td>已接入；按当前环境适配器支持边界 / Integrated within current environment-adapter boundaries</td></tr>
-<tr><td>v2 本地 CAS、完整／自动增量组包 / v2 local CAS and full/automatic delta builds</td><td>已接入；后台不下载 remote 或环境 / Integrated; backend does not fetch remote files or runtimes</td></tr>
-<tr><td>审核、独立包签名、READY 门槛、发布与当前版本切换 / Review, package signing, READY gate, publication and current-release switch</td><td>v1／v2 共用体系，已接入 / Integrated in the shared v1/v2 system</td></tr>
-<tr><td>能力协商、full／update 分发、optional API 标记 / Negotiation, full/update delivery and optional API flags</td><td>已接入；只匹配固定预构建基准 / Integrated; only the fixed prebuilt base is matched</td></tr>
-<tr><td>v2 通用包、固定发布链接刷新、v1／v2 分发校验 / Universal v2 packages, pinned-release renewal and v1/v2 delivery checks</td><td>已接入；S3 Range／If-Match 在 MinIO 验证，Launcher 续传待接入 / Integrated; S3 Range/If-Match verified on MinIO, Launcher resumption pending</td></tr>
-<tr><td>Launcher 环境解析、optional 选择、增量安装事务与恢复 / Launcher runtime resolution, optional selection, transactional delta install and recovery</td><td>端侧待实现／联调 / Pending client-side implementation/integration</td></tr>
-<tr><td>六平台真实游戏启动、公钥信任部署、CDN／生产鉴权 / Six-platform game launches, key-trust deployment, CDN/production authorization</td><td>待验收或待部署，不由离线组包校验代替 / Pending acceptance or deployment; offline validation is insufficient</td></tr>
+<h2>12. 实现范围</h2>
+<p>以下状态以 2026-10-14 的后台实现为准。组包校验通过不代表真实游戏启动已通过验收。</p>
+<div class="table-wrap"><table><thead><tr><th>能力</th><th>状态</th></tr></thead><tbody>
+<tr><td>v1 多平台环境准备、缓存、完整包／更新包构建</td><td>已接入；按当前环境适配器支持边界</td></tr>
+<tr><td>v2 本地 CAS、完整包／自动更新包构建</td><td>已接入；后台不下载远程文件或运行环境</td></tr>
+<tr><td>审核、独立包签名、READY 门槛、发布与当前版本切换</td><td>v1／v2 共用体系，已接入</td></tr>
+<tr><td>格式协商、完整包／更新包分发、可选文件 API 标记</td><td>已接入；只匹配固定预构建基准</td></tr>
+<tr><td>v2 通用包、固定发布链接刷新、v1／v2 分发校验</td><td>已接入；Range／If-Match 已在 MinIO 验证；原生云存储仍需实际云端验收，启动器续传待接入</td></tr>
+<tr><td>启动器环境解析、optional 选择、更新安装事务与恢复</td><td>启动器待实现／联调</td></tr>
+<tr><td>各受支持平台的真实游戏启动、公钥信任部署、CDN／生产鉴权</td><td>待验收或待部署，不由离线组包校验代替</td></tr>
 </tbody></table></div>
-<div class="pair"><p>Upload READY 仅表示导入完成，PackageBuild READY 表示该修订的必需组包产物已生成并验签；只有审核及发布事务成功才公开。已发布包不可补写字段或重签以改变事实，修改需新版本。v1／v2 切换也创建新发布，并使用 full 过渡。</p><p class="en" lang="en">Upload READY means import completion; PackageBuild READY means the revision's required artifacts are built and signature-verified. Public availability requires successful review and publication. Published packages MUST NOT be amended or re-signed to change facts; changes require a new version. A v1/v2 transition also creates a new release and uses full.</p></div>
+<div class="paragraph"><p>Upload READY 仅表示导入完成。单个 PackageBuild READY 表示该构建的产物已生成、验签并保存到 OSS；发布前还须确认所有必需构建就绪。审核与发布请求均必须提交 contentRevision 和 packageRevision，服务端核对当前修订及权限。审核通过不会自动发布或启用；玩家分发还取决于发布成功、有效绑定与上架状态。已发布内容不可补写字段或重新签名来改变事实；内容或包格式变化必须创建新发布，跨 v1／v2 使用完整包过渡。</p></div>
 </section>
 
 <section id="references">
-<h2>13. 参考与实现契约 / <span lang="en">References and implementation contracts</span></h2>
-<div class="pair"><p>本规范以仓库当前协议契约为依据；阅读其他较早的设计文件时，应区分设计意图与本快照已实现能力。与代码发生差异时，应复核并修订文档，不得改写旧已签名发布来消除差异。</p><p class="en" lang="en">This specification follows the repository's current protocol contracts. Older design documents must be read with design intent distinguished from implemented snapshot capabilities. Any discrepancy with code requires review and documentation correction, not rewriting previously signed releases.</p></div>
+<h2>13. 参考与实现契约</h2>
+<div class="paragraph"><p>本规范以仓库当前协议契约为依据；阅读其他较早的设计文件时，应区分设计意图与本文档列出的实现范围。与代码发生差异时，应复核并修订文档，不得改写旧已签名发布来消除差异。</p></div>
 <ul>
-<li><a href="muapack-v1.md">muapack v1 协议 / v1 protocol</a> · <a href="muapack-v2.md">muapack v2 协议基线 / v2 protocol baseline</a> · <a href="muapack-v2-design.md">v2 设计与实施顺序 / v2 design and implementation sequence</a></li>
-<li><a href="muapack-worker.md">Worker 组包与发布门槛 / Worker builds and publication gate</a> · <a href="client-upload-api.md">标准 API / Standard API</a> · <a href="modrinth-import.md">mrpack 导入 / mrpack import</a></li>
-<li><a href="environment-download-sources.md">环境下载源 / Environment sources</a> · <a href="forge-environments.md">Forge／NeoForge 环境支持 / Forge/NeoForge environment support</a> · <a href="implementation-status.md">实施范围 / Implementation status</a></li>
+<li><a href="muapack-v1.md">muapack v1 协议</a> · <a href="muapack-v2.md">muapack v2 协议基线</a> · <a href="muapack-v2-design.md">v2 设计与实施顺序</a></li>
+<li><a href="muapack-worker.md">Worker 组包与发布门槛</a> · <a href="client-upload-api.md">标准 API</a> · <a href="modrinth-import.md">mrpack 导入</a></li>
+<li><a href="environment-download-sources.md">环境下载源</a> · <a href="forge-environments.md">Forge／NeoForge 环境支持</a> · <a href="implementation-status.md">实施范围</a></li>
 <li>v1：<a href="../src/lib/muapack-contract.ts">muapack-contract.ts</a> · <a href="../src/lib/muapack-protocol.ts">muapack-protocol.ts</a> · <a href="../src/lib/muapack-archive.ts">muapack-archive.ts</a></li>
 <li>v2：<a href="../src/lib/muapack-v2-contract.ts">muapack-v2-contract.ts</a> · <a href="../src/lib/muapack-v2-protocol.ts">muapack-v2-protocol.ts</a> · <a href="../src/lib/muapack-v2-archive.ts">muapack-v2-archive.ts</a> · <a href="../src/lib/recipe-inventory.ts">recipe-inventory.ts</a></li>
-<li><a href="../src/lib/pack-path.ts">公共路径规则 / Shared path rules</a></li>
-<li>排版参考 / <span lang="en">Document-layout reference:</span> <a href="https://opensoundcontrol.stanford.edu/spec-1_0.html">OpenSoundControl Specification 1.0</a>（借鉴文档结构，不复制其协议内容 / <span lang="en">structure inspiration only, not copied protocol content</span>）</li>
+<li><a href="../src/lib/pack-path.ts">公共路径规则</a> · <a href="first-release-cleanup.md">首发契约清理</a> · <a href="object-storage.md">对象存储配置与验证</a></li>
 </ul>
 </section>
 <hr>
-<footer><p>Union Link · muapack 1 &amp; 2 · 2026-10-12 · UTF-8<br>单文件 HTML，可离线阅读与打印。示例／源码链接需保留仓库目录结构。<br><span lang="en">Single-file HTML for offline reading and printing. Example/source links require the repository directory structure.</span></p><a href="#top">返回顶部 / Back to top ↑</a></footer>
+<footer><p>Union Link · muapack 1 &amp; 2 · 2026-10-14 · UTF-8<br>单文件 HTML，可离线阅读与打印。示例／源码链接需保留仓库目录结构。</p><a href="#top">返回顶部</a></footer>
 </body>
 </html>

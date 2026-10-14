@@ -14,6 +14,6 @@ async function main() {
   try { await writeFile(path, privateKey.export({ type: "pkcs8", format: "pem" }), { flag: "wx", mode: 0o600 }); }
   catch (error) { if (!(error && typeof error === "object" && "code" in error && error.code === "EEXIST")) throw error; }
   const identity = await signingIdentity();
-  console.log(`Private MinIO buckets ready; Ed25519 key ID: ${identity.keyId}`);
+  console.log(`Private object storage buckets ready (${process.env.OSS_PROVIDER ?? "minio"}); Ed25519 key ID: ${identity.keyId}`);
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "Initialization failed"); process.exitCode = 1; });

@@ -1,97 +1,116 @@
 # Union Link
-欢迎使用 Union Link。该系统可以分发支持版本管理的 .muapack 格式的整合包文件。
 
-## 什么是 .muapack？
+使用 Union Link 管理和分发 Minecraft 客户端整合包。你可以创建客户端版本，提交审核，并在发布后提供完整包或更新包。
 
-.muapack 是 MUA 高校联盟基于 .mrpack 研发的新型整合包格式，目的是给各个高校的各模组服服主上传分发使用。相较于 .mrpack，该格式支持多元化的版本管理以及增量更新系统。
+Union Link 包含 `.muapack` 整合包格式、管理后台和 API。接入 API 的启动器可以查询已发布的版本，并获取对应的整合包。资讯推送计划在后续提供。
 
-该文档会详细说明 .muapack 的工作原理与启动器适配相关的逻辑。
+## 了解 .muapack
 
-## .muapack 技术手册
+`.muapack` 是 MUA 高校联盟基于 `.mrpack` 研发的整合包格式，用于高校服务器的客户端分发。它支持版本管理和增量更新，便于服务器管理员维护客户端内容。
 
-.muapack 有两个版本，分别是 V1 与 V2。
+本文介绍 `.muapack` 的工作方式、包内文件，以及后台和启动器的使用流程。
 
-**.muapack V1：**该版本支持打包完整的模组、运行环境。在启动器进行安装 V1 版本时，无需进行联网。
+## 分发和更新整合包
 
-**.muapack V2：**该版本继承了 .mrpack 的直链模组下载。在启动器进行安装 V2 版本时，需要进行联网下载对应的模组与运行环境。
+你可以在 Union Link 中上传整合包、填写版本信息并提交审核。审核通过、组包完成并发布后，接入 Union Link 的启动器可以获取该版本。
 
-***MUA 与 Union Link 体系推荐使用 V2 版本，因为该版本体积更小，占用带宽极少。对于有需要进行离线安装的组织，我们也提供限时的 V1 版本分发渠道。***
+发布更新时，平台会根据指定的已发布版本生成更新包。更新包携带更新所需的文件，减少重复下载。
 
-无论是 V1 还是 V2，两者都支持完整发布与增量发布。
+## 选择 .muapack 版本
 
-**完整发布：**内部包含最新版本的完整内容，安装完整发布后可以直接运行客户端。
+`.muapack` 提供 v1 和 v2 两种格式。根据安装方式选择适合的版本。
 
-**增量发布：**内部只包含上一版本到最新版本的文件变化，安装增量发布时需要有上一版本的完整发布。
+**.muapack v1** 包含预安装的客户端文件和对应平台的运行环境。完整包可用于离线安装。
 
-![image-20261013191805737](C:\Users\omgst\AppData\Roaming\Typora\typora-user-images\image-20261013191805737.png)
+**.muapack v2** 沿用 `.mrpack` 的远程文件下载方式，包含本地文件以及远程模组和运行环境的声明。安装时，启动器需要联网获取所需的远程文件和运行环境。
 
-*关于 .muapack 的详细技术细节以及规范，详情请看* **MUA Package Specification**
+> **建议：**优先使用 v2。它减少了包内携带的远程模组和运行环境文件，有助于缩减包体及平台分发带宽。如需离线安装，可使用限时的 v1 分发渠道。
 
-### .muapack 的文件内容
+两种格式都支持完整包和更新包。
 
-与 .mrpack 一样，.muapack 也使用 ZIP64 来进行封装与储存。一个标准的 .muapack 的内容应该是这样的：
+- **完整包：**描述目标版本的完整内容，适用于首次安装或重新安装。v2 中声明的远程文件和运行环境仍需联网获取。
+- **更新包：**描述指定基准版本到目标版本的变化，并携带更新所需的文件。安装时，需要已有与基准版本匹配的客户端。
 
-#### .muapack V1
+![完整包与更新包的版本关系](C:\Users\omgst\AppData\Roaming\Typora\typora-user-images\image-20261013191805737.png)
 
-v1 是带完整预安装文件与精确运行环境的单平台容器。包内内容以 SHA-256 对象存储；安装位置由目标平台清单决定，不由对象 ZIP 路径决定。
+有关格式和安装要求，请参阅 [MUA Package Specification](docs/muapack-spec.html)。
 
-```
+### 查看包内文件
+
+`.muapack` 使用 ZIP／ZIP64 封装。以下示例展示两种格式的文件布局。
+
+#### .muapack v1
+
+v1 包对应一个目标平台，包含客户端文件和精确的运行环境。文件以 SHA-256 对象保存，安装位置由目标平台清单指定。
+
+```text
 packv1-1.4.3-windows-amd64.muapack
-├── mua-pack.json                           [协议识别]
-├── metadata/target-manifest.json           [目标清单文件表单]
-├── metadata/base-manifest.json             [完整清单文件表单 / 仅更新包包含该文件]
-├── metadata/signature.json                 [密钥]
-├── metadata/environments/<sha256>.json     [运行环境]
-└── objects/sha256/<sha256>                 [原始文件字节]
+├── mua-pack.json                          [格式和发布信息]
+├── metadata/target-manifest.json          [目标版本完整清单]
+├── metadata/base-manifest.json            [基准版本完整清单，仅更新包包含]
+├── metadata/signature.json                [签名信息]
+├── metadata/environments/<sha256>.json    [运行环境清单]
+└── objects/sha256/<sha256>                [原始文件字节]
 ```
 
-#### .muapack V2
+#### .muapack v2
 
-```
+v2 包使用一份平台无关的目标清单。本地文件保存在 `overrides` 中，远程文件由启动器根据索引下载，运行环境由启动器根据本机平台解析。
+
+```text
 packv2-1.4.3.muapack
-├── mua-pack.json                           [协议识别]
-├── modrinth.index.json                     [Modrinth 源]
-├── metadata/target-manifest.json           [目标清单文件表单]
-├── metadata/base-manifest.json             [完整清单文件表单 / 仅更新包包含该文件]
-├── metadata/signature.json                 [密钥]
-└── overrides/<path>                        [本地文件]
+├── mua-pack.json                          [格式和发布信息]
+├── modrinth.index.json                    [Modrinth 索引]
+├── metadata/target-manifest.json          [目标版本完整清单]
+├── metadata/base-manifest.json            [基准版本完整清单，仅更新包包含]
+├── metadata/signature.json                [签名信息]
+└── overrides/<path>                       [本地文件]
 ```
 
-有关于更多信息，如这些文件与表单的格式和内容，请看 **MUA Package Specification**
+有关各文件的字段和内容，请参阅 [MUA Package Specification](docs/muapack-spec.html)。
 
-## 使用 Union Link 平台管理服务器与客户端
+## 管理服务器和客户端
 
-Union Link 支持两种方式分发整合包：
+你可以通过 Union Link 后台管理客户端，也可以使用接入管理 API 的启动器。Union Link Launcher 的管理入口仍在开发中。
 
-1. Union Link 后台
-2. 接入整合包分发 API 的启动器（如 Union Link Launcher 等）
+### 使用 Union Link 后台
 
-### Union Link 后台
+![Union Link 管理后台](G:\Projects\Minecraft\BotWMCS\mualauncher-backend\docs\images\image-20261013160436811.png)
 
-![image-20261013160436811](G:\Projects\Minecraft\BotWMCS\mualauncher-backend\docs\images\image-20261013160436811.png)
+使用平台提供的账号登录后台。你可以查看和管理的组织、服务器及客户端取决于账号权限。首次接入的服务器由平台管理员登记。
 
-Union Link 后台只允许相应的组织管理员进行访问。
+#### 首次发布客户端
 
-要想分发整合包，请遵循以下几个步骤：
+1. 联系 Union Link 平台管理员，申请接入所属高校的服务器，并获取后台账号。
+2. 登录 Union Link 后台，在「服务器管理」中确认已登记的服务器。
+3. 打开「客户端管理」，选择「添加客户端」，选择所属组织并上传整合包。上传前，选择要制作的 `.muapack` 格式。
+4. 核对识别结果，填写客户端资料和版本信息，然后提交审核。
+5. 审核通过后，等待平台完成组包。由具有发布权限的人员发布该版本，并由具有相应权限的人员启用版本、完成服务器绑定。
 
-- **要是第一次分发整合包：**
-  1. 寻找 Union Link 管理员申请将自己高校服务器接入 Union Link 体系
-  2. 使用管理员提供的账号和密码登录到 Union Link 后台
-  3. 在 `服务器管理` 页面新增自己高校的服务器
-  4. 在 `客户端管理` 页面为服务器绑定整合包并上传
-  5. 等待管理员审核，审核完毕后会将整合包自动推送给接入 Union Link 体系的启动器
-- **要是分发更新包：**
-  1. 前往 `客户端管理` 页面
-  2. 选择要更新的整合包，点选 `更新` 按钮
-  3. 上传新的整合包，并完成资料填充
-  4. 等待管理员审核，审核完毕后会将更新包自动推送给接入 Union Link 体系的启动器
+发布版本启用并满足公开分发条件后，接入 Union Link 的启动器即可获取对应的整合包。
 
-### Union Link Launcher (WIP)
+#### 发布客户端更新
 
-进入 ULL 之后，点击 `选项` 按钮，进入之后按 `ESC` 退出。重复 5 次，并关闭 ULL。再次打开 ULL 后，会发现加载进度条变成了灰黑色。此时进入 ULL 的助理页面。在该页面，执行以下操作：
+1. 打开「客户端管理」，选择要更新的客户端，然后选择「更新」。
+2. 上传包含目标版本完整内容的新整合包。平台会根据已发布的基准版本生成更新包。
+3. 填写新版本号，核对客户端资料和识别结果，然后提交审核。
+4. 审核通过、组包完成后，由具有相应权限的人员发布并启用新版本。
 
-- **分发整合包与更新包**：
-  1. 点击 `登录 Union Link` 按钮，在弹出的窗口输入 Union Link 账号和密码，登录后台
-  2. 登录完成后，点击 `服务器管理` 页面，新增自己高校的服务器
-  3. 在 `客户端管理` 页面为服务器绑定 整合包 / 更新包 并上传
-  4. 等待管理员审核，审核完毕后会将整合包自动推送给接入 Union Link 体系的启动器
+在新版本启用前，服务器继续使用原来的客户端版本。
+
+### 使用 Union Link Launcher（开发中）
+
+Union Link Launcher（ULL）的后台接入和整合包安装适配仍在开发中。以下记录开发版本的操作流程，具体入口以所用版本为准。
+
+#### 打开助理页面
+
+1. 打开 ULL，选择「选项」，然后按 Esc 返回。
+2. 重复上述操作 5 次，随后关闭 ULL。
+3. 再次打开 ULL。加载进度条变为灰黑色后，进入助理页面。
+
+#### 管理整合包和更新
+
+1. 在助理页面选择「登录 Union Link」，在登录窗口中输入后台账号和密码。
+2. 打开「服务器管理」，选择所属高校的服务器。首次接入时，请联系平台管理员登记服务器。
+3. 打开「客户端管理」，创建客户端或选择已有客户端进行更新，上传整合包并填写版本资料。
+4. 提交审核。审核通过、组包完成并发布后，由具有相应权限的人员启用版本、完成服务器绑定。

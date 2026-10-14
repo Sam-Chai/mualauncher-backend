@@ -1,5 +1,7 @@
 # Launcher 客户端下载与链接刷新
 
+2026-10-14：存储支持 `.env` 选择 MinIO／AWS／通用 S3／阿里云 OSS／腾讯云 COS／华为云 OBS，见 [配置与验证](object-storage.md)。签名 URL 的参数由供应商决定，客户端按不透明 URL 使用；返回字段、发布签名、ETag／Range／If-Match 与刷新身份规则保持一致。
+
 2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。
 
 
@@ -35,9 +37,9 @@ Launcher 应保存并直接请求响应里的相对 `refreshUrl`，以后台 API
 
 成功响应 `Cache-Control:no-store`。它包含新预签名链接和从签名时间计算的 UTC `expiresAt`；同秒请求可能得到相同的有效 URL，刷新不要求随机生成 URL。无论服务器最新发布是什么，选定的 releaseId／SHA-256／大小不变才允许继续原下载。
 
-## 3. AWS S3 下载与续传
+## 3. 对象存储下载与续传
 
-预签名链接由 AWS SDK 的 `GetObjectCommand` 使用 SigV4 签发，默认有效 300 秒。GET 签名不绑定 `Range`；Launcher 可以对同一对象请求单一范围，并携带后台返回的 ETag：
+预签名链接由选定供应商的 SDK 签发，MinIO／AWS／通用 S3 使用 SigV4，三家云服务使用原生签名，默认有效 300 秒。GET 签名不绑定 `Range` 或 `If-Match`；Launcher 可以对同一对象请求单一范围，并携带后台返回的原始 ETag：
 
 ```http
 GET <presigned-url>

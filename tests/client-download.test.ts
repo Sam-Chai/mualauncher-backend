@@ -4,7 +4,6 @@ import { assertPublicResponse } from "./openapi-validation";
 import { test, type TestContext } from "node:test";
 import { Readable } from "node:stream";
 import { readFileSync } from "node:fs";
-import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import type { Db } from "../src/lib/auth";
 import { AppError } from "../src/lib/errors";
 import { publicPackage } from "../src/lib/client-download";
@@ -17,6 +16,8 @@ process.env.S3_ENDPOINT = "https://s3.test.invalid";
 process.env.S3_ACCESS_KEY_ID = "test-access-key";
 process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
 process.env.S3_REGION = "us-east-1";
+process.env.OSS_PROVIDER = "minio";
+for (const key of ["ENDPOINT", "ACCESS_KEY_ID", "SECRET_ACCESS_KEY", "REGION", "SESSION_TOKEN", "FORCE_PATH_STYLE", "CUSTOM_DOMAIN"]) delete process.env[`OSS_${key}`];
 const denied = (status: number) => (error: unknown) => error instanceof AppError && error.status === status;
 
 function fixture(t: TestContext, format: 1 | 2, protocolRevision: 2 = 2) {
@@ -66,11 +67,14 @@ function fixture(t: TestContext, format: 1 | 2, protocolRevision: 2 = 2) {
     clientUpload: { findUnique: async () => ({ baseReleaseId: uploadBase }) },
     packageBuild: { findUnique: async ({ where }: { where: { draftId_platform_revision: { draftId: string; platform: string } } }) => builds.find(build => build.draftId === where.draftId_platform_revision.draftId && build.platform === where.draftId_platform_revision.platform) ?? null },
   } as unknown as Db;
-  t.mock.method(storageClient(), "send", async (command: GetObjectCommand | HeadObjectCommand) => {
-    const value = objects.get(command.input.Key!);
+  t.mock.method(storageClient(), "getObject", async (input: { Key: string }) => {
+    const value = objects.get(input.Key);
     if (!value) throw { $metadata: { httpStatusCode: 404 } };
-    if (command instanceof GetObjectCommand) return { Body: Readable.from([value.bytes]), ContentLength: value.size };
-    assert(command instanceof HeadObjectCommand);
+    return { Body: Readable.from([value.bytes]), ContentLength: value.size };
+  });
+  t.mock.method(storageClient(), "headObject", async (input: { Key: string }) => {
+    const value = objects.get(input.Key);
+    if (!value) throw { $metadata: { httpStatusCode: 404 } };
     return { ContentLength: value.size, Metadata: { sha256: value.sha256 }, ETag: value.etag };
   });
   const platform = format === 2 ? null : "windows-amd64";

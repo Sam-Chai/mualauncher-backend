@@ -24,7 +24,7 @@ v1 提交可传 platforms，默认除 Linux aarch64 外五项，Worker 准备环
 
 ## 本地启动
 
-配置 .env 的 S3_ENDPOINT、S3_ACCESS_KEY_ID、S3_SECRET_ACCESS_KEY、S3_PACKAGES_BUCKET、S3_CAS_BUCKET、S3_ENVIRONMENTS_BUCKET、SIGNING_PRIVATE_KEY_PATH；本机使用 mualauncher-minio 的 9000 端口。S3_ENDPOINT 必须能被后台服务和上传浏览器访问。
+配置 .env 的 OSS_PROVIDER、OSS_ENDPOINT、OSS_REGION、OSS_ACCESS_KEY_ID、OSS_SECRET_ACCESS_KEY、OSS_PACKAGES_BUCKET、OSS_CAS_BUCKET、OSS_ENVIRONMENTS_BUCKET、SIGNING_PRIVATE_KEY_PATH；本机 MinIO 使用 9000 端口。旧 S3_* 配置在 MinIO／S3 场景继续可用；Endpoint 必须能被后台服务、Worker、上传浏览器与 Launcher 访问。各厂商原生 SDK、桶权限／CORS 和部署验证见 [对象存储配置](object-storage.md)。
 
     npm run db:deploy
     npm run storage:init

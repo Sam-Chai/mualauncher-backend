@@ -5660,7 +5660,7 @@
         ],
         "security": [],
         "summary": "发现当前发布的完整包或更新包",
-        "description": "v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。\n\nacceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。\n\n返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的 S3 原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；不要改变签名 URL，也不能把 GET URL 用作 HEAD。",
+        "description": "v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。\n\nacceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。\n\n返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的对象存储原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；签名参数由存储供应商决定，不要改变签名 URL，也不能把 GET URL 用作 HEAD。",
         "parameters": [
           {
             "schema": {
@@ -5832,7 +5832,7 @@
         ],
         "security": [],
         "summary": "刷新固定发布版本的下载链接",
-        "description": "v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。\n\nacceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。\n\n返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的 S3 原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；不要改变签名 URL，也不能把 GET URL 用作 HEAD。\n\nreleaseId 固定为当前在线绑定客户端的未归档发布，允许该客户端历史版本刷新，不重新选择最新版本。packageSha256 可选，但生成的 refreshUrl 始终携带；摘要不匹配返回 409。归档或解绑后新刷新被拒绝，已经签发的链接仍可能在剩余有效期内可用。",
+        "description": "v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。\n\nacceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。\n\n返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的对象存储原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；签名参数由存储供应商决定，不要改变签名 URL，也不能把 GET URL 用作 HEAD。\n\nreleaseId 固定为当前在线绑定客户端的未归档发布，允许该客户端历史版本刷新，不重新选择最新版本。packageSha256 可选，但生成的 refreshUrl 始终携带；摘要不匹配返回 409。归档或解绑后新刷新被拒绝，已经签发的链接仍可能在剩余有效期内可用。",
         "parameters": [
           {
             "schema": {

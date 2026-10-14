@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-14 对象存储可通过 OSS_PROVIDER=minio／aws／s3／ali／tencent／huawei 选择；MinIO／AWS 使用 S3 SDK，三家云使用 ali-oss、cos-nodejs-sdk-v5、esdk-obs-nodejs 原生适配。业务只调用统一 ObjectStorage 接口。原生云桶禁止启用／暂停版本控制，不支持原子禁止覆盖时拒绝正式不可变写入；复制按厂商单次上限分片并固定源 ETag。Web／Worker 共用配置，旧 S3_* 在 MinIO／S3 场景继续有效；配置不自动迁移旧对象、不改发布签名。部署须运行 storage:verify 并检查 CORS，本地 SDK fixture 与 MinIO 验证不代表真实云验收。见 [对象存储配置](docs/object-storage.md)。
+
 - 2026-10-14 首发清理：旧页面、五个旧后台 API 与公开 CAS 单文件入口已删除；客户端 ID 统一 UUID。上传必填 packageFormatVersion，公开分发必填 acceptedFormatVersions，审核／发布必填双修订。v2 只保留 protocolRevision:2，移除历史平台列、旧协议及 WAITING_PROCESSOR；v1 环境包保留。仅有初始迁移 202610140001_initial_release，OpenAPI 首发基线 1.0.0。详见 [首发清理](docs/first-release-cleanup.md)，本条替代下文历史兼容描述。
 
 - 项目及网站唯一名称为 Union Link。OpenAPI 第 1–7 步已接入：左侧 `API` 内嵌 Scalar，继承后台登录、语言与主题，默认 63 操作完整规范，可切换 4 个 Launcher GET；`/openapi.json` 只公开 Launcher，`/api/admin/openapi` 逐请求检查 Cookie。客户端自动化支持 Cookie 或 Bearer，后台仅 Cookie，文档不授予权限。接口变更必须同步定义／生成产物，执行 openapi:check、关键契约与浏览器检查，记录兼容性后审查新基线；CI 仅发布公开 JSON artifact，不公开内部规范。见 [接入与校验](docs/openapi.md)、[完整流程](docs/api-workflows.md)、[兼容性](docs/openapi-changelog.md)。Scalar Registry／云端站点未接入。
