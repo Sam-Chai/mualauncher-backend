@@ -1,4 +1,8 @@
 {
+  "getStorageTelemetry": [
+    "Read storage telemetry",
+    "Superadmin Cookie sessions only. Reads platform-wide Worker-collected capacity and observed traffic for today in Asia/Shanghai, independent of organization filters. Bytes and object counts are decimal strings; missing values are null. Traffic includes Worker and admin access, not complete player downloads or billing. Gaps and intervals crossing midnight are not estimated. CDN remains NOT_CONNECTED."
+  ],
   "listClients": [
     "List accessible clients and package progress",
     "Returns only clients readable under current RBAC; deleted records are hidden. Drafts/uploads require DRAFT_READ; releases require RELEASE_READ. Poll drafts[].packageBuilds and releases[].packageBuilds for build progress: there is no separate build-status endpoint. ARCHIVED takes precedence. Upload canEdit indicates ownership or superadmin access."

@@ -66,8 +66,8 @@ export function createHuaweiStorage(config: StorageConfiguration): ObjectStorage
     deleteObject: input => call("deleteObject", input),
     deleteObjects: input => call("deleteObjects", { Bucket: input.Bucket, Objects: input.Delete.Objects }),
     listObjects: async input => {
-      const result = await call<{ Contents: { Key: string }[]; IsTruncated: string; NextMarker?: string }>("listObjects", { Bucket: input.Bucket, Prefix: input.Prefix, Marker: input.ContinuationToken });
-      return { Contents: result.Contents, KeyCount: result.Contents.length, NextContinuationToken: truncated(result.IsTruncated) ? result.NextMarker || result.Contents.at(-1)?.Key : undefined };
+      const result = await call<{ Contents: { Key: string; Size?: number | string }[]; IsTruncated: string; NextMarker?: string }>("listObjects", { Bucket: input.Bucket, Prefix: input.Prefix, Marker: input.ContinuationToken });
+      return { Contents: result.Contents.map(object => ({ Key: object.Key, Size: object.Size === undefined ? undefined : Number(object.Size) })), KeyCount: result.Contents.length, IsTruncated: truncated(result.IsTruncated), NextContinuationToken: truncated(result.IsTruncated) ? result.NextMarker || result.Contents.at(-1)?.Key : undefined };
     },
     createMultipartUpload: (input, options) => createdUpload(() => call("initiateMultipartUpload", input), options,
       id => call("abortMultipartUpload", { ...input, UploadId: id })),

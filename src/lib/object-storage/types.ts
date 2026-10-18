@@ -33,7 +33,7 @@ export interface ObjectStorage {
   deleteObject(input: ObjectInput): Promise<unknown>;
   deleteObjects(input: BucketInput & { Delete: { Objects: { Key: string }[] } }): Promise<unknown>;
   listObjects(input: BucketInput & { Prefix?: string; ContinuationToken?: string }): Promise<{
-    Contents?: { Key?: string }[]; NextContinuationToken?: string; KeyCount?: number; IsTruncated?: boolean;
+    Contents?: { Key?: string; Size?: number }[]; NextContinuationToken?: string; KeyCount?: number; IsTruncated?: boolean;
   }>;
   createMultipartUpload(input: CreateMultipartInput, options?: StorageOptions): Promise<{ UploadId?: string }>;
   uploadPart(input: MultipartInput & { PartNumber: number; Body: Buffer; ContentLength?: number }, options?: StorageOptions): Promise<{ ETag?: string }>;

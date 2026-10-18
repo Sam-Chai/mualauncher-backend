@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-18 存储遥测已接入超管主页／Storage，Cookie 超管只读 API `/api/admin/storage-telemetry`；Worker 租约采集，新增迁移 `202610180001_storage_telemetry`，当前 23 张业务表 FORCE RLS。当前 MinIO 取桶级指标和进程启动时间，其他供应商通过统一对象列表提供容量，云监控流量和 CDN 尚未接入。未测值为 null，已采集流量含 Worker／后台访问，不代表玩家完成下载或账单；不改变签名链接和发布。OpenAPI 1.1.0 共 64 操作，公开仍四 GET。见 [存储遥测](docs/storage-telemetry.md)。本条补充首发后新增迁移与操作，优先于下文首发时的数量记录。
+
 - 2026-10-14 对象存储可通过 OSS_PROVIDER=minio／aws／s3／ali／tencent／huawei 选择；MinIO／AWS 使用 S3 SDK，三家云使用 ali-oss、cos-nodejs-sdk-v5、esdk-obs-nodejs 原生适配。业务只调用统一 ObjectStorage 接口。原生云桶禁止启用／暂停版本控制，不支持原子禁止覆盖时拒绝正式不可变写入；复制按厂商单次上限分片并固定源 ETag。Web／Worker 共用配置，旧 S3_* 在 MinIO／S3 场景继续有效；配置不自动迁移旧对象、不改发布签名。部署须运行 storage:verify 并检查 CORS，本地 SDK fixture 与 MinIO 验证不代表真实云验收。见 [对象存储配置](docs/object-storage.md)。
 
 - 2026-10-14 首发清理：旧页面、五个旧后台 API 与公开 CAS 单文件入口已删除；客户端 ID 统一 UUID。上传必填 packageFormatVersion，公开分发必填 acceptedFormatVersions，审核／发布必填双修订。v2 只保留 protocolRevision:2，移除历史平台列、旧协议及 WAITING_PROCESSOR；v1 环境包保留。仅有初始迁移 202610140001_initial_release，OpenAPI 首发基线 1.0.0。详见 [首发清理](docs/first-release-cleanup.md)，本条替代下文历史兼容描述。

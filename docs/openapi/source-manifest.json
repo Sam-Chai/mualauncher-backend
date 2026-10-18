@@ -1,7 +1,8 @@
 {
   "prisma/migrations/202610140001_initial_release/migration.sql": "f3d2717b5de2411001c72ac656528891f0245ae98333402bd50e37c7ba9562ac",
-  "prisma/schema.prisma": "b199db20fd0634c13b1a346fa01998b7c0d216a5487a38463dad93b9cfedb74b",
-  "src/app/api/admin/[...path]/route.ts": "1b90aefb5c6e9c9fe8d46a78b661584ebde64fe632d22643fac8eb0866f5fa83",
+  "prisma/migrations/202610180001_storage_telemetry/migration.sql": "529dcc6ead5992fa268724732a90ab1a527a3a633a6f8739405e358824c750bf",
+  "prisma/schema.prisma": "8e6e8b5485bbcc7f53b77c800ae21d51aefbe789ad6bddfa182d27210dc21827",
+  "src/app/api/admin/[...path]/route.ts": "419236e709e0542e0132d0f72228b67039c4c191d80bc75d4e7cc1ddc5568a0e",
   "src/app/api/admin/servers/[serverId]/motto-image/route.ts": "4539e1cb8817f7033363f85b40151a6d41b0148fdafcc0a7331cadcc8cd2c894",
   "src/app/api/admin/servers/[serverId]/probe/route.ts": "d53ba69b28059a4827c00b400b34470e6d75488a6f788803e3b81eeef35fbf00",
   "src/app/api/auth/[action]/route.ts": "f27f07d22d2f4ada657dc6581f765960d73ae941c03c23054efb82c997cafb55",
@@ -22,6 +23,7 @@
   "src/lib/management.ts": "33245aa26ddf753854ea873d5aaf6a54dda73d0f0e65e188d1d5637fd57a67c5",
   "src/lib/muapack-contract.ts": "49cea82690aa92bab216d584237788d63a4e314053270b6234a3a5f23a9eebf9",
   "src/lib/muapack-v2-contract.ts": "2fc34d568dce92f42845a3e89b3118cc2f6b56b2efe3754ecdc095a597dd1120",
+  "src/lib/object-storage/telemetry.ts": "1563aad53cd0d4777102e42c2b24784fe27dea900ca1560d6141efc3869200dc",
   "src/lib/package-build-service.ts": "0c2730c26ca9ee8f14b841e8767d8d9d77c74d085011e870d695ab34548f7724",
   "src/lib/package-contract.ts": "f9c6f1e650a619f904ec5886e1964c849af49c578191094fab7548588d448638",
   "src/lib/package-format-settings.ts": "88932b4124a472e268dfd67036c4c235a21cc65507b1c82a5226c445204df76d",
@@ -33,5 +35,8 @@
   "src/lib/server-motto-contract.ts": "dbad0ab0774d9e8a97ca432ccf19bd8b184111244c5d3334f8c7db4cdbf42695",
   "src/lib/server-motto.ts": "33d565723aae3cd8df913661845d43a2b7887a417b4cef3bbe5f9027f9f6e81d",
   "src/lib/server-probe-contract.ts": "bb35c0ee72affc1ea8297a0c23f77888ba2c2c112080182d1efbd14d1403c088",
+  "src/lib/storage-telemetry-contract.ts": "c17248d4cc848991e823479ed9133d99d64507e591a1a5de95fb172921e70332",
+  "src/lib/storage-telemetry-metrics.ts": "9b2898509185d1657e4d20f49556ddae3df5fc784ce67391d2a98d4494a7d145",
+  "src/lib/storage-telemetry.ts": "6079ec7f68d8470bfcebc1c377be3a3e7f11dfd9879ee21cd79c20e610dba396",
   "src/lib/upload-size-settings.ts": "ff767ed89d7f3ade497ff148b30be5ec9e7685ff97cefa16c0a2fe43c021e874"
 }

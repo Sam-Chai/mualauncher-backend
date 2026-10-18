@@ -117,7 +117,7 @@ async function fixture(t: TestContext, provider: "ali" | "tencent" | "huawei") {
     if (!key) {
       const second = url.searchParams.has("marker") || url.searchParams.has("continuation-token");
       const names = paginated ? [second ? "second-page" : "first-page"] : [...objects.keys()];
-      return xml(`<ListBucketResult><IsTruncated>${paginated && !second}</IsTruncated><NextMarker>next page+%</NextMarker><NextContinuationToken>next page+%</NextContinuationToken>${names.map(name => `<Contents><Key>${xmlEscape(name)}</Key></Contents>`).join("")}</ListBucketResult>`);
+      return xml(`<ListBucketResult><IsTruncated>${paginated && !second}</IsTruncated><NextMarker>next page+%</NextMarker><NextContinuationToken>next page+%</NextContinuationToken>${names.map(name => `<Contents><Key>${xmlEscape(name)}</Key><Size>123</Size></Contents>`).join("")}</ListBucketResult>`);
     }
     if (request.method === "DELETE") { objects.delete(key); response.writeHead(204); return response.end(); }
     if (request.method === "PUT") {
@@ -186,6 +186,7 @@ for (const provider of ["ali", "tencent", "huawei"] as const) {
     await client.putObject({ Bucket, Key: "stream", Body: Readable.from([bytes]), ContentLength: bytes.length, ChecksumSHA256: Buffer.from(sha, "hex").toString("base64"), Metadata: { sha256: sha }, IfNoneMatch: "*" });
     assert.equal((await client.headObject({ Bucket, Key: "stream" })).ContentLength, bytes.length);
     assert((await client.listObjects({ Bucket })).Contents?.some(row => row.Key === Key));
+    assert.equal((await client.listObjects({ Bucket })).Contents?.find(row => row.Key === Key)?.Size, 123);
     f.paginate(); const page = await client.listObjects({ Bucket }); assert.equal(page.NextContinuationToken, "next page+%");
     assert.equal((await client.listObjects({ Bucket, ContinuationToken: page.NextContinuationToken })).Contents?.[0].Key, "second-page");
     await client.deleteObject({ Bucket, Key: "copied" }); await assert.rejects(client.headObject({ Bucket, Key: "copied" }), (error: unknown) => (error as { $metadata: { httpStatusCode: number } }).$metadata.httpStatusCode === 404);

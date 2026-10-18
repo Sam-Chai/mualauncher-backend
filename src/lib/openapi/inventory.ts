@@ -18,7 +18,7 @@ export const apiInventory = [
     ...["archive", "platforms", "retry-packages", "review", "publish"].map(action => ["POST", `/api/v1/clients/{clientId}/drafts/{draftId}/${action}`] as const),
     ["GET", "/api/v1/clients/{clientId}/releases/{releaseId}/package"], ["POST", "/api/v1/clients/{clientId}/releases/{releaseId}/activate"],
   ] satisfies Entry[]).map(([method, path]) => ({ method, path, group: "Clients", authentication: "session OR bearer", documented: true, source: "src/app/api/v1/clients" })),
-  ...([ ...["state", "pipeline", "tokens", "recycle-settings", "download-settings", "package-format-settings", "upload-size-settings"].map(action => ["GET", `/api/admin/${action}`] as const),
+  ...([ ...["state", "pipeline", "storage-telemetry", "tokens", "recycle-settings", "download-settings", "package-format-settings", "upload-size-settings"].map(action => ["GET", `/api/admin/${action}`] as const),
     ["GET", "/api/admin/organizations/{organizationId}/account-search"],
     ["POST", "/api/admin/tokens"], ["POST", "/api/admin/tokens/{tokenId}/revoke"],
     ...["organizations", "servers", "accounts"].map(kind => ["POST", `/api/admin/${kind}`] as const),

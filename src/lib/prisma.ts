@@ -65,7 +65,8 @@ export async function validateDatabase(purpose: Exclude<DatabasePurpose, "migrat
       (SELECT count(DISTINCT tablename)::int FROM pg_policies WHERE schemaname=${process.env.DATABASE_SCHEMA ?? "public"}) AS policies
       FROM pg_roles r WHERE r.rolname=current_user`;
     const row = rows[0];
-    if (!row || row.name !== roles[purpose] || row.login !== roles[purpose] || row.superuser || row.bypass || row.privileged || row.ddl || row.owners || row.tables !== 21 || row.unsafe || row.policies < 21) throw new Error(`Unsafe ${purpose} database identity or missing RLS policies`);
+    const expectedTables = Object.keys(Prisma.ModelName).length;
+    if (!row || row.name !== roles[purpose] || row.login !== roles[purpose] || row.superuser || row.bypass || row.privileged || row.ddl || row.owners || row.tables !== expectedTables || row.unsafe || row.policies < expectedTables) throw new Error(`Unsafe ${purpose} database identity or missing RLS policies`);
     const dataSchema = process.env.DATABASE_SCHEMA ?? "public";
     const securitySchema = dataSchema === "public" ? "authz" : `${dataSchema}_authz`;
     const mapping = await client.$queryRaw<{ role: string; permission: string }[]>`SELECT role,permission FROM ${Prisma.raw(`"${securitySchema}".role_permission`)} ORDER BY role,permission`;

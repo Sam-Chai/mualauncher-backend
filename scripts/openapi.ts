@@ -17,7 +17,7 @@ async function main() {
     for (const [scope, document] of [["public", publicOpenApi(locale)], ["admin", adminOpenApi(locale)]] as const) {
       const result = await validate(JSON.stringify(document));
       if (!result.valid) throw new Error(JSON.stringify(result.errors));
-      const expected = scope === "public" ? 4 : 63;
+      const expected = scope === "public" ? 4 : 64;
       const count = Object.values(document.paths ?? {}).reduce((sum, path) => sum + ["get", "post", "patch", "put", "delete"].filter(method => path && method in path).length, 0);
       if (count !== expected) throw new Error(`${scope}: expected ${expected} operations, got ${count}`);
       if (locale === "en-US" && /[\u3400-\u9fff]/.test(JSON.stringify(document))) throw new Error(`${scope}: untranslated English document`);
@@ -26,11 +26,11 @@ async function main() {
       outputs.set(`docs/openapi/union-link.${scope === "admin" ? "admin." : ""}${locale}.json`, JSON.stringify(document, null, 2) + "\n");
     }
   }
-  const sourceFiles = [...new Set(["src/lib/recipe-distribution.ts", "src/lib/recipe-distribution-contract.ts", "src/lib/client-service.ts", "src/lib/management.ts", "src/lib/api-auth.ts", "src/lib/package-build-service.ts", "src/lib/draft-lifecycle.ts", "src/lib/http.ts", "src/lib/input.ts", "src/lib/roles.ts", "src/lib/auth.ts", "src/lib/rbac.ts", "src/lib/database-security.ts", "src/lib/infrastructure.ts", "src/lib/server-motto.ts", "src/lib/server-motto-contract.ts", "src/lib/server-probe-contract.ts", "src/lib/download-settings.ts", "src/lib/upload-size-settings.ts", "src/lib/package-format-settings.ts", "src/lib/recycle-storage.ts", "src/lib/client-contract.ts", "src/lib/package-contract.ts", "src/lib/muapack-v2-contract.ts", "src/lib/muapack-contract.ts", "src/lib/client-download.ts", "src/lib/catalog.ts", "src/app/api/auth/[action]/route.ts", "src/app/api/admin/[...path]/route.ts", "src/app/api/v1/clients/route.ts", "src/app/api/v1/clients/[...path]/route.ts", "src/app/api/admin/servers/[serverId]/motto-image/route.ts", "src/app/api/admin/servers/[serverId]/probe/route.ts", "prisma/migrations/202610140001_initial_release/migration.sql", "prisma/schema.prisma"])].sort();
+  const sourceFiles = [...new Set(["src/lib/storage-telemetry.ts", "src/lib/storage-telemetry-contract.ts", "src/lib/storage-telemetry-metrics.ts", "src/lib/object-storage/telemetry.ts", "prisma/migrations/202610180001_storage_telemetry/migration.sql", "src/lib/recipe-distribution.ts", "src/lib/recipe-distribution-contract.ts", "src/lib/client-service.ts", "src/lib/management.ts", "src/lib/api-auth.ts", "src/lib/package-build-service.ts", "src/lib/draft-lifecycle.ts", "src/lib/http.ts", "src/lib/input.ts", "src/lib/roles.ts", "src/lib/auth.ts", "src/lib/rbac.ts", "src/lib/database-security.ts", "src/lib/infrastructure.ts", "src/lib/server-motto.ts", "src/lib/server-motto-contract.ts", "src/lib/server-probe-contract.ts", "src/lib/download-settings.ts", "src/lib/upload-size-settings.ts", "src/lib/package-format-settings.ts", "src/lib/recycle-storage.ts", "src/lib/client-contract.ts", "src/lib/package-contract.ts", "src/lib/muapack-v2-contract.ts", "src/lib/muapack-contract.ts", "src/lib/client-download.ts", "src/lib/catalog.ts", "src/app/api/auth/[action]/route.ts", "src/app/api/admin/[...path]/route.ts", "src/app/api/v1/clients/route.ts", "src/app/api/v1/clients/[...path]/route.ts", "src/app/api/admin/servers/[serverId]/motto-image/route.ts", "src/app/api/admin/servers/[serverId]/probe/route.ts", "prisma/migrations/202610140001_initial_release/migration.sql", "prisma/schema.prisma"])].sort();
   outputs.set("docs/openapi/source-manifest.json", JSON.stringify(Object.fromEntries(await Promise.all(sourceFiles.map(async path => [path, createHash("sha256").update((await readFile(path, "utf8")).replace(/\r\n/g, "\n")).digest("hex")]))), null, 2) + "\n");
   outputs.set("docs/api-inventory.md", ["# Union Link API 接口清单", "",
     "由 `npm run openapi:generate` 生成。以下为实际业务路径，catch-all 已展开；HEAD／OPTIONS 框架隐式方法不作为独立业务操作。", "",
-    "63 个业务操作均已纳入受保护的后台完整 OpenAPI；公开规范仅含 Launcher 的 4 个 GET。文档不授予业务权限。", "",
+    "64 个业务操作均已纳入受保护的后台完整 OpenAPI；公开规范仅含 Launcher 的 4 个 GET。文档不授予业务权限。", "",
     "Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，并继续检查实时 RBAC。Auth 登录／退出要求同源，改密还要求有效会话。", "",
     "| 方法 | 路径 | 分组 | 认证 | OpenAPI | 实现目录 |", "| --- | --- | --- | --- | --- | --- |",
     ...apiInventory.map(item => `| ${item.method} | \`${item.path}\` | ${item.group} | ${item.authentication} | ${item.group === "Launcher" ? "公开及后台规范" : "仅后台规范"} | \`${item.source}\` |`), "",
@@ -45,6 +45,6 @@ async function main() {
       if (current.replace(/\r\n/g, "\n") !== expected) throw new Error(`${path} is stale. Run npm run openapi:generate.`);
     } else await writeFile(path, expected, "utf8");
   }
-  console.log(`OpenAPI 3.1: public/admin in both locales validated; actual route coverage 63/63; ${check ? "sources, compatibility and artifacts current" : "artifacts generated"}.`);
+  console.log(`OpenAPI 3.1: public/admin in both locales validated; actual route coverage 64/64; ${check ? "sources, compatibility and artifacts current" : "artifacts generated"}.`);
 }
 void main().catch(error => { console.error(error); process.exitCode = 1; });

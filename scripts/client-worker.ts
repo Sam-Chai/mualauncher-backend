@@ -4,6 +4,7 @@ import { workerPrisma as prisma, validateDatabase } from "../src/lib/prisma";
 import { runUploadWorker, expireIncompleteUploads } from "../src/lib/client-worker";
 import { maintainRecycleBin } from "../src/lib/recycle-storage";
 import { runPackageWorker } from "../src/lib/package-worker";
+import { collectStorageTelemetry } from "../src/lib/storage-telemetry";
 
 const workerId = randomUUID(); let running = true;
 process.on("SIGINT", () => { running = false; }); process.on("SIGTERM", () => { running = false; });
@@ -12,6 +13,12 @@ async function main() {
   const heartbeat = setInterval(() => { void prisma.workerHeartbeat.upsert({ where: { id: workerId }, create: { id: workerId }, update: { lastSeen: new Date() } }).catch(() => console.error("Worker heartbeat failed")); }, 10000);
   await prisma.workerHeartbeat.create({ data: { id: workerId } });
   console.log(`MUA client Worker ready (${workerId})`);
+  let telemetry: Promise<unknown> | undefined;
+  const refreshTelemetry = () => {
+    if (!telemetry) telemetry = collectStorageTelemetry(prisma).catch(() => console.error("Storage telemetry collection failed")).finally(() => { telemetry = undefined; });
+  };
+  refreshTelemetry();
+  const telemetryTimer = setInterval(refreshTelemetry, 30_000);
   let maintenance: Promise<void> | undefined;
   const packages = (async () => {
     while (running) {
@@ -34,6 +41,6 @@ async function main() {
       }
       catch (error) { console.error("Worker queue failed", error instanceof Error ? error.message : "unknown"); await new Promise(resolve => setTimeout(resolve, 3000)); }
     }
-  } finally { running = false; await packages; await maintenance; clearInterval(heartbeat); await prisma.$disconnect(); }
+  } finally { running = false; clearInterval(telemetryTimer); await telemetry; await packages; await maintenance; clearInterval(heartbeat); await prisma.$disconnect(); }
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "Worker failed"); process.exitCode = 1; });

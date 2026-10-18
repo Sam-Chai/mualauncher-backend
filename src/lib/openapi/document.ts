@@ -6,7 +6,7 @@ import { recipeManifestSchema } from "../muapack-v2-contract";
 import { acceptedFormats, directorySchema, errorSchema, clientManifestSchema, packageQuery, packageResponseSchema, refreshQuery, serverParams } from "./schemas";
 
 extendZodWithOpenApi(z);
-export const OPENAPI_VERSION = "1.0.0";
+export const OPENAPI_VERSION = "1.1.0";
 export const PUBLIC_OPERATION_IDS = ["listServers", "getServerManifest", "getServerPackages", "refreshReleasePackages"] as const;
 
 export function publicOpenApi(locale: Locale = "zh-CN") {

@@ -16,6 +16,8 @@ import * as m from "../src/lib/management";
 import * as c from "../src/lib/client-service";
 import { validateDatabase, disconnectDatabases } from "../src/lib/prisma";
 import { performance } from "node:perf_hooks";
+import { storageTelemetry, collectStorageTelemetry } from "../src/lib/storage-telemetry";
+import { telemetryConfiguration } from "../src/lib/object-storage/telemetry";
 
 const schema = `mua_rls_${randomBytes(8).toString("hex")}`;
 process.env.DATABASE_SCHEMA = schema;
@@ -78,6 +80,40 @@ test("all runtime roles are restricted and every business table forces RLS", asy
   const mapping = await owner.$queryRawUnsafe<{ role: keyof typeof rolePermissions; permission: string }[]>(`SELECT * FROM "${schema}_authz".role_permission ORDER BY role,permission`);
   assert.deepEqual(mapping.map(row => `${row.role}:${row.permission}`), Object.entries(rolePermissions).flatMap(([role, permissions]) => permissions.map(p => `${role}:${p}`)).sort());
   for (const db of [web, auth, worker, pub]) await assert.rejects(db.$executeRawUnsafe("SET ROLE mua_owner"));
+});
+
+test("storage telemetry is Worker-written, superadmin-session-only and excludes cross-midnight traffic", async () => {
+  const config = telemetryConfiguration();
+  const now = new Date("2026-10-18T02:00:00Z");
+  await worker.storageTelemetrySource.create({ data: { id: config.id, provider: config.storage.provider, sampledAt: now,
+    snapshot: config.buckets.map(row => ({ ...row, bytes: "1024", objects: "1", observedAt: now.toISOString(), method: "OBJECT_LIST", status: "READY" })) } });
+  await worker.storageTelemetrySample.createMany({ data: [
+    { id: "00000000-0000-4000-8000-000000000001", sourceId: config.id, startsAt: new Date("2026-10-17T15:59:00Z"), endsAt: new Date("2026-10-17T16:01:00Z"), sentBytes: 999, buckets: [] },
+    { id: "00000000-0000-4000-8000-000000000002", sourceId: config.id, startsAt: new Date("2026-10-18T01:00:00Z"), endsAt: new Date("2026-10-18T01:01:00Z"), sentBytes: 2048, buckets: [] },
+  ] });
+  assert.equal(await web.storageTelemetrySource.count(), 0);
+  assert.equal(await as(f.admin, db => db.storageTelemetrySource.count()), 0);
+  assert.equal(await as(f.root, db => db.storageTelemetrySource.count()), 1);
+  const result = await as(f.root, db => storageTelemetry(db, f.root, now));
+  assert.equal(result.traffic.sentBytes, "2048"); assert.equal(result.traffic.receivedBytes, null); assert.equal(result.traffic.hasGaps, true);
+  assert.equal(result.capacityBytes, String(config.buckets.length * 1024)); assert.equal(result.cdn, "NOT_CONNECTED");
+  await assert.rejects(as(f.admin, db => storageTelemetry(db, f.admin, now)));
+  await assert.rejects(as({ ...f.root, apiScope: { permissions: [], serverIds: [] } }, db => storageTelemetry(db, { ...f.root, apiScope: { permissions: [], serverIds: [] } }, now)));
+  await assert.rejects(auth.storageTelemetrySource.count()); await assert.rejects(pub.storageTelemetrySource.count());
+  await assert.rejects(as(f.root, db => db.storageTelemetrySource.update({ where: { id: config.id }, data: { error: "forbidden" } })));
+  const stale = await as(f.root, db => storageTelemetry(db, f.root, new Date(now.getTime() + 86400_000)));
+  assert.equal(stale.status, "STALE"); assert.equal(stale.traffic.sentBytes, null); assert.equal(stale.capacityBytes, result.capacityBytes);
+});
+
+test("concurrent storage collectors share a lease and publish an actual capacity snapshot", async () => {
+  const config = telemetryConfiguration();
+  await worker.storageTelemetrySource.update({ where: { id: config.id }, data: { nextCollectAt: new Date(0) } });
+  const attempts = await Promise.all([collectStorageTelemetry(worker), collectStorageTelemetry(worker)]);
+  assert.equal(attempts.filter(Boolean).length, 1);
+  const source = await worker.storageTelemetrySource.findUniqueOrThrow({ where: { id: config.id } });
+  assert.equal(source.leaseToken, null); assert(source.sampledAt);
+  const data = await as(f.root, db => storageTelemetry(db, f.root));
+  assert.equal(data.status, "READY"); assert(data.capacityBytes !== null); assert(BigInt(data.capacityBytes) >= BigInt(0));
 });
 
 test("scoped SERVER_EDIT changes color and schedules in application and RLS writes; readers and other scopes are denied", async () => {

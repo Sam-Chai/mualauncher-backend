@@ -1,5 +1,7 @@
 # MUA Management Platform 管理界面
 
+2026-10-18：超管主页的「CDN 与存储流量」已显示后台采集的容量、对象数及今日已采集流量；Storage 增加分桶数据和 24 小时趋势。MinIO 流量已接入，其他供应商通过统一列表提供容量；CDN 保持待接入。普通账号不读取平台遥测。见 [存储遥测](storage-telemetry.md)。Settings 已重新布局为等高账号／平台卡片、半行 Token，以及分开的下载源与代理表单。
+
 2026-10-12：服务器管理已支持永久／区间展示，超管可设置北京时间起止；客户端状态下方显示区间说明。到期只隐藏目录，不自动下架或停止下载。见 [服务器展示时间](server-display-schedule.md)。
 
 更新时间：2026-10-12。入口 /admin，本机地址 http://localhost:3001/admin。根路径跳转至 /admin；旧 /dashboard 已移除。

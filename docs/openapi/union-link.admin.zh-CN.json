@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。"
   },
   "servers": [
@@ -19343,6 +19343,473 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Infrastructure"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/storage-telemetry": {
+      "get": {
+        "operationId": "getStorageTelemetry",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "读取存储遥测",
+        "description": "仅超管 Cookie 会话。读取 Worker 已采集的全平台容量及今日上海时区已采集流量，不随组织筛选变化。字节及对象数量为十进制字符串；缺失为 null。流量包含 Worker 与后台访问，非完整玩家下载量或账单。缺口与跨日区间不估算，CDN 保持 NOT_CONNECTED。",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "responses": {
+          "200": {
+            "description": "成功；字段可见性仍受当前 RBAC 和资源状态约束。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "minio",
+                        "aws",
+                        "s3",
+                        "ali",
+                        "tencent",
+                        "huawei"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "WAITING",
+                        "READY",
+                        "STALE",
+                        "ERROR",
+                        "DISABLED"
+                      ]
+                    },
+                    "collectedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "issue": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "COLLECTION_FAILED",
+                            "METRICS_UNAVAILABLE"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bucket": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "PACKAGES",
+                                "CAS",
+                                "ENVIRONMENTS"
+                              ]
+                            }
+                          },
+                          "bytes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          },
+                          "objects": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          },
+                          "observedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "method": {
+                            "type": "string",
+                            "enum": [
+                              "MINIO_METRICS",
+                              "OBJECT_LIST"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "READY",
+                              "ERROR"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "bucket",
+                          "roles",
+                          "bytes",
+                          "objects",
+                          "observedAt",
+                          "method",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "capacityBytes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^\\d+$"
+                    },
+                    "objectCount": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^\\d+$"
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "supported": {
+                          "type": "boolean"
+                        },
+                        "sentBytes": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d+$"
+                        },
+                        "receivedBytes": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d+$"
+                        },
+                        "startsAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "endsAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "samples": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "hasGaps": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "supported",
+                        "sentBytes",
+                        "receivedBytes",
+                        "startsAt",
+                        "endsAt",
+                        "samples",
+                        "hasGaps"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "hour": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "sentBytes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          },
+                          "receivedBytes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          }
+                        },
+                        "required": [
+                          "hour",
+                          "sentBytes",
+                          "receivedBytes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "cdn": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_CONNECTED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "status",
+                    "collectedAt",
+                    "issue",
+                    "buckets",
+                    "capacityBytes",
+                    "objectCount",
+                    "traffic",
+                    "history",
+                    "cdn"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

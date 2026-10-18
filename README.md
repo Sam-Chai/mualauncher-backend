@@ -42,6 +42,15 @@ npm run worker
 
 打开 http://localhost:3001/admin/clients。停止 Worker 不会丢失已经完成上传的任务；重新启动后继续处理。系统页面显示实际 Worker 心跳、存储和签名公钥状态。
 
+已配置好 `.env`、依赖及本地服务后，也可在项目根目录运行以下两个脚本。每个脚本都会打开独立的 PowerShell 窗口，保留运行输出；按 Ctrl+C 停止对应服务。
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-frontend.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-backend.ps1
+~~~
+
+`start-frontend.ps1` 运行 Next.js 开发服务，同时提供网页和 HTTP API，默认地址为 http://localhost:3001/admin（可用 `-Port` 指定端口）；`start-backend.ps1` 运行独立 Worker。脚本按自身位置定位项目，日志分别追加到 `.local/next-visible.log` 和 `.local/worker-visible.log`。PostgreSQL、MinIO 等依赖须提前启动。
+
 APP_ORIGIN 必须匹配页面的协议、主机和端口，末尾不加斜杠。本地允许同协议、同端口的 localhost、127.0.0.1 和 IPv6 回环别名；其他来源精确匹配，跨站请求拒绝。HTTPS origin 自动启用 Secure Cookie。
 
 首次 auth:bootstrap 创建超管 mua-admin，随机密码写入被 Git 忽略的 .local/initial-admin-*.txt。已有启用超管时不会重置账号。登录后在“系统 → Settings → 账号安全”修改密码并删除初始凭据文件。可通过进程环境 BOOTSTRAP_USERNAME、BOOTSTRAP_PASSWORD 提供初始凭据，不能把密码写进命令参数或提交内容。面板没有公开注册，普通账号由超管在“联盟管理 → 成员 → 白名单账号”创建。

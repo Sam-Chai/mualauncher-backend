@@ -10,6 +10,7 @@ import * as s from "./private-schemas";
 import * as r from "./requests.generated";
 import english from "../locales/openapi-private-en.json";
 import { recipeDistributionSchema } from "../recipe-distribution-contract";
+import { storageTelemetrySchema } from "../storage-telemetry-contract";
 
 type Operation = { method: "get" | "post" | "patch" | "put" | "delete"; path: string; id: string; tag: string;
   summary: string; description: string; response: z.ZodTypeAny; body?: z.ZodTypeAny; query?: z.AnyZodObject;
@@ -56,6 +57,7 @@ client("post", "/{clientId}/delete", "deleteClient", "删除已归档且无绑�
 
 admin("get", "/state", "getAdminState", "读取后台范围和真实状态", s.state, "所有有效后台会话可读。组织、服务器和成员按实时 RBAC 过滤；账号、事件和完整窗口审计曲线仅超管可读，其他账号为空数组。普通账号从 enabledPackageFormats／maxUploadSizeMb 读取开放格式和上传上限。");
 admin("get", "/pipeline", "getPipeline", "读取存储、Worker 和签名状态", s.infrastructure, "仅超管会话。返回真实 bucket 连通性、可为 null 的公钥身份、队列计数和最近 30 秒 Worker 心跳；不暴露私钥或 OSS 凭据。", undefined, [], true);
+admin("get", "/storage-telemetry", "getStorageTelemetry", "读取存储遥测", storageTelemetrySchema, "仅超管 Cookie 会话。读取 Worker 已采集的全平台容量及今日上海时区已采集流量，不随组织筛选变化。字节及对象数量为十进制字符串；缺失为 null。流量包含 Worker 与后台访问，非完整玩家下载量或账单。缺口与跨日区间不估算，CDN 保持 NOT_CONNECTED。", undefined, [], true);
 admin("get", "/organizations/{organizationId}/account-search", "searchOrganizationAccounts", "搜索可授权白名单账号", z.array(s.account), "ORG_MEMBERS_READ；q 去首尾空白后至少 3 字符，原值最多 64 字符。仅 ACTIVE 账号，忽略大小写搜索用户名／显示名称，按显示名称返回最多 10 项。", undefined, ["ORG_MEMBERS_READ"], false, 200, z.object({ q: z.string().min(3).max(64) }));
 admin("get", "/tokens", "listApiTokens", "列出当前账号的 API Token 元数据", z.array(s.token), "仅列出本账号 Token，包括已撤销记录；不返回明文 Token。Token 不能认证本后台接口。");
 admin("post", "/tokens", "createApiToken", "创建受范围限制的 API Token", s.createdToken, "只通过 Cookie 会话创建。serverIds 必须为调用者当前有权限的服务器，permissions 必须包含 SERVER_READ，禁止 ORG_* 和 SERVER_EDIT；有效期 1–90 天。明文只在创建响应出现一次。Token 实际权限与账号当前 RBAC 取交集，停用／撤权／撤销立即生效。", r.CreateToken, [], false, 201);

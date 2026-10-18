@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "The complete panel reference includes Launcher, client automation, administration and authentication. Documentation access grants no business permissions. Each request still checks scope, RBAC, revisions and lifecycle. Follow upload, review, build and publication stages using actual progress."
   },
   "servers": [
@@ -19343,6 +19343,473 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Infrastructure"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/storage-telemetry": {
+      "get": {
+        "operationId": "getStorageTelemetry",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "Read storage telemetry",
+        "description": "Superadmin Cookie sessions only. Reads platform-wide Worker-collected capacity and observed traffic for today in Asia/Shanghai, independent of organization filters. Bytes and object counts are decimal strings; missing values are null. Traffic includes Worker and admin access, not complete player downloads or billing. Gaps and intervals crossing midnight are not estimated. CDN remains NOT_CONNECTED.",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "responses": {
+          "200": {
+            "description": "Success; field visibility remains subject to current RBAC and resource state.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "minio",
+                        "aws",
+                        "s3",
+                        "ali",
+                        "tencent",
+                        "huawei"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "WAITING",
+                        "READY",
+                        "STALE",
+                        "ERROR",
+                        "DISABLED"
+                      ]
+                    },
+                    "collectedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "issue": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "COLLECTION_FAILED",
+                            "METRICS_UNAVAILABLE"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "bucket": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "PACKAGES",
+                                "CAS",
+                                "ENVIRONMENTS"
+                              ]
+                            }
+                          },
+                          "bytes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          },
+                          "objects": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          },
+                          "observedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "method": {
+                            "type": "string",
+                            "enum": [
+                              "MINIO_METRICS",
+                              "OBJECT_LIST"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "READY",
+                              "ERROR"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "bucket",
+                          "roles",
+                          "bytes",
+                          "objects",
+                          "observedAt",
+                          "method",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "capacityBytes": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^\\d+$"
+                    },
+                    "objectCount": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "pattern": "^\\d+$"
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "supported": {
+                          "type": "boolean"
+                        },
+                        "sentBytes": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d+$"
+                        },
+                        "receivedBytes": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d+$"
+                        },
+                        "startsAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "endsAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "samples": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "hasGaps": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "supported",
+                        "sentBytes",
+                        "receivedBytes",
+                        "startsAt",
+                        "endsAt",
+                        "samples",
+                        "hasGaps"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "history": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "hour": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "sentBytes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          },
+                          "receivedBytes": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^\\d+$"
+                          }
+                        },
+                        "required": [
+                          "hour",
+                          "sentBytes",
+                          "receivedBytes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "cdn": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_CONNECTED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "provider",
+                    "status",
+                    "collectedAt",
+                    "issue",
+                    "buckets",
+                    "capacityBytes",
+                    "objectCount",
+                    "traffic",
+                    "history",
+                    "cdn"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

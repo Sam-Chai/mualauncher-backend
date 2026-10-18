@@ -7,6 +7,7 @@ import { serverId, uuid } from "@/lib/input";
 import * as management from "@/lib/management";
 import { createApiToken, revokeApiToken, tokenSelect } from "@/lib/api-auth";
 import { infrastructureStatus } from "@/lib/infrastructure";
+import { storageTelemetry } from "@/lib/storage-telemetry";
 import { recycleSettings, updateRecycleSettings } from "@/lib/recycle-storage";
 import { downloadSettings, updateDownloadSettings } from "@/lib/download-settings";
 import { packageFormatSettings, updatePackageFormatSettings } from "@/lib/package-format-settings";
@@ -30,6 +31,7 @@ async function handle(request: Request, context: Context) {
         if (path.length === 1 && kind === "recycle-settings") return recycleSettings(db, actor);
         if (path.length === 1 && kind === "tokens") return db.apiToken.findMany({ where: { accountId: actor.id }, select: tokenSelect, orderBy: { createdAt: "desc" } });
         if (path.length === 1 && kind === "pipeline") return infrastructureStatus(db, actor);
+        if (path.length === 1 && kind === "storage-telemetry") return storageTelemetry(db, actor);
         if (path.length === 1 && kind === "state") return management.getState(db, actor);
         if (path.length === 3 && kind === "organizations" && action === "account-search") return management.searchAccounts(db, actor, uuid(id), new URL(request.url).searchParams.get("q") ?? "");
       }

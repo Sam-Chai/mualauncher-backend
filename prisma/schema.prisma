@@ -395,6 +395,34 @@ model ApiToken {
   account     Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
 }
 
+model StorageTelemetrySource {
+  id             String @id @db.Char(64)
+  provider       String
+  snapshot       Json?
+  counters       Json?
+  sampledAt      DateTime? @db.Timestamptz(6)
+  attemptedAt    DateTime? @db.Timestamptz(6)
+  error          String?
+  leaseToken     String? @db.Uuid
+  leaseUntil     DateTime? @db.Timestamptz(6)
+  nextCollectAt  DateTime @default(now()) @db.Timestamptz(6)
+  samples        StorageTelemetrySample[]
+}
+
+model StorageTelemetrySample {
+  id            String @id @default(uuid()) @db.Uuid
+  sourceId      String @db.Char(64)
+  startsAt      DateTime @db.Timestamptz(6)
+  endsAt        DateTime @db.Timestamptz(6)
+  sentBytes     BigInt?
+  receivedBytes BigInt?
+  buckets       Json
+  source        StorageTelemetrySource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceId, endsAt])
+  @@index([sourceId, startsAt])
+}
+
 model WorkerHeartbeat {
   id        String   @id
   startedAt DateTime @default(now()) @db.Timestamptz(6)

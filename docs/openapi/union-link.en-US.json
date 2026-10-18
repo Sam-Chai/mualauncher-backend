@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "The public specification describes four Launcher read operations. Client automation, administration and authentication are in the protected full specification. API route v1, muapack formatVersion and document versions are independent. Examples, generated clients and online requests follow this declared scope."
   },
   "servers": [
