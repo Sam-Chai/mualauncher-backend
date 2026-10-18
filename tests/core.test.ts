@@ -3,7 +3,7 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -56,7 +56,7 @@ test("pipelined Prisma transactions preserve dependency order, abort and rollbac
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610140001_initial_release"]) {
+  for (const migration of (await readdir("prisma/migrations")).filter(name => /^\d{12}_/.test(name)).sort()) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }

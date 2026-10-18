@@ -1,0 +1,33 @@
+[Unit]
+Description=Union Link Worker
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=union-link
+Group=union-link
+WorkingDirectory=/opt/union-link/app
+EnvironmentFile=/etc/union-link/common.env
+EnvironmentFile=/etc/union-link/worker.env
+UnsetEnvironment=DATABASE_ADMIN_URL DATABASE_MIGRATION_URL DATABASE_URL DATABASE_AUTH_URL DATABASE_PUBLIC_URL
+ExecStartPre=/usr/bin/node --conditions=react-server --import tsx scripts/check-deployment.ts --role worker
+ExecStart=/usr/bin/node --conditions=react-server --import tsx scripts/client-worker.ts
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=90
+# Allow active work to finish; remaining work recovers through existing DB leases.
+TimeoutStopSec=900
+KillSignal=SIGTERM
+KillMode=mixed
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/union-link/tmp
+
+[Install]
+WantedBy=multi-user.target

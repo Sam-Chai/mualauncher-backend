@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16
@@ -50,7 +50,7 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=dev
       - name: Provision isolated database roles
         run: npm run db:provision
         env:
@@ -73,14 +73,14 @@ jobs:
           BOOTSTRAP_PASSWORD: isolated-ci-panel-password
       - name: Validate spec, route coverage, source drift and compatibility
         run: npm run openapi:check
-      - run: npm run test:openapi
-      - run: npm run test:downloads
-      - run: npm run test:admin-ui
-      - run: npm run typecheck
+      - run: npm run db:validate
+      - run: npm run db:check
       - run: npm run lint
       - run: npm run build
-      - name: Test actual Bearer, Cookie, admin, auth and binary image contracts
-        run: npm run test:openapi:contracts
+      - run: npm run typecheck
+      - name: Full regression including HTTP contracts, RLS, storage and telemetry
+        run: npm test
+      - run: npm audit --omit=dev --audit-level=high
       - run: npx playwright install --with-deps chromium
       - name: Test embedded Scalar in a browser
         run: |

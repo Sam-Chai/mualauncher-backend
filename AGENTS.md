@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-18 `release/server` 为受控服务器部署分支；Node 24，Linux systemd 独立 Web／Worker，Nginx HTTPS，配置／Ed25519 密钥位于 checkout 外。运行按 web/auth/public 与 worker 分离连接，迁移／管理员凭据不进常驻服务；启动执行 `deployment:check`。服务器保留构建运维依赖，使用 `npm ci --include=dev`；操作配方见 [README](README.md)、[验收与恢复](docs/server-deployment.md)。这不替代目标云存储、CORS、负载与备份恢复验收。
+
 - 2026-10-18 存储遥测已接入超管主页／Storage，Cookie 超管只读 API `/api/admin/storage-telemetry`；Worker 租约采集，新增迁移 `202610180001_storage_telemetry`，当前 23 张业务表 FORCE RLS。当前 MinIO 取桶级指标和进程启动时间，其他供应商通过统一对象列表提供容量，云监控流量和 CDN 尚未接入。未测值为 null，已采集流量含 Worker／后台访问，不代表玩家完成下载或账单；不改变签名链接和发布。OpenAPI 1.1.0 共 64 操作，公开仍四 GET。见 [存储遥测](docs/storage-telemetry.md)。本条补充首发后新增迁移与操作，优先于下文首发时的数量记录。
 
 - 2026-10-14 对象存储可通过 OSS_PROVIDER=minio／aws／s3／ali／tencent／huawei 选择；MinIO／AWS 使用 S3 SDK，三家云使用 ali-oss、cos-nodejs-sdk-v5、esdk-obs-nodejs 原生适配。业务只调用统一 ObjectStorage 接口。原生云桶禁止启用／暂停版本控制，不支持原子禁止覆盖时拒绝正式不可变写入；复制按厂商单次上限分片并固定源 ETag。Web／Worker 共用配置，旧 S3_* 在 MinIO／S3 场景继续有效；配置不自动迁移旧对象、不改发布签名。部署须运行 storage:verify 并检查 CORS，本地 SDK fixture 与 MinIO 验证不代表真实云验收。见 [对象存储配置](docs/object-storage.md)。

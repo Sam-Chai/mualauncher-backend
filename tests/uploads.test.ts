@@ -4,7 +4,7 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import { randomBytes, generateKeyPairSync, createPublicKey, verify, createHash } from "node:crypto";
-import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { readFile, readdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import pg from "pg";
@@ -121,7 +121,8 @@ async function approved(draftId: string) {
 }
 before(async () => {
   await pool.query('CREATE SCHEMA "' + schema + '"'); created = true;
-  for (const migration of ["202610140001_initial_release"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+  for (const migration of (await readdir("prisma/migrations")).filter(name => /^\d{12}_/.test(name)).sort())
+    await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
   temp = await mkdtemp(join(tmpdir(), "mua-upload-test-")); process.env.SIGNING_PRIVATE_KEY_PATH = join(temp, "key.pem");
   await writeFile(process.env.SIGNING_PRIVATE_KEY_PATH, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }));
   await initializeStorage();
