@@ -12,6 +12,8 @@ async function Login() {
   if (await currentActor()) redirect("/admin");
   return <PreferenceProvider initialLocale={parseLocale((await cookies()).get(LOCALE_COOKIE)?.value)} withTheme={false}><LoginForm /></PreferenceProvider>;
 }
+// Session validation can redirect authenticated requests to /admin.
+export const instant = false;
 export default function LoginPage() {
   return <main className="flex min-h-svh items-center justify-center bg-muted/30 p-6"><Suspense fallback={<LocalizedLoading />}><Login /></Suspense></main>;
 }

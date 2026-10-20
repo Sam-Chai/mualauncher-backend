@@ -9,7 +9,7 @@ import { AdminProvider } from "@/components/admin/provider";
 import { AdminShell } from "@/components/admin/shell";
 import { LocalizedLoading, PreferenceProvider } from "@/components/preferences";
 import { LOCALE_COOKIE, parseLocale } from "@/lib/i18n";
-// Session validation may redirect; validate deeper admin pages after this gate.
+// Session validation may redirect. Each admin page also opts out because instant is per segment.
 export const instant = false;
 async function AuthenticatedAdmin({ children }: { children: ReactNode }) {
   await connection();
