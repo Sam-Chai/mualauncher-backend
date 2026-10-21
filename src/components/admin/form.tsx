@@ -1,6 +1,6 @@
 "use client";
 import { useI18n } from "@/components/preferences";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -19,12 +19,18 @@ export type Field = { visibleWhen?: { name: string; value: string }; name: strin
 export const nameSchema = z.string().trim().min(1, "请填写名称").max(200, "最多 200 个字符");
 export const textSchema = (max = 5000) => z.string().trim().max(max, `最多 ${max} 个字符`);
 export const passwordSchema = z.string().min(12, "密码至少 12 个字符").max(128, "密码最多 128 个字符");
-export function SchemaForm({ schema, fields, defaults, onSubmit, disabled = false, label = "保存" }: { schema: z.ZodType<Values>; fields: Field[]; defaults: Values; onSubmit: (values: Values) => Promise<boolean>; disabled?: boolean; label?: string }) {
+const subscribe = () => () => {};
+const clientReady = () => true;
+const serverReady = () => false;
+export function SchemaForm({ schema, fields, defaults, onSubmit, action, disabled = false, label = "保存" }: { schema: z.ZodType<Values>; fields: Field[]; defaults: Values; onSubmit: (values: Values) => Promise<boolean>; action?: string; disabled?: boolean; label?: string }) {
   const { t } = useI18n();
+  const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: defaults });
   const values = useWatch({ control: form.control });
-  return <Form {...form}><form onSubmit={form.handleSubmit(async values => { await onSubmit(values); })} className="space-y-5">
-    <fieldset disabled={disabled || form.formState.isSubmitting} className="space-y-5">
+  // These forms submit through their JSON handlers. Never fall back to GET,
+  // including before hydration or when scripts fail to load.
+  return <Form {...form}><form method="post" action={action} onSubmit={form.handleSubmit(async values => { await onSubmit(values); })} className="space-y-5">
+    <fieldset disabled={!ready || disabled || form.formState.isSubmitting} className="space-y-5">
       {fields.filter(spec => !spec.visibleWhen || values[spec.visibleWhen.name] === spec.visibleWhen.value).map(spec => <FormField key={spec.name} control={form.control} name={spec.name} render={({ field }) => <FormItem>
         {spec.type !== "checkbox" && <FormLabel>{t(spec.label)}</FormLabel>}
         {spec.type === "checkbox" ? <div className="flex items-center gap-2"><FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} disabled={disabled || form.formState.isSubmitting} /></FormControl><FormLabel>{t(spec.label)}</FormLabel></div>

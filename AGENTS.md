@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-21 表单安全：共享 SchemaForm 必须明确 POST，hydration 前禁用 fieldset；登录原生 action 固定 `/api/auth/login`，正常仍走 JSON POST。禁止凭据进入查询参数；原生 URL-encoded 请求由 JSON-only API 拒绝，不作为备用认证。回归 `test:auth:browser`，见 [密码链接修复](docs/login-form-security.md)。
+
 - 2026-10-21 PLAYER／Union 身份：Union 成员默认 PLAYER（玩家），管理权限集合为空，不能用角色数组非空判断后台准入；只有实际管理权限才可进入后台。空组织角色回填／保存归一化为 PLAYER，单服授权排除此角色；不改变停用或已有特权。成员／账号／搜索显示 `Union · CODE:ID`，本地用户名继续独立。迁移 005／006，OpenAPI 3.2.0／83 操作，仍 31 张 FORCE RLS 表。见 [成员访问](docs/union-oauth-member-access.md)。
 
 - 2026-10-21 YITUEM 已确认合并：`skin.yitmc.cn`／`skin.uemcraft.cn` 对应同一组织和 CODE，保存主地址及 bsRootAliases，列表分别显示两个域名按钮。只对此确切组合放行，其他重复 CODE 仍报告冲突；账号仍用完整 sub，不合并本地账号或授予角色。迁移 `202610210004_yituem_skin_site_aliases`，仍 31 张 FORCE RLS 表，OpenAPI 当前 3.1.0／83 操作。见 [目录同步](docs/union-directory-sync.md)。

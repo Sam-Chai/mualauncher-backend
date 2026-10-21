@@ -21,7 +21,7 @@ export default function LoginForm({ unionEnabled = false, unionError = false, re
     <Card><CardHeader><CardTitle className="text-xl">{t("登录管理平台")}</CardTitle><CardDescription>{t("使用 MUA 管理员分配的白名单账号。")}</CardDescription></CardHeader><CardContent className="space-y-5">
       {unionEnabled ? <Button className="w-full" asChild><a href={`/api/auth/union/start${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`}>{t("使用 Union 皮肤站登录")}</a></Button> : <p className="text-sm text-muted-foreground">{t("Union OAuth 尚未配置，请使用账号密码登录")}</p>}
       {error && <Alert variant="destructive" role="alert"><AlertDescription>{t(error)}</AlertDescription></Alert>}
-      <SchemaForm schema={schema} defaults={{ username: "", password: "" }} label={t("登录")}
+      <SchemaForm schema={schema} defaults={{ username: "", password: "" }} label={t("登录")} action="/api/auth/login"
         fields={[{ name: "username", label: t("用户名"), autoComplete: "username", placeholder: "mua-admin" }, { name: "password", label: t("密码"), type: "password", autoComplete: "current-password" }]}
         onSubmit={async values => { setError(""); try { await api("/api/auth/login", "POST", values); navigateAfterAuthChange(returnTo ?? "/admin"); return true; } catch (error) { setError(error instanceof Error ? error.message : t("登录失败")); return false; } }} />
     </CardContent></Card><p className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" />{t("仅对白名单成员开放 · 组织权限隔离")}</p>
