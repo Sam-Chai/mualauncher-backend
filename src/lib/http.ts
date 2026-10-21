@@ -46,7 +46,7 @@ export async function readJson(request: Request, maximumBytes = 32768) {
   catch { throw new AppError(400, "无效的 JSON"); }
 }
 export function json(value: unknown, status = 200) {
-  return NextResponse.json(value, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+  return NextResponse.json(value, { status, headers: { "Cache-Control": "private, no-store", Vary: "Cookie, Authorization", "X-Content-Type-Options": "nosniff" } });
 }
 export function failure(error: unknown) {
   if (error instanceof AppError) return json({ error: error.message }, error.status);

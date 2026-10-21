@@ -3,7 +3,7 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { randomBytes, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
@@ -56,7 +56,7 @@ test("pipelined Prisma transactions preserve dependency order, abort and rollbac
 before(async () => {
   assert.match(schema, /^mua_test_[0-9a-f]{16}$/);
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const migration of ["202610140001_initial_release"]) {
+  for (const migration of (await readdir("prisma/migrations")).filter(name => /^\d/.test(name)).sort()) {
     const sql = (await readFile(`prisma/migrations/${migration}/migration.sql`, "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', "");
     await pool.query(sql);
   }
@@ -157,7 +157,7 @@ test("sidebar reflects organization, server and platform permissions after grant
   const f = await fixture(db);
   const links = async (actor: Actor) => [...visiblePaths(await m.getState(db, actor))];
   const root = await links(f.root);
-  assert.equal(root.length, 15);
+  assert.equal(root.length, 16);
   assert(!root.includes("/admin/listings"));
   assert(!root.includes("/admin/servers/status"));
   const admin = await links(f.admin);
@@ -294,7 +294,7 @@ test("display windows filter discovery at inclusive start/exclusive end without 
   await m.updateServer(db, f.root, "NPR", { displayMode: "RANGE", displayStartsAt: start.toISOString(), displayEndsAt: end.toISOString() });
   for (const [at, visible] of [[start.getTime()-1, false], [start.getTime(), true], [end.getTime()-1, true], [end.getTime(), false]] as const)
     assert.equal((await publishedServers(db, new Date(at))).length, visible ? 1 : 0);
-  const directory = async () => (await db.$queryRaw<{ rows: { serverId: string; displayMode: string; displayStartsAt: string; displayEndsAt: string }[] }[]>`SELECT ${securityFunction("public_servers")}() AS rows`)[0].rows;
+  const directory = async () => (await db.$queryRaw<{ rows: { serverId: string; displayMode: string; displayStartsAt: string; displayEndsAt: string }[] }[]>`SELECT ${securityFunction("distribution_servers")}() AS rows`)[0].rows;
   assert.equal((await directory())[0].displayMode, "RANGE");
   assert.equal(Date.parse((await directory())[0].displayStartsAt), start.getTime());
   const binding = await db.serverPublication.findUniqueOrThrow({ where: { serverId: "NPR" } });
@@ -304,7 +304,7 @@ test("display windows filter discovery at inclusive start/exclusive end without 
   await db.$executeRaw`UPDATE "Server" SET "displayStartsAt"=CURRENT_TIMESTAMP-interval '1 minute',"displayEndsAt"=CURRENT_TIMESTAMP WHERE "serverId"='NPR'`;
   assert.equal((await directory()).length, 0);
   for (const releaseId of [null, release.id]) {
-    const [{ snapshot }] = await db.$queryRaw<{ snapshot: unknown }[]>`SELECT ${securityFunction("public_snapshot")}('NPR',${releaseId}::uuid) AS snapshot`;
+    const [{ snapshot }] = await db.$queryRaw<{ snapshot: unknown }[]>`SELECT ${securityFunction("distribution_snapshot")}('NPR',${releaseId}::uuid) AS snapshot`;
     assert(snapshot, "current and pinned download snapshots survive display expiry");
   }
   assert.equal((await db.server.findUniqueOrThrow({ where: { serverId: "NPR" } })).isListed, true);
@@ -319,7 +319,7 @@ test("display windows filter discovery at inclusive start/exclusive end without 
   assert.equal((await db.server.findUniqueOrThrow({ where: { serverId: "NPR" } })).displayEndsAt, null);
   await m.updateServer(db, f.root, "NPR", { isListed: false });
   assert.equal((await directory()).length, 0);
-  const [{ snapshot }] = await db.$queryRaw<{ snapshot: unknown }[]>`SELECT ${securityFunction("public_snapshot")}('NPR',NULL::uuid) AS snapshot`;
+  const [{ snapshot }] = await db.$queryRaw<{ snapshot: unknown }[]>`SELECT ${securityFunction("distribution_snapshot")}('NPR',NULL::uuid) AS snapshot`;
   assert.equal(snapshot, null, "manual unlisting still blocks public downloads");
 }));
 

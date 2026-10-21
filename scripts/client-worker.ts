@@ -5,6 +5,7 @@ import { runUploadWorker, expireIncompleteUploads } from "../src/lib/client-work
 import { maintainRecycleBin } from "../src/lib/recycle-storage";
 import { runPackageWorker } from "../src/lib/package-worker";
 import { collectStorageTelemetry } from "../src/lib/storage-telemetry";
+import { syncUnionDirectory, importUnionAvatars } from "../src/lib/union-directory";
 
 const workerId = randomUUID(); let running = true;
 process.on("SIGINT", () => { running = false; }); process.on("SIGTERM", () => { running = false; });
@@ -19,6 +20,13 @@ async function main() {
   };
   refreshTelemetry();
   const telemetryTimer = setInterval(refreshTelemetry, 30_000);
+  let directory: Promise<unknown> | undefined, avatars: Promise<unknown> | undefined;
+  const refreshUnion = () => {
+    if (!directory) directory = syncUnionDirectory(prisma).catch(() => console.error("Union directory sync failed")).finally(() => { directory = undefined; });
+    if (!avatars) avatars = importUnionAvatars(prisma).catch(() => console.error("Union avatar import failed")).finally(() => { avatars = undefined; });
+  };
+  refreshUnion();
+  const unionTimer = setInterval(refreshUnion, 10_000);
   let maintenance: Promise<void> | undefined;
   const packages = (async () => {
     while (running) {
@@ -41,6 +49,6 @@ async function main() {
       }
       catch (error) { console.error("Worker queue failed", error instanceof Error ? error.message : "unknown"); await new Promise(resolve => setTimeout(resolve, 3000)); }
     }
-  } finally { running = false; clearInterval(telemetryTimer); await telemetry; await packages; await maintenance; clearInterval(heartbeat); await prisma.$disconnect(); }
+  } finally { running = false; clearInterval(telemetryTimer); clearInterval(unionTimer); await directory; await avatars; await telemetry; await packages; await maintenance; clearInterval(heartbeat); await prisma.$disconnect(); }
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "Worker failed"); process.exitCode = 1; });

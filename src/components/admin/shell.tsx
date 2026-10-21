@@ -42,7 +42,7 @@ function AppSidebar() {
         <div className="grid flex-1 text-left text-sm"><span className="truncate font-medium">{state.actor.displayName}</span><span className="truncate text-xs text-muted-foreground">{t(roleLabel(state))}</span></div><ChevronsUpDown className="ml-auto size-4" />
       </SidebarMenuButton></DropdownMenuTrigger>
       <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
-        <DropdownMenuLabel>{state.actor.username ? `@${state.actor.username}` : t("白名单账号")}</DropdownMenuLabel><DropdownMenuSeparator />
+        <DropdownMenuLabel>{state.actor.unionSubject ? `Union · ${state.actor.unionSubject}` : state.actor.username ? `@${state.actor.username}` : t("白名单账号")}</DropdownMenuLabel><DropdownMenuSeparator />
         <DropdownMenuItem asChild><Link href="/admin/system/settings"><Settings />{t("账号设置")}</Link></DropdownMenuItem>
         <DropdownMenuItem disabled={busy} onSelect={() => void logout()}><LogOut />{t("退出登录")}</DropdownMenuItem>
       </DropdownMenuContent>

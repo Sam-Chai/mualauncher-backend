@@ -1,6 +1,7 @@
 import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "@/generated/prisma/client";
+import * as modelEnums from "@/generated/prisma/enums";
 import { rolePermissions } from "./roles";
 
 export type DatabasePurpose = "web" | "auth" | "public" | "worker" | "migration";
@@ -10,11 +11,11 @@ const globalDb = globalThis as unknown as { muaClients?: Map<DatabasePurpose, Pr
 const clients: Map<DatabasePurpose, PrismaClient> = globalDb.muaClients ??= new Map<DatabasePurpose, PrismaClient>();
 const clientSchemas = globalDb.muaClientSchemas ??= new Map<DatabasePurpose, string>();
 // Next dev preserves global pools across hot reloads, including after prisma generate.
-// Invalidate pools when generated models/scalar fields change. Prisma 7's
+// Invalidate pools when generated models, scalar fields or enum values change. Prisma 7's
 // prisma-client generator exposes field enums rather than runtime DMMF.
-const currentSchema = JSON.stringify(Object.entries(Prisma)
+const currentSchema = JSON.stringify([Object.entries(Prisma)
   .filter(([name]) => name === "ModelName" || name === "prismaVersion" || name.endsWith("ScalarFieldEnum"))
-  .sort(([a], [b]) => a.localeCompare(b)));
+  .sort(([a], [b]) => a.localeCompare(b)), modelEnums]);
 const checked = globalDb.muaChecked ??= new WeakSet();
 const pending = new WeakMap<PrismaClient, Promise<void>>();
 export function getPrisma(purpose: DatabasePurpose): PrismaClient {
@@ -69,6 +70,10 @@ export async function validateDatabase(purpose: Exclude<DatabasePurpose, "migrat
     if (!row || row.name !== roles[purpose] || row.login !== roles[purpose] || row.superuser || row.bypass || row.privileged || row.ddl || row.owners || row.tables !== expectedTables || row.unsafe || row.policies < expectedTables) throw new Error(`Unsafe ${purpose} database identity or missing RLS policies`);
     const dataSchema = process.env.DATABASE_SCHEMA ?? "public";
     const securitySchema = dataSchema === "public" ? "authz" : `${dataSchema}_authz`;
+    const publicGrants = await client.$queryRaw<{ unsafe: boolean }[]>`SELECT
+      has_function_privilege(current_user,${`"${securitySchema}".distribution_servers()`},'EXECUTE') OR
+      has_function_privilege(current_user,${`"${securitySchema}".distribution_snapshot(text,uuid)`},'EXECUTE') AS unsafe`;
+    if (publicGrants[0]?.unsafe) throw new Error("Runtime roles must not execute unscoped distribution functions");
     const mapping = await client.$queryRaw<{ role: string; permission: string }[]>`SELECT role,permission FROM ${Prisma.raw(`"${securitySchema}".role_permission`)} ORDER BY role,permission`;
     const expected = Object.entries(rolePermissions).flatMap(([role, permissions]) => permissions.map(permission => `${role}:${permission}`)).sort();
     if (JSON.stringify(mapping.map(row => `${row.role}:${row.permission}`)) !== JSON.stringify(expected)) throw new Error("Database role-permission mapping differs from application RBAC; deploy matching migration");

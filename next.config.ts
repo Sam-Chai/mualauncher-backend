@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   serverExternalPackages: ["ali-oss", "cos-nodejs-sdk-v5", "esdk-obs-nodejs"],
+  allowedDevOrigins: ["link.mualliance.cn"]
 };
 
 export default nextConfig;

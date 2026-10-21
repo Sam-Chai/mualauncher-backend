@@ -17,7 +17,7 @@ async function AuthenticatedAdmin({ children }: { children: ReactNode }) {
   const token = cookieStore.get(COOKIE_NAME)?.value;
   let initial;
   try { initial = await authorized(token, false, getState); }
-  catch (error) { if (error instanceof AppError && error.status === 401) redirect("/login"); throw error; }
+  catch (error) { if (error instanceof AppError && error.status === 401) redirect("/login"); if (error instanceof AppError && error.status === 403) redirect("/member"); throw error; }
   return <PreferenceProvider initialLocale={parseLocale(cookieStore.get(LOCALE_COOKIE)?.value)} withTheme={false}><AdminProvider key={initial.actor.id} initial={initial}><AdminShell>{children}</AdminShell></AdminProvider></PreferenceProvider>;
 }
 export default function AdminLayout({ children }: { children: ReactNode }) {

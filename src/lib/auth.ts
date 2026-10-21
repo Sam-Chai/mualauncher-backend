@@ -12,7 +12,7 @@ export const COOKIE_NAME = "mua_session";
 export const SESSION_SECONDS = 60 * 60 * 12;
 export const tokenDigest = (token: string) => createHash("sha256").update(token).digest("hex");
 export type Db = Prisma.TransactionClient;
-export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string; apiScope?: { tokenId?: string; permissions: Permission[]; serverIds: string[] } };
+export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string; unionSubject?: string | null; canManage?: boolean; sessionKind?: string; apiScope?: { tokenId?: string; permissions: Permission[]; serverIds: string[] } };
 
 export async function actorFromToken(db: Db, token: string | undefined): Promise<Actor> {
   invariant(token && /^[0-9a-f]{64}$/.test(token), 401, "请先登录");
@@ -36,7 +36,7 @@ export async function locked<T>(work: (db: Db) => Promise<T>, client = prisma): 
 }
 export async function authorized<T>(token: string | undefined, write: boolean, work: (db: Db, actor: Actor) => Promise<T>) {
   await validateDatabase("web");
-  const run = async (db: Db) => { const actor = await actorFromToken(db, token); await setDatabaseActor(db, actor); return work(db, actor); };
+  const run = async (db: Db) => { const actor = await actorFromToken(db, token); invariant(actor.sessionKind !== "LAUNCHER" && actor.canManage !== false, 403, "此账号没有后台管理权限"); await setDatabaseActor(db, actor); return work(db, actor); };
   return write ? locked(run) : prisma.$transaction(run);
 }
 

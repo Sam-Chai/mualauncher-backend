@@ -1,11 +1,13 @@
+import { unionOperations } from "./union-document";
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 type Entry = readonly [Method, string];
 const publicSource = "src/app/api/v1/servers";
 export const apiInventory = [
+  ...unionOperations.map(op => ({method: op.method.toUpperCase() as Method, path:op.path,group:"Union",authentication:op.auth,documented:true,source:"src/app/api"})),
   ...([ ["GET", "/api/v1/servers"], ["GET", "/api/v1/servers/{serverId}/manifest"],
     ["GET", "/api/v1/servers/{serverId}/packages"],
     ["GET", "/api/v1/servers/{serverId}/releases/{releaseId}/packages"] ] satisfies Entry[])
-    .map(([method, path]) => ({ method, path, group: "Launcher", authentication: "public", documented: true, source: publicSource })),
+    .map(([method, path]) => ({ method, path, group: "Launcher", authentication: "member session OR Launcher bearer", documented: true, source: publicSource })),
   ...([ ["GET", "/api/v1/clients"], ["POST", "/api/v1/clients"], ["GET", "/api/v1/clients/{clientId}"],
     ["POST", "/api/v1/clients/{clientId}/bind"], ["POST", "/api/v1/clients/{clientId}/unbind"],
     ["POST", "/api/v1/clients/{clientId}/archive"], ["POST", "/api/v1/clients/{clientId}/delete"],

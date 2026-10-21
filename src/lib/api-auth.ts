@@ -12,7 +12,7 @@ import { audit } from "./management";
 
 export async function apiActor(db: Db, request: Request, cookie: string | undefined): Promise<Actor> {
   const header = request.headers.get("authorization");
-  if (!header) return actorFromToken(db, cookie);
+  if (!header) { const actor = await actorFromToken(db, cookie); invariant(actor.sessionKind !== "LAUNCHER" && actor.canManage !== false, 403, "此账号没有后台管理权限"); return actor; }
   invariant(/^Bearer mua_[0-9a-f]{64}$/.test(header), 401, "无效的 API Token");
   const rows = await db.$queryRaw<{ actor: Actor | null }[]>`SELECT ${securityFunction("api_actor")}(${tokenDigest(header.slice(7))}) AS actor`;
   invariant(rows[0]?.actor, 401, "API Token 已失效");

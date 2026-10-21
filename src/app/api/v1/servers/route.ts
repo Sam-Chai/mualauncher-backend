@@ -1,10 +1,10 @@
 import { failure, json } from "@/lib/http";
-import { publicDirectory } from "@/lib/public-database";
+import { memberState } from "@/lib/member-access";
 import { connection } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   await connection();
   try {
-    return json({ servers: await publicDirectory() });
+    return json({ servers: (await memberState(request)).servers });
   } catch (error) { return failure(error); }
 }

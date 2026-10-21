@@ -4,6 +4,7 @@ export const navigation = [
   { title: "联盟管理", items: [
     { title: "组织", href: "/admin/organizations", icon: Building2 },
     { title: "成员", href: "/admin/members", icon: Users },
+    { title: "跨组织访问", href: "/admin/access", icon: ShieldCheck },
     { title: "权限", href: "/admin/permissions", icon: ShieldCheck }] },
   { title: "服务器", items: [
     { title: "服务器管理", href: "/admin/servers", icon: Server }] },

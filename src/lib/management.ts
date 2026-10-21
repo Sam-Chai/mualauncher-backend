@@ -12,8 +12,8 @@ import { serverMottoUrl } from "./server-motto-contract";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
 const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true } as const;
-const accountDto = (account: { id: string; displayName: string; status: string; isSuperAdmin: boolean }, username = "") =>
-  ({ id: account.id, displayName: account.displayName, status: account.status, isSuperAdmin: account.isSuperAdmin, username });
+const accountDto = (account: { id: string; displayName: string; status: string; isSuperAdmin: boolean }, identity?: { username: string | null; unionSubject: string | null }) =>
+  ({ id: account.id, displayName: account.displayName, status: account.status, isSuperAdmin: account.isSuperAdmin, username: identity?.username ?? "", ...(identity?.unionSubject ? { unionSubject: identity.unionSubject } : {}) });
 
 export async function audit(db: Db, actor: Actor, action: string, targetType: string, targetId: string,
   organizationId?: string, serverId?: string, details: Prisma.InputJsonObject = {}) {
@@ -27,11 +27,12 @@ export async function getState(db: Db, actor: Actor) {
     where: actor.isSuperAdmin ? {} : { members: { some: { accountId: actor.id, status: "ACTIVE" } } },
     orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { displayName: "asc" }],
     include: { servers: { orderBy: [{ sortOrder: "asc" }, { serverId: "asc" }], include: { publication: { include: { client: true } } } },
+      unionSites: { where: { enabled: true }, orderBy: { code: "asc" }, select: { code: true, bsRoot: true, bsRootAliases: true } },
       clients: { where: { deletedAt: null }, select: { archivedAt: true, scopeServerId: true, binding: { select: { serverId: true } } } },
       members: { where: { accountId: actor.id }, include: { serverGrants: true } } },
   });
   const directory = await accountDirectory(db);
-  const names = new Map(directory.map(account => [account.id, account.username ?? ""]));
+  const identities = new Map(directory.map(account => [account.id, account]));
   const releaseStates = await serverSummaries(db, organizations.flatMap(org => org.servers.map(server => server.serverId)));
   const organizationDtos = [];
   for (const organization of organizations) {
@@ -51,7 +52,7 @@ export async function getState(db: Db, actor: Actor) {
     });
     const members = permissions.includes("ORG_MEMBERS_READ") ? (await db.organizationMember.findMany({
       where: { organizationId: organization.id }, orderBy: { createdAt: "asc" }, include: { account: { select: accountSelect }, serverGrants: true },
-    })).map(member => ({ account: accountDto(member.account, names.get(member.account.id)), status: member.status, roles: member.roles,
+    })).map(member => ({ account: accountDto(member.account, identities.get(member.account.id)), status: member.status, roles: member.roles,
       grants: member.serverGrants.map(grant => ({ serverId: grant.serverId, roles: grant.roles })),
       protected: member.account.isSuperAdmin || member.roles.some(role => reservedRoles.includes(role)) || member.serverGrants.some(grant => grant.roles.some(role => reservedRoles.includes(role))) })) : [];
     const clientCount = organization.clients.filter(client => {
@@ -61,9 +62,10 @@ export async function getState(db: Db, actor: Actor) {
       return !organization.archivedAt && !client.archivedAt && (rights.includes("DRAFT_READ") || rights.includes("RELEASE_READ"));
     }).length;
     organizationDtos.push({ id: organization.id, displayName: organization.displayName, description: organization.description, clientCount,
+      ...(organization.unionSites.length ? { skinSites: organization.unionSites.flatMap(site => [site.bsRoot, ...site.bsRootAliases].map(url => ({ code: site.code, url }))) } : {}),
       avatarObjectKey: organization.avatarObjectKey, archivedAt: organization.archivedAt, permissions: [...new Set(permissions)], servers, members });
   }
-  const accounts = actor.isSuperAdmin ? directory.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(account => accountDto(account, account.username ?? "")) : [];
+  const accounts = actor.isSuperAdmin ? directory.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(account => accountDto(account, account)) : [];
   const events = actor.isSuperAdmin ? await db.auditEvent.findMany({ take: 50, orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { id: true, action: true, targetType: true, targetId: true, organizationId: true, serverId: true, details: true, createdAt: true, actor: { select: { displayName: true } } } }) : [];
   // Aggregate the entire window, rather than treating the last 50 events as complete statistics.
@@ -83,26 +85,24 @@ export async function getState(db: Db, actor: Actor) {
     SELECT to_char(days.day, 'YYYY-MM-DD') AS date, coalesce(counts.count, 0)::int AS count
     FROM days LEFT JOIN counts USING (day) ORDER BY days.day
   ` : [];
-  return { actor, organizations: organizationDtos, accounts, events, auditActivity, enabledPackageFormats: packageFormats, maxUploadSizeMb: uploadSizeLimit };
+  return { actor: { id: actor.id, displayName: actor.displayName, isSuperAdmin: actor.isSuperAdmin, ...(actor.username !== undefined ? { username: actor.username } : {}), ...(actor.unionSubject ? { unionSubject: actor.unionSubject } : {}) }, organizations: organizationDtos, accounts, events, auditActivity, enabledPackageFormats: packageFormats, maxUploadSizeMb: uploadSizeLimit };
 }
 
 export async function createOrganization(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
-  const data = input.fields(raw, ["displayName", "description", "avatarObjectKey"]);
+  const data = input.fields(raw, ["displayName", "description"]);
   const organization = await db.organization.create({ data: { displayName: input.text(data, "displayName"),
-    description: data.description === undefined ? "" : input.text(data, "description", 5000, false),
-    avatarObjectKey: data.avatarObjectKey === undefined ? null : input.optionalText(data, "avatarObjectKey") } });
+    description: data.description === undefined ? "" : input.text(data, "description", 5000, false) } });
   await audit(db, actor, "ORGANIZATION_CREATE", "Organization", organization.id, organization.id);
   return { id: organization.id };
 }
 
 export async function updateOrganization(db: Db, actor: Actor, id: string, raw: unknown) {
   await requireOrganization(db, actor, id, "ORG_EDIT");
-  const data = input.fields(raw, ["displayName", "description", "avatarObjectKey"]);
+  const data = input.fields(raw, ["displayName", "description"]);
   const update: Prisma.OrganizationUpdateInput = {};
   if ("displayName" in data) update.displayName = input.text(data, "displayName");
   if ("description" in data) update.description = input.text(data, "description", 5000, false);
-  if ("avatarObjectKey" in data) update.avatarObjectKey = input.optionalText(data, "avatarObjectKey");
   await db.organization.update({ where: { id }, data: update });
   await audit(db, actor, "ORGANIZATION_EDIT", "Organization", id, id, undefined, { fields: Object.keys(data) });
   return { ok: true };
@@ -211,7 +211,8 @@ async function checkMemberChange(db: Db, actor: Actor, organizationId: string, a
 
 export async function setMember(db: Db, actor: Actor, organizationId: string, accountId: string, raw: unknown) {
   const data = input.fields(raw, ["roles", "status"]);
-  const roles = input.roles(data.roles);
+  const selectedRoles = input.roles(data.roles);
+  const roles = selectedRoles.length ? selectedRoles : ["PLAYER" as const];
   invariant(data.status === "ACTIVE" || data.status === "DISABLED", 400, "成员状态无效");
   const { account, member } = await checkMemberChange(db, actor, organizationId, accountId, roles);
   invariant(member || account.status === "ACTIVE", 409, "不能添加已停用的账号");
@@ -225,6 +226,7 @@ export async function setMember(db: Db, actor: Actor, organizationId: string, ac
 export async function setGrant(db: Db, actor: Actor, organizationId: string, accountId: string, id: string, raw: unknown) {
   const roles = input.roles(input.fields(raw, ["roles"]).roles);
   invariant(!roles.includes("ORG_ADMIN"), 400, "组织管理员不能按单服授权");
+  invariant(!roles.includes("PLAYER"), 400, "玩家角色仅可用于组织成员");
   const { member } = await checkMemberChange(db, actor, organizationId, accountId, roles);
   invariant(member, 404, "请先将该账号加入组织");
   const { server } = await requireServer(db, actor, id, "SERVER_READ");
@@ -239,8 +241,8 @@ export async function searchAccounts(db: Db, actor: Actor, organizationId: strin
   await requireOrganization(db, actor, organizationId, "ORG_MEMBERS_READ");
   invariant(query.trim().length >= 3 && query.length <= 64, 400, "请至少输入 3 个字符搜索白名单账号");
   const search = query.trim().toLowerCase();
-  return (await accountDirectory(db)).filter(account => account.status === "ACTIVE" && (account.displayName.toLowerCase().includes(search) || account.username?.toLowerCase().includes(search)))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName)).slice(0, 10).map(account => accountDto(account, account.username ?? ""));
+  return (await accountDirectory(db)).filter(account => account.status === "ACTIVE" && (account.displayName.toLowerCase().includes(search) || account.username?.toLowerCase().includes(search) || account.unionSubject?.toLowerCase().includes(search)))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName)).slice(0, 10).map(account => accountDto(account, account));
 }
 
 export async function createAccount(db: Db, actor: Actor, raw: unknown) {

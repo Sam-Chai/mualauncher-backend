@@ -2,16 +2,35 @@
 
 由 `npm run openapi:generate` 生成。以下为实际业务路径，catch-all 已展开；HEAD／OPTIONS 框架隐式方法不作为独立业务操作。
 
-64 个业务操作均已纳入受保护的后台完整 OpenAPI；公开规范仅含 Launcher 的 4 个 GET。文档不授予业务权限。
+83 个业务操作均已纳入受保护的后台完整 OpenAPI；对外规范包含需要登录的 Launcher 4 个 GET。文档不授予业务权限。
 
 Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，并继续检查实时 RBAC。Auth 登录／退出要求同源，改密还要求有效会话。
 
 | 方法 | 路径 | 分组 | 认证 | OpenAPI | 实现目录 |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/api/v1/servers` | Launcher | public | 公开及后台规范 | `src/app/api/v1/servers` |
-| GET | `/api/v1/servers/{serverId}/manifest` | Launcher | public | 公开及后台规范 | `src/app/api/v1/servers` |
-| GET | `/api/v1/servers/{serverId}/packages` | Launcher | public | 公开及后台规范 | `src/app/api/v1/servers` |
-| GET | `/api/v1/servers/{serverId}/releases/{releaseId}/packages` | Launcher | public | 公开及后台规范 | `src/app/api/v1/servers` |
+| GET | `/api/admin/union-sync` | Union | session | 仅后台规范 | `src/app/api` |
+| POST | `/api/admin/union-sync` | Union | session | 仅后台规范 | `src/app/api` |
+| GET | `/api/admin/organizations/{organizationId}/avatar-image` | Union | session | 仅后台规范 | `src/app/api` |
+| POST | `/api/admin/organizations/{organizationId}/avatar-image` | Union | session | 仅后台规范 | `src/app/api` |
+| DELETE | `/api/admin/organizations/{organizationId}/avatar-image` | Union | session | 仅后台规范 | `src/app/api` |
+| GET | `/api/auth/union/start` | Union | public | 仅后台规范 | `src/app/api` |
+| GET | `/api/auth/union/callback` | Union | public | 仅后台规范 | `src/app/api` |
+| POST | `/api/auth/launcher/start` | Union | public | 仅后台规范 | `src/app/api` |
+| POST | `/api/auth/launcher/claim` | Union | public | 仅后台规范 | `src/app/api` |
+| POST | `/api/auth/launcher/approve` | Union | session | 仅后台规范 | `src/app/api` |
+| POST | `/api/auth/launcher/logout` | Union | launcher | 仅后台规范 | `src/app/api` |
+| GET | `/api/member` | Union | member | 仅后台规范 | `src/app/api` |
+| GET | `/api/admin/union-sites` | Union | session | 仅后台规范 | `src/app/api` |
+| PUT | `/api/admin/union-sites` | Union | session | 仅后台规范 | `src/app/api` |
+| GET | `/api/admin/access/candidates` | Union | session | 仅后台规范 | `src/app/api` |
+| GET | `/api/admin/access/requests` | Union | session | 仅后台规范 | `src/app/api` |
+| POST | `/api/admin/access/requests` | Union | session | 仅后台规范 | `src/app/api` |
+| POST | `/api/admin/access/requests/{id}` | Union | session | 仅后台规范 | `src/app/api` |
+| POST | `/api/admin/access/grants/{id}/revoke` | Union | session | 仅后台规范 | `src/app/api` |
+| GET | `/api/v1/servers` | Launcher | member session OR Launcher bearer | 公开及后台规范 | `src/app/api/v1/servers` |
+| GET | `/api/v1/servers/{serverId}/manifest` | Launcher | member session OR Launcher bearer | 公开及后台规范 | `src/app/api/v1/servers` |
+| GET | `/api/v1/servers/{serverId}/packages` | Launcher | member session OR Launcher bearer | 公开及后台规范 | `src/app/api/v1/servers` |
+| GET | `/api/v1/servers/{serverId}/releases/{releaseId}/packages` | Launcher | member session OR Launcher bearer | 公开及后台规范 | `src/app/api/v1/servers` |
 | GET | `/api/v1/clients` | Clients | session OR bearer | 仅后台规范 | `src/app/api/v1/clients` |
 | POST | `/api/v1/clients` | Clients | session OR bearer | 仅后台规范 | `src/app/api/v1/clients` |
 | GET | `/api/v1/clients/{clientId}` | Clients | session OR bearer | 仅后台规范 | `src/app/api/v1/clients` |
@@ -73,7 +92,7 @@ Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，�
 | POST | `/api/auth/logout` | Auth | same-origin | 仅后台规范 | `src/app/api/auth/[action]/route.ts` |
 | POST | `/api/auth/password` | Auth | session + same-origin | 仅后台规范 | `src/app/api/auth/[action]/route.ts` |
 
-合计 64 个业务操作，均已描述。客户端身份统一为 UUID；上传与生命周期操作仅提供独立客户端标准 API。
+合计 83 个业务操作，均已描述。客户端身份统一为 UUID；上传与生命周期操作仅提供独立客户端标准 API。
 
 文档基础设施：`GET /openapi.json?locale=zh-CN|en-US` 为公开 Launcher 规范；`GET /api/admin/openapi?locale=zh-CN|en-US` 逐请求检查后台 Cookie 会话并返回完整规范。`/admin/api` 内嵌 Scalar 默认完整规范，可切换公开规范。内部契约不得加入公开输出。
 

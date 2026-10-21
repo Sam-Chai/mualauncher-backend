@@ -19,7 +19,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "auth:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
-    "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/rls.test.ts tests/prisma-cache.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:storage && npm run test:storage-telemetry && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui && npm run test:openapi && npm run openapi:check",
+    "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/rls.test.ts tests/prisma-cache.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:storage && npm run test:storage-telemetry && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui && npm run test:openapi && npm run openapi:check && npm run test:union",
     "test:package-format": "node --import tsx --test tests/package-format.test.ts",
     "test:admin-ui": "node --import tsx --test tests/server-management.test.tsx tests/preferences.test.tsx tests/recipe-distribution.test.tsx",
     "test:server-motto": "node --conditions=react-server --import tsx --test tests/server-motto.test.ts",
@@ -43,7 +43,8 @@
     "test:storage-telemetry": "node --conditions=react-server --import tsx --test tests/storage-telemetry.test.ts",
     "worker": "node --conditions=react-server --import tsx scripts/client-worker.ts",
     "client:upload": "node --import tsx scripts/upload-client.ts",
-    "runtime:sync": "node --import tsx scripts/sync-minecraft-runtime.ts"
+    "runtime:sync": "node --import tsx scripts/sync-minecraft-runtime.ts",
+    "test:union": "node --conditions=react-server --import tsx --test tests/union-access.test.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "7.3.4",
@@ -65,6 +66,7 @@
     "lucide-react": "^1.53.0",
     "next": "16.4.0",
     "next-themes": "^0.4.6",
+    "oauth4webapi": "3.8.8",
     "pg": "8.23.1",
     "radix-ui": "^1.7.0",
     "react": "19.3.0",

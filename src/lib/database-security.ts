@@ -7,12 +7,12 @@ export function securityFunction(name: string) {
   return Prisma.raw(`"${securitySchema().replaceAll('"', '""')}"."${name}"`);
 }
 export async function setDatabaseActor(db: Db, actor: Actor) {
-  await db.$queryRaw`SELECT set_config('mua.account_id',${actor.id},true), set_config('mua.auth_kind',${actor.apiScope ? "api" : "session"},true), set_config('mua.api_token_id',${actor.apiScope?.tokenId ?? ""},true)`;
+  await db.$queryRaw`SELECT set_config('mua.account_id',${actor.id},true), set_config('mua.auth_kind',${actor.sessionKind === "LAUNCHER" ? "launcher" : actor.apiScope ? "api" : "session"},true), set_config('mua.api_token_id',${actor.apiScope?.tokenId ?? ""},true)`;
 }
 export async function credentialCreate(db: Db, accountId: string, username: string, passwordHash: string) { await db.$executeRaw`SELECT ${securityFunction("create_credential")}(${accountId}::uuid,${username},${passwordHash})`; }
 export async function credentialUpdate(db: Db, accountId: string, passwordHash: string, previous: string | null = null) { await db.$executeRaw`SELECT ${securityFunction("set_password")}(${accountId}::uuid,${passwordHash},${previous})`; }
 export async function revokeAccountSessions(db: Db, accountId: string) { await db.$executeRaw`SELECT ${securityFunction("revoke_sessions")}(${accountId}::uuid)`; }
-export async function accountDirectory(db: Db) { return db.$queryRaw<{ id: string; displayName: string; status: "ACTIVE" | "DISABLED"; isSuperAdmin: boolean; username: string | null; createdAt: Date }[]>`SELECT * FROM ${securityFunction("account_directory")}()`; }
+export async function accountDirectory(db: Db) { return db.$queryRaw<{ id: string; displayName: string; status: "ACTIVE" | "DISABLED"; isSuperAdmin: boolean; username: string | null; unionSubject: string | null; createdAt: Date }[]>`SELECT * FROM ${securityFunction("account_identity_directory")}()`; }
 export async function serverSummaries(db: Db, ids: string[]) {
   if (!ids.length) return new Map<string, boolean>();
   const rows = await db.$queryRaw<{ id: string; summary: { currentReleaseActive: boolean } | null }[]>`SELECT id,${securityFunction("server_summary")}(id) AS summary FROM unnest(${ids}::text[]) id`;

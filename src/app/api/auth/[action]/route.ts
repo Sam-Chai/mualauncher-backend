@@ -9,7 +9,7 @@ import { authPrisma, validateDatabase } from "@/lib/prisma";
 import { credentialUpdate, revokeAccountSessions } from "@/lib/database-security";
 
 type Context = { params: Promise<{ action: string }> };
-const cookieOptions = () => ({ httpOnly: true, secure: appOrigin().startsWith("https://"), sameSite: "strict" as const, path: "/" });
+const cookieOptions = () => ({ httpOnly: true, secure: appOrigin().startsWith("https://"), sameSite: "lax" as const, path: "/" });
 
 export async function POST(request: Request, context: Context) {
   try {

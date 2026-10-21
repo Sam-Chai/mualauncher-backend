@@ -4,7 +4,7 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import { randomBytes, generateKeyPairSync, createPublicKey, verify, createHash } from "node:crypto";
-import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { readdir, readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import pg from "pg";
@@ -121,7 +121,7 @@ async function approved(draftId: string) {
 }
 before(async () => {
   await pool.query('CREATE SCHEMA "' + schema + '"'); created = true;
-  for (const migration of ["202610140001_initial_release"]) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
+  for (const migration of (await readdir("prisma/migrations")).filter(name => /^\d/.test(name)).sort()) await pool.query((await readFile("prisma/migrations/" + migration + "/migration.sql", "utf8")).replace('CREATE SCHEMA IF NOT EXISTS "public";', ""));
   temp = await mkdtemp(join(tmpdir(), "mua-upload-test-")); process.env.SIGNING_PRIVATE_KEY_PATH = join(temp, "key.pem");
   await writeFile(process.env.SIGNING_PRIVATE_KEY_PATH, generateKeyPairSync("ed25519").privateKey.export({ format: "pem", type: "pkcs8" }));
   await initializeStorage();
@@ -413,7 +413,14 @@ test("the standard HTTP API and Actions upload script share the reviewed release
   const probe = createServer(); await new Promise<void>(resolve => probe.listen(0, "127.0.0.1", resolve));
   const port = (probe.address() as { port: number }).port; await new Promise<void>(resolve => probe.close(() => resolve()));
   const origin = "http://127.0.0.1:" + port;
+  // A real ordinary member, separate from the management automation token.
+  const memberOrg = (await client.server.findUniqueOrThrow({where:{serverId:"OTH"}})).organizationId;
+  const memberAccount = await client.account.create({data:{displayName:"HTTP member"}});
+  await client.organizationMember.create({data:{organizationId:memberOrg,accountId:memberAccount.id,roles:[],grantedById:root.id}});
+  const memberSession = randomBytes(32).toString("hex");
+  await client.session.create({data:{accountId:memberAccount.id,tokenHash:tokenDigest(memberSession),expiresAt:new Date(Date.now()+600_000)}});
   const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (String(input).startsWith(origin + "/api/v1/servers/")) init = {...init, headers:{...Object.fromEntries(new Headers(init?.headers)),Cookie:`mua_session=${memberSession}`}};
     const response = await globalThis.fetch(input, init);
     const url = String(input), method = init?.method ?? "GET";
     if (url.startsWith(origin + "/api/")) {

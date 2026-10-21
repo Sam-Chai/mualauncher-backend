@@ -42,7 +42,7 @@ export function password(value: unknown) {
   invariant(typeof value === "string" && value.length >= 12 && value.length <= 128, 400, "密码长度须为 12–128 位");
   return value;
 }
-export const roleCodes: Role[] = ["ORG_ADMIN", "SERVER_ADMIN", "CLIENT_EDITOR", "SERVER_EDITOR", "REVIEWER", "PUBLISHER", "RELEASE_OPERATOR", "READ_ONLY"];
+export const roleCodes: Role[] = ["PLAYER", "ORG_ADMIN", "SERVER_ADMIN", "CLIENT_EDITOR", "SERVER_EDITOR", "REVIEWER", "PUBLISHER", "RELEASE_OPERATOR", "READ_ONLY"];
 export function roles(value: unknown): Role[] {
   invariant(Array.isArray(value) && value.every(role => roleCodes.includes(role)), 400, "角色无效");
   return [...new Set(value)] as Role[];

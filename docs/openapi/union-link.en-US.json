@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "1.1.0",
+    "version": "3.2.0",
     "description": "The public specification describes four Launcher read operations. Client automation, administration and authentication are in the protected full specification. API route v1, muapack formatVersion and document versions are independent. Examples, generated clients and online requests follow this declared scope."
   },
   "servers": [
@@ -14,12 +14,24 @@
   "tags": [
     {
       "name": "Launcher",
-      "description": "Server discovery, release manifests and download links. No login is required; the backend checks public resource eligibility on every request."
+      "description": "Server discovery, manifests and package links require member authentication and live organization, access-grant and distribution checks."
     }
   ],
-  "security": [],
+  "security": [
+    {
+      "SessionCookie": []
+    },
+    {
+      "LauncherToken": []
+    }
+  ],
   "components": {
     "securitySchemes": {
+      "LauncherToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "mul_<64 lowercase hex characters>"
+      },
       "SessionCookie": {
         "type": "apiKey",
         "in": "cookie",
@@ -2161,17 +2173,24 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
-        "summary": "List public servers",
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
+        "summary": "List servers accessible to the signed-in account",
         "description": "Returns listed, unarchived servers with a valid bound release, ordered by sortOrder and serverId. Display windows include their start and exclude their end. Expiry hides directory entries only; manifests, downloads and refreshes for otherwise online resources remain available. Times are ISO 8601 strings with a timezone.",
         "responses": {
           "200": {
-            "description": "Public server directory. When no servers are visible, servers is [].",
+            "description": "Account-scoped server directory; servers is empty when no resources are visible.",
             "headers": {
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2183,13 +2202,31 @@
               }
             }
           },
+          "401": {
+            "description": "Sign in first",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "500": {
             "description": "The service or database is temporarily unavailable.",
             "headers": {
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2210,7 +2247,14 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
         "summary": "Get the original current release manifest",
         "description": "Returns sealed original JSON bytes. Verify the signature against these bytes without reserialization. v1 returns mua-client-manifest schemaVersion:2; its digest is not the packaged platform manifest digest. v2 returns mua-recipe-manifest. Obtain public keys through a trusted channel; a key ID does not establish trust.",
         "parameters": [
@@ -2245,7 +2289,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               },
               "X-MUA-Manifest-Sha256": {
@@ -2288,7 +2332,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign in first",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2306,7 +2368,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The fixed package digest no longer matches. Start a new download task; do not resume with different bytes.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2324,7 +2404,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2342,7 +2422,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2360,7 +2440,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2381,7 +2461,14 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
         "summary": "Discover a full or update package for the current release",
         "description": "v1 requires a canonical platform. v2 protocolRevision:2 is platform independent and serves the same recipe on every system. Platform rules do not certify game launch compatibility.\n\nacceptedFormatVersions is required: 1, 2, 1,2 or 2,1. baseReleaseId must identify the publication pinned at upload; include baseManifestSha256 when available. Mismatches select full for the same target. v1 uses the packaged platform manifest digest; v2 uses the original recipe manifest digest. Corrupt baselines fail.\n\nReturns a JSON download descriptor, not ZIP bytes. full always points to the complete package for the same target. Links normally expire after 300 seconds. etag is the original object storage value, including quotes, or null; it is not SHA-256. Use the relative refreshUrl to renew links. Storage GET supports a single Range and If-Match; browsers still require storage CORS. Verify size, SHA-256 and archive signatures after download. Signature parameters depend on the storage provider. Do not modify signed URLs or use a GET URL for HEAD.",
         "parameters": [
@@ -2442,7 +2529,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2460,7 +2547,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign in first",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2478,7 +2583,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The fixed package digest no longer matches. Start a new download task; do not resume with different bytes.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2496,7 +2619,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2514,7 +2637,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2532,7 +2655,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2553,7 +2676,14 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
         "summary": "Refresh download links for a fixed release",
         "description": "v1 requires a canonical platform. v2 protocolRevision:2 is platform independent and serves the same recipe on every system. Platform rules do not certify game launch compatibility.\n\nacceptedFormatVersions is required: 1, 2, 1,2 or 2,1. baseReleaseId must identify the publication pinned at upload; include baseManifestSha256 when available. Mismatches select full for the same target. v1 uses the packaged platform manifest digest; v2 uses the original recipe manifest digest. Corrupt baselines fail.\n\nReturns a JSON download descriptor, not ZIP bytes. full always points to the complete package for the same target. Links normally expire after 300 seconds. etag is the original object storage value, including quotes, or null; it is not SHA-256. Use the relative refreshUrl to renew links. Storage GET supports a single Range and If-Match; browsers still require storage CORS. Verify size, SHA-256 and archive signatures after download. Signature parameters depend on the storage provider. Do not modify signed URLs or use a GET URL for HEAD.\n\nreleaseId identifies an unarchived release of the currently online bound client. Historical releases of that client can be refreshed without selecting the latest release. packageSha256 is optional but is always included in generated refreshUrl values; a mismatch returns 409. Archival or unbinding blocks new refreshes, but previously signed links may remain usable until expiry.",
         "parameters": [
@@ -2632,7 +2762,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2650,7 +2780,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sign in first",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2668,7 +2816,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2686,7 +2834,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2704,7 +2852,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2722,7 +2870,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2740,7 +2888,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },

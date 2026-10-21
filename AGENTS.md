@@ -10,6 +10,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-21 PLAYER／Union 身份：Union 成员默认 PLAYER（玩家），管理权限集合为空，不能用角色数组非空判断后台准入；只有实际管理权限才可进入后台。空组织角色回填／保存归一化为 PLAYER，单服授权排除此角色；不改变停用或已有特权。成员／账号／搜索显示 `Union · CODE:ID`，本地用户名继续独立。迁移 005／006，OpenAPI 3.2.0／83 操作，仍 31 张 FORCE RLS 表。见 [成员访问](docs/union-oauth-member-access.md)。
+
+- 2026-10-21 YITUEM 已确认合并：`skin.yitmc.cn`／`skin.uemcraft.cn` 对应同一组织和 CODE，保存主地址及 bsRootAliases，列表分别显示两个域名按钮。只对此确切组合放行，其他重复 CODE 仍报告冲突；账号仍用完整 sub，不合并本地账号或授予角色。迁移 `202610210004_yituem_skin_site_aliases`，仍 31 张 FORCE RLS 表，OpenAPI 当前 3.1.0／83 操作。见 [目录同步](docs/union-directory-sync.md)。
+
+- 2026-10-21 后续：Union 固定目录 API 每分钟由 Worker 租约同步，按 CODE 自动创建／关联组织，不授予角色；冲突 CODE 跳过并报告，不转移既有映射、不恢复人工停用或归档。组织头像支持私有 OSS 原图、1:1 网格裁剪和 512×512 WebP；网站 favicon 自动导入、每日检查、失败小时重试，人工上传／裁剪／移除后禁止覆盖。Settings 同步板块与接口仅超管 Cookie 可读／安排任务。迁移 `202610210002_union_directory_avatars` 后 31 张 FORCE RLS 表，OpenAPI 3.0.0 完整 83 操作；组织资料 JSON 不再接受裸 avatarObjectKey。见 [目录与头像](docs/union-directory-sync.md)。本条优先于下方旧数量及手工映射说明。
+
+- 2026-10-21 Union OAuth 与成员访问：保留本地密码登录和现有 Session，oauth4webapi＋独立五分钟 Lax Cookie＋一次性 state＋S256 PKCE；按来源 CODE 自动普通入组，成员读取不授予 READ_ONLY 或管理角色。外部访问由源 ORG_ADMIN 申请、目标 ORG_ADMIN 审批，保存具体服务器集合及单独自动新增选项。Launcher 四 GET 必须登录，专用 mul_ Token 只读，后台自动化 mua_ Token 不用于成员分发；后台完整规范只允许有管理权限的 Cookie。迁移 `202610210001_union_member_access` 后 30 张业务表 FORCE RLS，OpenAPI 2.0.0 共 78 操作。真实 Union 凭据／上游 PKCE 执行与实际 Launcher 接入未验收。见 [实施说明](docs/union-oauth-member-access.md) 和 [方案](docs/union-oauth-member-access-plan.md)。本条优先于下方白名单／匿名 Launcher 与旧数量说明。
+
 - 2026-10-18 存储遥测已接入超管主页／Storage，Cookie 超管只读 API `/api/admin/storage-telemetry`；Worker 租约采集，新增迁移 `202610180001_storage_telemetry`，当前 23 张业务表 FORCE RLS。当前 MinIO 取桶级指标和进程启动时间，其他供应商通过统一对象列表提供容量，云监控流量和 CDN 尚未接入。未测值为 null，已采集流量含 Worker／后台访问，不代表玩家完成下载或账单；不改变签名链接和发布。OpenAPI 1.1.0 共 64 操作，公开仍四 GET。见 [存储遥测](docs/storage-telemetry.md)。本条补充首发后新增迁移与操作，优先于下文首发时的数量记录。
 
 - 2026-10-14 对象存储可通过 OSS_PROVIDER=minio／aws／s3／ali／tencent／huawei 选择；MinIO／AWS 使用 S3 SDK，三家云使用 ali-oss、cos-nodejs-sdk-v5、esdk-obs-nodejs 原生适配。业务只调用统一 ObjectStorage 接口。原生云桶禁止启用／暂停版本控制，不支持原子禁止覆盖时拒绝正式不可变写入；复制按厂商单次上限分片并固定源 ETag。Web／Worker 共用配置，旧 S3_* 在 MinIO／S3 场景继续有效；配置不自动迁移旧对象、不改发布签名。部署须运行 storage:verify 并检查 CORS，本地 SDK fixture 与 MinIO 验证不代表真实云验收。见 [对象存储配置](docs/object-storage.md)。

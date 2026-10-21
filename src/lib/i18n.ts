@@ -1,6 +1,8 @@
 import english from "./locales/en.json";
 import extra from "./locales/extra-en.json";
 import openapi from "./locales/openapi-en.json";
+import union from "./locales/union-en.json";
+import unionDirectory from "./locales/union-directory-en.json";
 
 export const LOCALE_COOKIE = "mua-locale";
 export type Locale = "zh-CN" | "en-US";
@@ -9,8 +11,9 @@ export const parseLocale = (value: unknown): Locale => value === "en-US" ? "en-U
 const zhNavigation: Record<string, string> = {
   Organization: "组织管理", Server: "服务器", Client: "客户端", Releases: "版本发布", System: "系统管理", Members: "成员管理", Permissions: "权限管理",
   Storage: "存储", Worker: "任务处理", "Signing Keys": "签名密钥", "Audit Log": "审计日志", Settings: "设置",
+  PENDING: "待审批", APPROVED: "已同意", REJECTED: "已拒绝", CANCELLED: "已取消",
 };
-const enMessages: Record<string, string> = { ...english, ...extra, ...openapi };
+const enMessages: Record<string, string> = { ...english, ...extra, ...openapi, ...union, ...unionDirectory };
 const reverseMessages = Object.fromEntries(Object.entries(enMessages).map(([key, value]) => [value, key]));
 const patterns = Object.entries(enMessages).filter(([key]) => /\{\d+\}/.test(key)).map(([key, value]) => ({
   regex: new RegExp("^" + key.split(/(\{\d+\})/).map(part => /^\{\d+\}$/.test(part) ? "(.+?)" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("") + "$"),

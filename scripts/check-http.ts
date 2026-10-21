@@ -30,7 +30,7 @@ async function main() {
     assert.equal(signedIn.status, 200, "Local administrator login failed");
     const header = signedIn.headers.get("set-cookie")!;
     cookie = header.split(";")[0];
-    assert(header.includes("HttpOnly")); assert(/SameSite=strict/i.test(header));
+    assert(header.includes("HttpOnly")); assert(/SameSite=lax/i.test(header));
     assert.equal(header.includes("Secure"), base.startsWith("https://"));
     const state = await fetch(base + "/api/admin/state", { headers: { Cookie: cookie } });
     assert.equal(state.status, 200);
@@ -66,7 +66,8 @@ async function main() {
     for (const path of ["/dashboard", "/admin/news", "/admin/events", "/admin/launcher-ui", "/admin/listings", "/admin/servers/status", "/admin/clients/releases", "/admin/clients/artifacts", "/admin/clients/runtime", "/admin/clients/00000000-0000-4000-8000-000000000001/releases", "/admin/releases/revoked"]) {
       assert.equal((await fetch(base + path, { headers: { Cookie: cookie }, redirect: "manual" })).status, 404, path);
     }
-    const directory = await fetch(base + "/api/v1/servers");
+    assert.equal((await fetch(base + "/api/v1/servers")).status, 401);
+    const directory = await fetch(base + "/api/v1/servers", { headers: { Cookie: cookie } });
     assert.equal(directory.status, 200); assert(Array.isArray((await directory.json()).servers));
     assert.equal((await post("/api/auth/logout", {})).status, 200);
     assert.equal((await fetch(base + "/api/admin/state", { headers: { Cookie: cookie } })).status, 401);

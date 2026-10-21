@@ -13,6 +13,7 @@ enum AccountStatus {
 }
 
 enum Role {
+  PLAYER
   ORG_ADMIN
   SERVER_ADMIN
   CLIENT_EDITOR
@@ -63,6 +64,13 @@ model Account {
   auditEvents  AuditEvent[]
   uploads      ClientUpload[]
   apiTokens    ApiToken[]
+  unionIdentity UnionIdentity?
+  accessRequests OrganizationAccessRequest[] @relation("AccessBeneficiary")
+  accessRequestsCreated OrganizationAccessRequest[] @relation("AccessCreator")
+  accessRequestsReviewed OrganizationAccessRequest[] @relation("AccessReviewer")
+  accessGrants OrganizationAccessGrant[] @relation("AccessGrantee")
+  accessRevocations OrganizationAccessGrant[] @relation("AccessRevoker")
+  launcherLoginAttempts LauncherLoginAttempt[]
 }
 
 model LocalCredential {
@@ -80,6 +88,7 @@ model Session {
   expiresAt DateTime @db.Timestamptz(6)
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  kind      String   @default("WEB")
 
   @@index([accountId])
   @@index([expiresAt])
@@ -96,6 +105,8 @@ model Organization {
   displayName     String
   description     String               @default("")
   avatarObjectKey String?
+  avatarMode      String               @default("AUTO")
+  avatarRevision  Int                  @default(0)
   archivedAt      DateTime?            @db.Timestamptz(6)
   createdAt       DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime             @updatedAt @db.Timestamptz(6)
@@ -103,20 +114,29 @@ model Organization {
   servers         Server[]
   clients         Client[]
   auditEvents     AuditEvent[]
+  unionSites      UnionSkinSite[]
+  unionIdentities UnionIdentity[]
+  accessRequestsSent OrganizationAccessRequest[] @relation("AccessSource")
+  accessRequestsReceived OrganizationAccessRequest[] @relation("AccessTarget")
+  accessGrantsSent OrganizationAccessGrant[] @relation("GrantSource")
+  accessGrantsReceived OrganizationAccessGrant[] @relation("GrantTarget")
+  memberVisibility ServerMemberVisibility[]
 }
 
 model OrganizationMember {
   organizationId String        @db.Uuid
   accountId      String        @db.Uuid
   status         AccountStatus @default(ACTIVE)
-  roles          Role[]        @default([])
-  grantedById    String        @db.Uuid
+  roles          Role[]        @default([PLAYER])
+  grantedById    String?       @db.Uuid
+  source         String        @default("MANUAL")
   createdAt      DateTime      @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   account        Account       @relation("MemberAccount", fields: [accountId], references: [id], onDelete: Restrict)
-  grantedBy      Account       @relation("MemberGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+  grantedBy      Account?      @relation("MemberGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
   serverGrants   ServerGrant[]
+  externalAccessGrants OrganizationAccessGrant[] @relation("GrantMembership")
 
   @@id([organizationId, accountId])
   @@index([accountId])
@@ -124,6 +144,7 @@ model OrganizationMember {
 
 model Server {
   serverId       String             @id @db.VarChar(5)
+  memberVisibility ServerMemberVisibility?
   organizationId String             @db.Uuid
   displayName    String
   description    String             @default("")
@@ -461,4 +482,118 @@ model AuditEvent {
 
   @@index([organizationId, createdAt])
   @@index([actorId, createdAt])
+}
+
+// Database constraints and RLS are installed by the matching migration.
+model UnionSkinSite {
+  code           String @id @db.VarChar(6)
+  organizationId String @db.Uuid
+  bsRoot         String
+  bsRootAliases  String[] @default([])
+  enabled        Boolean @default(true)
+  revision       Int @default(1)
+  managedBySync  Boolean @default(false)
+  upstreamPresent Boolean @default(false)
+  lastSeenAt     DateTime? @db.Timestamptz(6)
+  avatarNextAt   DateTime @default(now()) @db.Timestamptz(6)
+  avatarCheckedAt DateTime? @db.Timestamptz(6)
+  avatarError    String?
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  identities     UnionIdentity[]
+  @@index([organizationId])
+}
+model UnionSyncState {
+  id             String @id
+  attemptedAt    DateTime? @db.Timestamptz(6)
+  syncedAt       DateTime? @db.Timestamptz(6)
+  nextSyncAt     DateTime @default(now()) @db.Timestamptz(6)
+  leaseToken     String? @db.Uuid
+  leaseUntil     DateTime? @db.Timestamptz(6)
+  avatarLeaseToken String? @db.Uuid
+  avatarLeaseUntil DateTime? @db.Timestamptz(6)
+  upstreamVersion String?
+  receivedCount  Int @default(0)
+  syncedCount    Int @default(0)
+  createdCount   Int @default(0)
+  error          String?
+  issues         Json @default("[]")
+}
+model UnionIdentity {
+  subject        String @id
+  accountId      String @unique @db.Uuid
+  siteCode       String @db.VarChar(6)
+  organizationId String @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  account        Account @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  site           UnionSkinSite @relation(fields: [siteCode], references: [code], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+model UnionOAuthAttempt {
+  stateHash   String @id @db.Char(64)
+  browserHash String @db.Char(64)
+  verifier    String
+  returnTo    String
+  expiresAt   DateTime @db.Timestamptz(6)
+  @@index([expiresAt])
+}
+model OrganizationAccessRequest {
+  id                   String @id @default(uuid()) @db.Uuid
+  sourceOrganizationId String @db.Uuid
+  targetOrganizationId String @db.Uuid
+  accountId            String @db.Uuid
+  createdById          String @db.Uuid
+  serverIds            String[]
+  autoIncludeNewServers Boolean @default(false)
+  reason               String
+  status               String @default("PENDING")
+  revision             Int @default(1)
+  reviewedById         String? @db.Uuid
+  reviewedAt           DateTime? @db.Timestamptz(6)
+  note                 String @default("")
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+  source               Organization @relation("AccessSource", fields: [sourceOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  target               Organization @relation("AccessTarget", fields: [targetOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  account              Account @relation("AccessBeneficiary", fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdBy            Account @relation("AccessCreator", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedBy           Account? @relation("AccessReviewer", fields: [reviewedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  grant                OrganizationAccessGrant?
+  @@index([sourceOrganizationId, status, createdAt])
+  @@index([targetOrganizationId, status, createdAt])
+}
+model OrganizationAccessGrant {
+  id                   String @id @default(uuid()) @db.Uuid
+  requestId            String @unique @db.Uuid
+  sourceOrganizationId String @db.Uuid
+  targetOrganizationId String @db.Uuid
+  accountId            String @db.Uuid
+  serverIds            String[]
+  autoIncludeNewServers Boolean
+  approvedAt           DateTime @db.Timestamptz(6)
+  revokedAt            DateTime? @db.Timestamptz(6)
+  revokedById          String? @db.Uuid
+  revokeReason         String?
+  request              OrganizationAccessRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  source               Organization @relation("GrantSource", fields: [sourceOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  target               Organization @relation("GrantTarget", fields: [targetOrganizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  account              Account @relation("AccessGrantee", fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  revokedBy            Account? @relation("AccessRevoker", fields: [revokedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sourceMember         OrganizationMember @relation("GrantMembership", fields: [sourceOrganizationId, accountId], references: [organizationId, accountId], onDelete: NoAction, onUpdate: NoAction)
+  @@index([accountId, targetOrganizationId, revokedAt])
+}
+model ServerMemberVisibility {
+  serverId       String @id @db.VarChar(5)
+  organizationId String @db.Uuid
+  firstVisibleAt DateTime @db.Timestamptz(6)
+  server         Server @relation(fields: [serverId], references: [serverId], onDelete: NoAction, onUpdate: NoAction)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@index([organizationId, firstVisibleAt])
+}
+model LauncherLoginAttempt {
+  id          String @id @default(uuid()) @db.Uuid
+  challenge   String @db.Char(43)
+  accountId   String? @db.Uuid
+  expiresAt   DateTime @db.Timestamptz(6)
+  account     Account? @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@index([expiresAt])
 }

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "1.1.0",
+    "version": "3.2.0",
     "description": "公开规范描述 4 个 Launcher 读取接口；客户端自动化、后台及认证接口见受保护的完整规范。API 路由 v1、muapack formatVersion 与文档版本是不同概念。所有示例、代码生成和在线请求都应以此处声明的范围为准。"
   },
   "servers": [
@@ -14,12 +14,24 @@
   "tags": [
     {
       "name": "Launcher",
-      "description": "服务器发现、发布清单与下载链接。无需登录；资源公开条件仍由后端逐请求校验。"
+      "description": "服务器发现、发布清单与下载链接。需要成员登录；逐请求检查所属组织、外部授权及分发条件。"
     }
   ],
-  "security": [],
+  "security": [
+    {
+      "SessionCookie": []
+    },
+    {
+      "LauncherToken": []
+    }
+  ],
   "components": {
     "securitySchemes": {
+      "LauncherToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "mul_<64 lowercase hex characters>"
+      },
       "SessionCookie": {
         "type": "apiKey",
         "in": "cookie",
@@ -2161,17 +2173,24 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
-        "summary": "获取公开服务器目录",
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
+        "summary": "获取账号可访问服务器目录",
         "description": "只返回已上架、未归档且绑定有效发布的服务器，按 sortOrder、serverId 排序。展示区间采用开始包含、结束排除；到期只隐藏目录，不阻止仍在线资源的 Manifest、下载或刷新。时间为带时区的 ISO 8601 字符串。",
         "responses": {
           "200": {
-            "description": "公开服务器目录；没有可见服务器时 servers 为 []。",
+            "description": "账号可访问服务器目录；没有可见服务器时 servers 为 []。",
             "headers": {
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2183,13 +2202,31 @@
               }
             }
           },
+          "401": {
+            "description": "请先登录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "500": {
             "description": "服务或数据库暂时不可用。",
             "headers": {
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2210,7 +2247,14 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
         "summary": "获取当前发布的原始清单",
         "description": "返回已封存的原始 JSON 字节，保持签名对应的编码，不能重新序列化后验签。v1 返回 mua-client-manifest schemaVersion:2，不能将其摘要当作包内平台清单摘要；v2 返回 mua-recipe-manifest。必须从可信渠道取得公钥，响应中的 key ID 本身不建立信任。",
         "parameters": [
@@ -2245,7 +2289,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               },
               "X-MUA-Manifest-Sha256": {
@@ -2288,7 +2332,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2306,7 +2368,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "固定下载包摘要不匹配；必须重新建立下载任务，不能续传到其他字节。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2324,7 +2404,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2342,7 +2422,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2360,7 +2440,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2381,7 +2461,14 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
         "summary": "发现当前发布的完整包或更新包",
         "description": "v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。\n\nacceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。\n\n返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的对象存储原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；签名参数由存储供应商决定，不要改变签名 URL，也不能把 GET URL 用作 HEAD。",
         "parameters": [
@@ -2442,7 +2529,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2460,7 +2547,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2478,7 +2583,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "固定下载包摘要不匹配；必须重新建立下载任务，不能续传到其他字节。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2496,7 +2619,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2514,7 +2637,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2532,7 +2655,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2553,7 +2676,14 @@
         "tags": [
           "Launcher"
         ],
-        "security": [],
+        "security": [
+          {
+            "SessionCookie": []
+          },
+          {
+            "LauncherToken": []
+          }
+        ],
         "summary": "刷新固定发布版本的下载链接",
         "description": "v1 必须提供六项规范平台之一。v2 protocolRevision:2 不限制平台，各系统获取相同配方。平台规则不代表游戏启动兼容性已经验收。\n\nacceptedFormatVersions 必填，可传 1、2、1,2 或 2,1。baseReleaseId 必须对应上传时固定的已发布基准，建议同时提供 baseManifestSha256；不匹配时回退同目标 full。v1 基准摘要为包内平台清单摘要，v2 为原始配方清单摘要。损坏基准返回错误。\n\n返回 JSON 下载描述，不直接返回 ZIP。full 永远指向同目标完整包。链接默认有效 300 秒；etag 是可能为 null 的对象存储原始值（含引号），不是 SHA-256。刷新使用相对 refreshUrl。OSS GET 支持单范围 Range／If-Match，浏览器仍受 OSS CORS 限制。下载后校验大小、SHA-256 和包内签名；签名参数由存储供应商决定，不要改变签名 URL，也不能把 GET URL 用作 HEAD。\n\nreleaseId 固定为当前在线绑定客户端的未归档发布，允许该客户端历史版本刷新，不重新选择最新版本。packageSha256 可选，但生成的 refreshUrl 始终携带；摘要不匹配返回 409。归档或解绑后新刷新被拒绝，已经签发的链接仍可能在剩余有效期内可用。",
         "parameters": [
@@ -2632,7 +2762,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2650,7 +2780,25 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2668,7 +2816,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2686,7 +2834,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2704,7 +2852,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2722,7 +2870,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },
@@ -2740,7 +2888,7 @@
               "Cache-Control": {
                 "schema": {
                   "type": "string",
-                  "const": "no-store"
+                  "const": "private, no-store"
                 }
               }
             },

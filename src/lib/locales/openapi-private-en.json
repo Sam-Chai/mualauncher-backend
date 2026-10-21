@@ -129,7 +129,7 @@
   ],
   "createOrganization": [
     "Create an organization",
-    "Superadmin only. Creates an internal UUID; display alias, avatar object key and description may later be edited."
+    "Superadmin only. Creates an internal UUID. The display alias and description may later be edited; avatars use the dedicated upload endpoint."
   ],
   "updateOrganization": [
     "Edit organization details",

@@ -1,5 +1,9 @@
 # 最小数据库模型
 
+2026-10-21 后续：新增 UnionSyncState 及 Organization.avatarMode／avatarRevision、UnionSkinSite 上游出现和头像检查字段；迁移 `202610210002_union_directory_avatars` 后共 31 张业务表，全部 FORCE RLS。自动组织和头像写入使用 Worker 租约与受限函数，Worker 无通用组织创建／修改权限。见 [同步与头像](union-directory-sync.md)。
+
+2026-10-21：新增七个模型 UnionSkinSite、UnionIdentity、UnionOAuthAttempt、OrganizationAccessRequest、OrganizationAccessGrant、ServerMemberVisibility、LauncherLoginAttempt；Session 增加 WEB／LAUNCHER 类别，OrganizationMember 增加 MANUAL／UNION 来源，自动入组允许无人工 grantedById。新表的外键、约束、受限函数和 FORCE RLS 由迁移 `202610210001_union_member_access` 安装，当前共 30 张业务表。独立客户端仍允许发布／启用，成员侧只按有效服务器绑定分发。见 [实施说明](union-oauth-member-access.md)。
+
 2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。
 
 

@@ -14,6 +14,7 @@ import type { DownloadSettings } from "@/lib/download-settings";
 import { MINECRAFT_SOURCES, JAVA_SOURCES } from "@/lib/download-sources";
 import { PackageFormatSettingsCard } from "./package-format-settings";
 import { UploadSizeSettingsCard } from "./upload-size-settings";
+import { UnionSyncSettings } from "./union-sync-settings";
 export function AuditPage() {
   const { t, formatDate } = useI18n();
   const { state } = useAdmin();
@@ -34,12 +35,13 @@ export function SettingsPage() {
   return <><Heading title="Settings" description={t("账号安全与平台接入状态。")} /><div className="space-y-6"><div className="grid items-stretch gap-6 xl:grid-cols-2">
     <Card><CardHeader><CardTitle>{t("账号安全")}</CardTitle><CardDescription>{state.actor.displayName} {" " + t("· 修改密码后全部会话失效，需要重新登录。")}</CardDescription></CardHeader><CardContent><SchemaForm schema={z.object({ currentPassword: z.string().min(1, t("请输入当前密码")).max(128), newPassword: passwordSchema })} fields={[{ name: "currentPassword", label: t("当前密码"), type: "password", autoComplete: "current-password" }, { name: "newPassword", label: t("新密码"), type: "password", autoComplete: "new-password" }]} defaults={{ currentPassword: "", newPassword: "" }} disabled={busy} label={t("修改密码并退出登录")}
       onSubmit={values => run(async () => { await api("/api/auth/password", "POST", values); navigateAfterAuthChange("/login"); }, "", false)} /></CardContent></Card>
-    <Card><CardHeader><CardTitle>{t("平台接入")}</CardTitle><CardDescription>{t("已启用白名单登录、应用层 RBAC 与 PostgreSQL RLS。")}</CardDescription></CardHeader><CardContent className="space-y-4 text-sm">{[[t("身份认证"), t("本地白名单 · 已启用")], ["MUA OIDC / Auth.js", t("待接入")], ["PostgreSQL RLS", t("已接入 · 保留应用层 RBAC")], [t("对象存储"), t("对象存储适配器 · 已接入")], [t("任务处理"), t("独立 Worker · PostgreSQL 持久任务")]].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b pb-3 last:border-0"><span className="text-muted-foreground">{label}</span><span className="text-right">{value}</span></div>)}</CardContent></Card>
+    <Card><CardHeader><CardTitle>{t("平台接入")}</CardTitle><CardDescription>{t("已启用白名单登录、应用层 RBAC 与 PostgreSQL RLS。")}</CardDescription></CardHeader><CardContent className="space-y-4 text-sm">{[[t("身份认证"), t("本地白名单 · 已启用")], ["Union OAuth", t("来源皮肤站 · 普通成员登录")], ["PostgreSQL RLS", t("已接入 · 保留应用层 RBAC")], [t("对象存储"), t("对象存储适配器 · 已接入")], [t("任务处理"), t("独立 Worker · PostgreSQL 持久任务")]].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b pb-3 last:border-0"><span className="text-muted-foreground">{label}</span><span className="text-right">{value}</span></div>)}</CardContent></Card>
   </div><div className="grid items-stretch gap-6 xl:grid-cols-2">
     <ApiTokens />
     {state.actor.isSuperAdmin && <RecycleSettings />}
   </div>
     {state.actor.isSuperAdmin && <DownloadSettingsCards />}
+    {state.actor.isSuperAdmin && <UnionSyncSettings />}
   </div></>;
 }
 function DownloadSettingsCards() {

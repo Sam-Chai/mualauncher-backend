@@ -1,5 +1,7 @@
 # Launcher 客户端下载与链接刷新
 
+2026-10-21：四个服务器目录／Manifest／packages／固定版本刷新 GET 均要求有效成员 Cookie 或 `Authorization: Bearer mul_...`，匿名 401、无资源权限 404，不保留匿名兼容。管理自动化 mua_ Token 不用于成员分发；原生登录桥接见 [Union 成员访问](union-oauth-member-access.md)。每次读取实时授权，返回下载结果前再次校验绑定与权限；原格式、平台、基准、摘要、签名和五分钟 OSS 链接语义保留，展示时间仍只影响目录。本条优先于下文“公开下载”的匿名含义。
+
 2026-10-14：存储支持 `.env` 选择 MinIO／AWS／通用 S3／阿里云 OSS／腾讯云 COS／华为云 OBS，见 [配置与验证](object-storage.md)。签名 URL 的参数由供应商决定，客户端按不透明 URL 使用；返回字段、发布签名、ETag／Range／If-Match 与刷新身份规则保持一致。
 
 2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。

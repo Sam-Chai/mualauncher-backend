@@ -1,5 +1,9 @@
 # Union Link OpenAPI 与 Scalar
 
+2026-10-21 后续：OpenAPI 3.0.0 完整规范 83 操作，新增目录同步和组织头像 5 操作；组织资料 JSON 不再接受裸 avatarObjectKey，使用独立 multipart 头像接口。新增 3.0.0 基线并保留历史基线。详见 [变更记录](openapi-changelog.md) 和 [目录与头像](union-directory-sync.md)。
+
+2026-10-21：OpenAPI 2.0.0 完整规范 78 操作；对外规范仍只含四个 Launcher GET，但均声明成员会话／LauncherToken 认证。新增 Union OAuth、只读 Launcher 登录桥接、成员目录和跨组织管理接口。后台完整规范要求有效管理 Cookie，普通 OAuth 成员不能读取；保留 1.0.0 基线，新增并检查 2.0.0 基线。开发期主动移除匿名兼容，不变更已签名包，见 [变更记录](openapi-changelog.md) 和 [实施说明](union-oauth-member-access.md)。下方旧操作数量和匿名说明为历史记录。
+
 2026-10-14 首发基线：开发期旧入口、旧请求与历史协议分支已清理；当前规则、数据处理及验证见 [首发清理](first-release-cleanup.md)。本说明优先于下文历史实施记录。
 
 

@@ -105,6 +105,22 @@ test("storage telemetry is Worker-written, superadmin-session-only and excludes 
   assert.equal(stale.status, "STALE"); assert.equal(stale.traffic.sentBytes, null); assert.equal(stale.capacityBytes, result.capacityBytes);
 });
 
+test("organization skin-site addresses are projected only within the live organization scope", async () => {
+  await owner.unionSkinSite.createMany({data:[
+    {code:"ALPHA",organizationId:f.org.id,bsRoot:"https://alpha.example"},
+    {code:"BETA",organizationId:f.other.id,bsRoot:"https://beta.example"},
+    {code:"OFF",organizationId:f.org.id,bsRoot:"https://disabled.example",enabled:false},
+  ]});
+  assert.equal(await web.unionSkinSite.count(),0);
+  for(const actor of [f.admin,f.single,f.reader]) await as(actor,async db=>{
+    const state=await m.getState(db,actor);const org=state.organizations.find(org=>org.id===f.org.id);assert(org);
+    assert.deepEqual(org.skinSites,[{code:"ALPHA",url:"https://alpha.example"}]);
+    const sites=await db.unionSkinSite.findMany();assert(sites.length);assert(sites.every(site=>site.organizationId===f.org.id));
+    assert(!state.organizations.some(org=>org.id===f.other.id));
+  });
+  const all=await as(f.root,db=>m.getState(db,f.root));assert.deepEqual(all.organizations.find(org=>org.id===f.other.id)?.skinSites,[{code:"BETA",url:"https://beta.example"}]);
+});
+
 test("concurrent storage collectors share a lease and publish an actual capacity snapshot", async () => {
   const config = telemetryConfiguration();
   await worker.storageTelemetrySource.update({ where: { id: config.id }, data: { nextCollectAt: new Date(0) } });
@@ -206,8 +222,8 @@ test("auth is separate, credentials never readable by web, and password/session 
 });
 test("public can only call projections; worker can process data but cannot publish, edit membership or delete clients", async () => {
   await assert.rejects(pub.server.count()); await assert.rejects(pub.clientDraft.count()); await assert.rejects(pub.localCredential.count());
-  assert.deepEqual(await pub.$queryRaw`SELECT ${securityFunction("public_servers")}() AS rows`, [{ rows: [] }]);
-  assert.deepEqual(await pub.$queryRaw`SELECT ${securityFunction("public_snapshot")}(\'AAA\',NULL::uuid) AS value`, [{ value: null }]);
+  await assert.rejects(pub.$queryRaw`SELECT ${securityFunction("distribution_servers")}()`);
+  await assert.rejects(pub.$queryRaw`SELECT ${securityFunction("distribution_snapshot")}(\'AAA\',NULL::uuid)`);
   assert.equal(await worker.server.count(), 3);
   await worker.workerHeartbeat.upsert({ where: { id: "rls-worker" }, create: { id: "rls-worker", lastSeen: new Date() }, update: { lastSeen: new Date() } });
   await assert.rejects(worker.organizationMember.updateMany({ data: { status: "DISABLED" } }));

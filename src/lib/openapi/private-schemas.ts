@@ -62,14 +62,15 @@ export const published = z.object({ releaseId: uuid, versionLabel: z.string(), a
 export const fullPackage = z.object({ packageType: z.literal("full"), packageFormatVersion: z.number().int(), platform: z.string(),
   versionLabel: z.string(), fileName: z.string(), sha256: z.string().regex(/^[a-f0-9]{64}$/), size: integer, expiresIn: z.literal(300), url: z.string().url() }).strict();
 
-export const account = z.object({ id: uuid, displayName: z.string(), status: z.nativeEnum(AccountStatus), isSuperAdmin: z.boolean(), username: z.string() }).strict();
+export const account = z.object({ id: uuid, displayName: z.string(), status: z.nativeEnum(AccountStatus), isSuperAdmin: z.boolean(), username: z.string(), unionSubject: z.string().optional() }).strict();
 export const server = z.object({ serverId, organizationId: uuid, displayName: z.string(), description: z.string(), gameAddress: nullableText,
   iconObjectKey: nullableText, sortOrder: z.number().int(), themeColor: nullableText, mottoImageUrl: nullableText,
   ...displaySchedule.shape, isListed: z.boolean(), archivedAt: nullableDate, clientArchivedAt: nullableDate,
   currentReleaseId: uuid.nullable(), currentReleaseActive: z.boolean(), publicationRevision: integer,
   boundClientId: uuid.nullable(), boundClientName: nullableText, permissions: z.array(permission) }).strict();
-export const state = z.object({ actor: z.object({ id: uuid, displayName: z.string(), isSuperAdmin: z.boolean(), username: nullableText.optional() }).strict(),
+export const state = z.object({ actor: z.object({ id: uuid, displayName: z.string(), isSuperAdmin: z.boolean(), username: nullableText.optional(), unionSubject: z.string().optional() }).strict(),
   organizations: z.array(z.object({ id: uuid, displayName: z.string(), description: z.string(), clientCount: integer, avatarObjectKey: nullableText,
+    skinSites: z.array(z.object({code:z.string(),url:z.string().url()}).strict()).optional(),
     archivedAt: nullableDate, permissions: z.array(permission), servers: z.array(server),
     members: z.array(z.object({ account, status: z.nativeEnum(AccountStatus), roles: z.array(role), grants: z.array(z.object({ serverId, roles: z.array(role) }).strict()), protected: z.boolean() }).strict()) }).strict()),
   accounts: z.array(account), events: z.array(z.object({ id: uuid, action: z.string(), targetType: z.string(), targetId: z.string(), organizationId: uuid.nullable(),
@@ -89,7 +90,7 @@ export const motto = mottoMetadataSchema;
 export const mottoSaved = ok.extend({ iconObjectKey: nullableText }).strict();
 const text = (max = 200, minimum = 1) => z.string().trim().min(minimum).max(max);
 const nullableInput = (max = 500) => z.union([text(max), z.literal(""), z.null()]);
-export const organizationCreate = z.object({ displayName: text(), description: text(5000, 0).optional(), avatarObjectKey: nullableInput().optional() }).strict();
+export const organizationCreate = z.object({ displayName: text(), description: text(5000, 0).optional() }).strict();
 export const organizationUpdate = organizationCreate.partial();
 export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),
   displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: date.nullable().optional(), displayEndsAt: date.nullable().optional() }).strict();
@@ -97,7 +98,7 @@ export const serverUpdate = z.object({ displayName: text().optional(), descripti
   sortOrder: z.number().int().min(-2147483647).max(2147483647).optional(), themeColor: z.union([z.string().regex(/^#[0-9a-f]{6}$/i), z.literal(""), z.null()]).optional(),
   isListed: z.boolean().optional(), displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: nullableDate.optional(), displayEndsAt: nullableDate.optional() }).strict();
 export const member = z.object({ roles: z.array(role), status: z.nativeEnum(AccountStatus) }).strict();
-export const grant = z.object({ roles: z.array(role) }).strict();
+export const grant = z.object({ roles: z.array(z.enum(Object.values(Role).filter(role => role !== "ORG_ADMIN" && role !== "PLAYER") as [Role, ...Role[]])) }).strict();
 export const accountCreate = z.object({ displayName: text(), username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i), password: z.string().min(12).max(128), isSuperAdmin: z.boolean().optional() }).strict();
 export const accountUpdate = z.object({ displayName: text().optional(), status: z.nativeEnum(AccountStatus).optional(), isSuperAdmin: z.boolean().optional(), password: z.string().min(12).max(128).optional() }).strict();
 export const login = z.object({ username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i), password: z.string().min(1).max(128) }).strict();

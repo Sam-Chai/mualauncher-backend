@@ -3,6 +3,7 @@ export type Permission = "ORG_EDIT" | "ORG_MEMBERS_READ" | "ORG_MEMBERS_MANAGE" 
   "DRAFT_READ" | "DRAFT_CREATE" | "DRAFT_EDIT" | "DRAFT_SUBMIT" | "DRAFT_ARCHIVE" | "RELEASE_READ" | "DRAFT_REVIEW" | "RELEASE_PUBLISH" | "RELEASE_ACTIVATE";
 const base: Permission[] = ["SERVER_READ", "SERVER_EDIT", "DRAFT_READ", "DRAFT_CREATE", "DRAFT_EDIT", "DRAFT_SUBMIT", "DRAFT_ARCHIVE", "RELEASE_READ"];
 export const rolePermissions: Record<Role, readonly Permission[]> = {
+  PLAYER: [],
   ORG_ADMIN: [...base, "ORG_EDIT", "ORG_MEMBERS_READ", "ORG_MEMBERS_MANAGE", "CLIENT_ARCHIVE", "CLIENT_DELETE", "CLIENT_BIND"],
   SERVER_ADMIN: [...base, "CLIENT_ARCHIVE", "CLIENT_DELETE", "CLIENT_BIND"],
   CLIENT_EDITOR: base.filter(permission => permission !== "SERVER_EDIT"),
@@ -14,6 +15,7 @@ export const rolePermissions: Record<Role, readonly Permission[]> = {
 };
 export const reservedRoles: readonly Role[] = ["ORG_ADMIN", "REVIEWER", "PUBLISHER", "RELEASE_OPERATOR"];
 export const roleLabels: Record<Role, string> = {
+  PLAYER: "玩家",
   ORG_ADMIN: "组织管理员", SERVER_ADMIN: "服务器管理员", CLIENT_EDITOR: "客户端编辑", SERVER_EDITOR: "服务器编辑",
   REVIEWER: "审核员", PUBLISHER: "发布人员", RELEASE_OPERATOR: "版本切换人员", READ_ONLY: "只读人员",
 };

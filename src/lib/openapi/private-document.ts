@@ -1,3 +1,4 @@
+import { unionOpenApi, unionOperations } from "./union-document";
 import { z } from "zod";
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-openapi";
 import { publicOpenApi, OPENAPI_VERSION } from "./document";
@@ -62,7 +63,7 @@ admin("get", "/organizations/{organizationId}/account-search", "searchOrganizati
 admin("get", "/tokens", "listApiTokens", "列出当前账号的 API Token 元数据", z.array(s.token), "仅列出本账号 Token，包括已撤销记录；不返回明文 Token。Token 不能认证本后台接口。");
 admin("post", "/tokens", "createApiToken", "创建受范围限制的 API Token", s.createdToken, "只通过 Cookie 会话创建。serverIds 必须为调用者当前有权限的服务器，permissions 必须包含 SERVER_READ，禁止 ORG_* 和 SERVER_EDIT；有效期 1–90 天。明文只在创建响应出现一次。Token 实际权限与账号当前 RBAC 取交集，停用／撤权／撤销立即生效。", r.CreateToken, [], false, 201);
 admin("post", "/tokens/{tokenId}/revoke", "revokeApiToken", "撤销本账号的 API Token", s.ok, "只能撤销本账号 Token；撤销记录保留，之后 Bearer 请求返回 401。", s.ignoredJson);
-admin("post", "/organizations", "createOrganization", "创建组织", s.createdId, "仅超管；创建内部 UUID，别名、头像对象键和简介可随后编辑。", s.organizationCreate, [], true, 201);
+admin("post", "/organizations", "createOrganization", "创建组织", s.createdId, "仅超管；创建内部 UUID，别名和简介可随后编辑；头像通过独立上传接口保存。", s.organizationCreate, [], true, 201);
 admin("patch", "/organizations/{organizationId}", "updateOrganization", "编辑组织资料", s.ok, "要求组织范围 ORG_EDIT；只允许修改列出的资料，内部 ID 不变。", s.organizationUpdate, ["ORG_EDIT"]);
 admin("post", "/servers", "createServer", "登记已有 MUA server ID", z.object({ serverId: s.serverId }).strict(), "仅超管且检查 ORG_EDIT。使用已有 3–5 位字母 ID，不另造 ID。登记时可选 displayMode=PERMANENT 或 RANGE，省略默认永久；区间须提供带时区的开始与结束时间且开始早于结束，永久模式时间须为空。箴言图片通过专用上传接口设置。", s.serverCreate, ["ORG_EDIT"], true, 201);
 admin("patch", "/servers/{serverId}", "updateServer", "编辑服务器资料和展示配置", s.ok, "SERVER_EDIT 可修改范围内资料、themeColor、displayMode、displayStartsAt、displayEndsAt；sortOrder、isListed 仍仅超管。RANGE 要求有效起止时间且开始早于结束；PERMANENT 清空区间。时间字段为 UTC／带时区 ISO 8601，网页以北京时间编辑。箴言图片通过专用上传接口修改。", s.serverUpdate, ["SERVER_EDIT"]);
@@ -95,7 +96,7 @@ for (const [action, id, summary, body, auth, description] of [
   ["logout", "logout", "退出当前会话", z.object({}).strict(), "public", "同源 Origin 必需，会话 Cookie 可选；删除当前会话并设置 Cookie Max-Age=0。请求为 {}。"],
   ["password", "changePassword", "修改当前账号密码", s.passwordChange, "session", "有效 Cookie 会话和同源 Origin 必需；校验当前密码，要求新密码 12–128 字符，修改后撤销该账号全部会话并清除 Cookie，须重新登录。不会修改 API Token 的明文或权限。"],
 ] as const) ops.push({ method: "post", path: `/api/auth/${action}`, id, summary, response: s.ok, body, auth, description, tag: "Authentication" });
-export const privateOperations = ops;
+export const privateOperations = [...ops, ...unionOperations];
 
 export function adminOpenApi(locale: Locale = "zh-CN") {
   const base = publicOpenApi(locale), t = translator(locale), registry = new OpenAPIRegistry();
@@ -131,7 +132,7 @@ export function adminOpenApi(locale: Locale = "zh-CN") {
   }
   const internal = new OpenApiGeneratorV31(registry.definitions).generateDocument({ openapi: "3.1.0", info: { title: "Union Link API", version: OPENAPI_VERSION } });
   return { ...base, info: { ...base.info, description: t("后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。") },
-    paths: { ...base.paths, ...internal.paths }, components: { ...base.components, schemas: { ...base.components?.schemas, ...internal.components?.schemas } },
+    paths: { ...base.paths, ...internal.paths, ...unionOpenApi(locale).paths }, components: { ...base.components, schemas: { ...base.components?.schemas, ...internal.components?.schemas, ...unionOpenApi(locale).components?.schemas } },
     tags: [...base.tags ?? [], ...["Clients", "Uploads", "Drafts", "Releases", "Administration", "Authentication"].map(name => ({ name }))],
   };
 }

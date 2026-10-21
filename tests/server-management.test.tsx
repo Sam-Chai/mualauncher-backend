@@ -16,6 +16,16 @@ import { uploadFileError, UPLOAD_MB } from "../src/lib/upload-size-policy";
 import { displayTimeInput, displayTimeIso, displayWindowOpen } from "../src/lib/server-display";
 import { DisplayScheduleNote } from "../src/components/admin/display-schedule";
 import { PreferenceProvider } from "../src/components/preferences";
+import { AccountIdentity } from "../src/components/admin/account-identity";
+
+test("Union identities show their complete subject without inventing a local username; PLAYER grants no management permissions", () => {
+  const union=renderToStaticMarkup(<AccountIdentity username="" unionSubject="MUA:9917" />);
+  assert(union.includes("Union ·"));assert(union.includes("MUA:9917"));assert(!union.includes("@"));
+  const local=renderToStaticMarkup(<AccountIdentity username="mua-admin" />);assert(local.includes("@mua-admin"));assert(!local.includes("Union"));
+  const linked=renderToStaticMarkup(<AccountIdentity username="local" unionSubject="NPU:123" />);assert(linked.includes("@local"));assert(linked.includes("NPU:123"));
+  const en=renderToStaticMarkup(<PreferenceProvider initialLocale="en-US"><AccountIdentity /></PreferenceProvider>);assert(en.includes("No sign-in identity configured"));
+  assert.deepEqual(rolePermissions.PLAYER,[]);
+});
 
 function fixture(permissions: Server["permissions"], superAdmin = false) {
   const server: Server = {

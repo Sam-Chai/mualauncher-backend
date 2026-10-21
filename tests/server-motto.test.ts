@@ -149,9 +149,12 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     }
     return response;
   };
-  const instance = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
-    windowsHide: true, stdio: "ignore", env: { ...process.env, APP_ORIGIN: origin, DATABASE_SCHEMA: schema, NEXT_DIST_DIR: ".next/server-motto-test", NEXT_TELEMETRY_DISABLED: "1" },
+  const instance = spawn(process.execPath, ["node_modules/next/dist/bin/next", process.env.MUA_HTTP_TEST_DIST ? "start" : "dev", "--port", String(port), "--hostname", "127.0.0.1"], {
+    windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, APP_ORIGIN: origin, DATABASE_SCHEMA: schema, NEXT_DIST_DIR: process.env.MUA_HTTP_TEST_DIST ?? ".next/server-motto-test", NEXT_TELEMETRY_DISABLED: "1" },
   });
+  let instanceOutput = "";
+  instance.stdout?.on("data", chunk => { instanceOutput += chunk.toString(); });
+  instance.stderr?.on("data", chunk => { instanceOutput += chunk.toString(); });
   const cookies = new Map<string, string>();
   for (const actor of [root, editor, reader, other]) { const token = randomBytes(32).toString("hex"); await client.session.create({ data: { accountId: actor.id, tokenHash: tokenDigest(token), expiresAt: new Date(Date.now() + 600000) } }); cookies.set(actor.id, `${COOKIE_NAME}=${token}`); }
   try {
@@ -160,7 +163,7 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
       try { const response = await fetch(origin + "/api/admin/state", { signal: AbortSignal.timeout(2000) }); if (response.status === 401) { ready = true; break; } } catch {}
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    assert(ready, "isolated Next instance must start");
+    assert(ready, "isolated Next instance must start: " + instanceOutput.slice(-2000));
     const patchDisplay = (actor: Actor, value: unknown, serverId = "NPA") => fetch(origin + `/api/admin/servers/${serverId}`, {
       method: "PATCH", headers: { Cookie: cookies.get(actor.id)!, Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(value),
     });
@@ -232,7 +235,7 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     const archived = await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } });
     assert.equal(archived.status, 200); const archivedData = await archived.json(); assert.equal(archivedData.state, "UNKNOWN"); assert(archivedData.message.includes("已归档"));
     await locked(db => m.setMember(db, root, organizationId, reader.id, { roles: [], status: "ACTIVE" }), client);
-    assert.equal((await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } })).status, 404);
+    assert.equal((await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } })).status, 403, "after all management roles are removed, the management gate rejects the session");
     // Exercise administrative and authentication contracts against this disposable schema.
     const panelHeaders = { Cookie: cookies.get(root.id)!, Origin: origin, "Content-Type": "application/json" };
     const adminWrite = async (method: string, path: string, body: unknown, status = 200) => {
@@ -272,7 +275,7 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     assert.equal((await auth("login", { username, password }, undefined, "https://outside.invalid")).status, 403);
     const loggedIn = await auth("login", { username, password }); assert.equal(loggedIn.status, 200);
     const session = loggedIn.headers.get("set-cookie")!.split(";")[0];
-    assert.match(loggedIn.headers.get("set-cookie")!, /HttpOnly/i); assert.match(loggedIn.headers.get("set-cookie")!, /SameSite=strict/i);
+    assert.match(loggedIn.headers.get("set-cookie")!, /HttpOnly/i); assert.match(loggedIn.headers.get("set-cookie")!, /SameSite=lax/i);
     assert.equal((await fetch(origin + "/api/admin/state", { headers: { Cookie: session } })).status, 200);
     const changedPassword = await auth("password", { currentPassword: password, newPassword: nextPassword }, session);
     assert.equal(changedPassword.status, 200); assert.match(changedPassword.headers.get("set-cookie")!, /Max-Age=0/i);
@@ -287,6 +290,7 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
 
 async function stop(instance: ChildProcess) {
   if (!instance.pid) return;
-  if (process.platform === "win32") await new Promise<void>(resolve => { const cleanup = spawn("C:\\Windows\\System32\\taskkill.exe", ["/PID", String(instance.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }); cleanup.on("exit", () => resolve()); cleanup.on("error", () => resolve()); });
+  if (process.env.MUA_HTTP_TEST_DIST) { instance.kill("SIGTERM"); return; }
+  if (process.platform === "win32") await new Promise<void>(resolve => { const cleanup = spawn("C:\Windows\System32\taskkill.exe", ["/PID", String(instance.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }); cleanup.on("exit", () => resolve()); cleanup.on("error", () => resolve()); });
   else instance.kill("SIGTERM");
 }
