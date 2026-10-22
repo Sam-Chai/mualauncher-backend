@@ -28,6 +28,7 @@ Tremor 来自官方 [AreaChart v1.0.0](https://github.com/tremorlabs/tremor/tree
 | 总览 | /admin | 真实资源统计、目录与 Tremor 图表 |
 | 组织 | /admin/organizations | 资料、归档／恢复，超管新建 |
 | 成员 | /admin/members | 组织／单服授权；超管管理白名单账号 |
+| 跨组织访问 | /admin/access | 成员访问申请、审批和撤销；超管维护 Union 皮肤站组织映射 |
 | 权限 | /admin/permissions | 与后端共用的角色矩阵 |
 | 服务器管理 | /admin/servers | 统一资料、排序／颜色、上架与绑定状态；按权限编辑或查看，超管登记／归档／恢复 |
 | 客户端管理 | /admin/clients | 表格、完整 ZIP 添加／更新、解析统计、归档、历史切换 |
@@ -42,6 +43,8 @@ Tremor 来自官方 [AreaChart v1.0.0](https://github.com/tremorlabs/tremor/tree
 | Settings | /admin/system/settings | 自助改密与 API Token；超管管理上传大小、开放格式、下载与回收设置 |
 
 客户端管理与服务器管理各使用统一入口，旧分散页面已删除。资讯、活动和 Launcher UI 的导航与占位页已删除。
+
+跨组织访问中的源组织、成员和目标组织采用统一 shadcn/ui Select，带关联标签、主题样式和键盘操作。切换源组织会清空成员、目标与服务器选择，目标切换后重新读取可申请资源；忽略旧请求的迟到结果。Union 皮肤站组织映射仅超管可见，使用共享 TanStack DataTable 展示 CODE、组织、主／别名地址、状态和启用／停用操作，支持搜索、排序、分页和显示列。新增／更新映射仍使用既有表单和带修订的 API，不改变权限规则。
 
 ## 服务器管理
 
@@ -72,6 +75,8 @@ Tremor 来自官方 [AreaChart v1.0.0](https://github.com/tremorlabs/tremor/tree
 超管图表使用完整近 14 天 AuditEvent，按 Asia/Shanghai 补齐日期；普通成员只见有权限组织的服务器分布。MC Java 连接探测与状态灯已接入，历史在线监控及 CDN 流量指标尚未接入，不显示模拟数字。
 
 ## 验证
+
+2026-10-22 跨组织访问增量：三个选择器已统一为 shadcn/ui Select，Union 映射使用共享 DataTable。TypeScript、相关 ESLint、23 项界面测试通过；开发模式隔离 HTTP／浏览器专项 27／27 通过，覆盖标准下拉选择后申请／审批／撤销、映射搜索、YITUEM 双地址、带修订的停用／启用和非超管隐藏，无页面异常及 hydration 警告。浅色／深色选择器和表格预览分别为 `.local/organization-access-selects.png`、`.local/organization-access-selects-dark.png`、`.local/union-site-mapping-table.png`，使用隔离测试数据，没有修改真实映射。本增量未重新执行生产构建，接口字段和数据库保持不变。
 
 TypeScript、ESLint、生产构建及 50 项测试通过（含真实 PostgreSQL／MinIO 与隔离 HTTP 流程），包含多客户端绑定、迁移兼容、标准 API Token 上传脚本、真实隔离 HTTP 审核发布、签名与 CAS 下载。运行实例 HTTP 检查覆盖登录、19 个模块入口、客户端 API、存储状态和来源／会话保护。本次浏览器工具启动失败，新增绑定和模组表格界面的交互和视觉复验尚未完成。
 

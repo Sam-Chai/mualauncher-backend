@@ -64,7 +64,7 @@ admin("get", "/tokens", "listApiTokens", "列出当前账号的 API Token 元数
 admin("post", "/tokens", "createApiToken", "创建受范围限制的 API Token", s.createdToken, "只通过 Cookie 会话创建。serverIds 必须为调用者当前有权限的服务器，permissions 必须包含 SERVER_READ，禁止 ORG_* 和 SERVER_EDIT；有效期 1–90 天。明文只在创建响应出现一次。Token 实际权限与账号当前 RBAC 取交集，停用／撤权／撤销立即生效。", r.CreateToken, [], false, 201);
 admin("post", "/tokens/{tokenId}/revoke", "revokeApiToken", "撤销本账号的 API Token", s.ok, "只能撤销本账号 Token；撤销记录保留，之后 Bearer 请求返回 401。", s.ignoredJson);
 admin("post", "/organizations", "createOrganization", "创建组织", s.createdId, "仅超管；创建内部 UUID，别名和简介可随后编辑；头像通过独立上传接口保存。", s.organizationCreate, [], true, 201);
-admin("patch", "/organizations/{organizationId}", "updateOrganization", "编辑组织资料", s.ok, "要求组织范围 ORG_EDIT；只允许修改列出的资料，内部 ID 不变。", s.organizationUpdate, ["ORG_EDIT"]);
+admin("patch", "/organizations/{organizationId}", "updateOrganization", "编辑组织资料", s.ok, "要求组织范围 ORG_EDIT；只允许修改列出的资料，内部 ID 不变。手动修改或清空简介后永久停止皮肤站名称自动同步；省略或原样保存简介不改变同步模式。", s.organizationUpdate, ["ORG_EDIT"]);
 admin("post", "/servers", "createServer", "登记已有 MUA server ID", z.object({ serverId: s.serverId }).strict(), "仅超管且检查 ORG_EDIT。使用已有 3–5 位字母 ID，不另造 ID。登记时可选 displayMode=PERMANENT 或 RANGE，省略默认永久；区间须提供带时区的开始与结束时间且开始早于结束，永久模式时间须为空。箴言图片通过专用上传接口设置。", s.serverCreate, ["ORG_EDIT"], true, 201);
 admin("patch", "/servers/{serverId}", "updateServer", "编辑服务器资料和展示配置", s.ok, "SERVER_EDIT 可修改范围内资料、themeColor、displayMode、displayStartsAt、displayEndsAt；sortOrder、isListed 仍仅超管。RANGE 要求有效起止时间且开始早于结束；PERMANENT 清空区间。时间字段为 UTC／带时区 ISO 8601，网页以北京时间编辑。箴言图片通过专用上传接口修改。", s.serverUpdate, ["SERVER_EDIT"]);
 for (const [kind, param, id, summary] of [["organizations", "organizationId", "archiveOrganization", "归档或恢复组织"], ["servers", "serverId", "archiveServer", "归档或恢复服务器"]] as const)

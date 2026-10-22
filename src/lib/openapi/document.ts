@@ -4,10 +4,11 @@ import { PROJECT_NAME } from "../branding";
 import { translator, type Locale } from "../i18n";
 import { recipeManifestSchema } from "../muapack-v2-contract";
 import { acceptedFormats, directorySchema, errorSchema, clientManifestSchema, packageQuery, packageResponseSchema, refreshQuery, serverParams } from "./schemas";
+import { unionOpenApi, PUBLIC_AUTH_OPERATION_IDS } from "./union-document";
 
 extendZodWithOpenApi(z);
-export const OPENAPI_VERSION = "3.2.0";
-export const PUBLIC_OPERATION_IDS = ["listServers", "getServerManifest", "getServerPackages", "refreshReleasePackages"] as const;
+export const OPENAPI_VERSION = "4.0.0";
+export const PUBLIC_OPERATION_IDS = ["listServers", "getServerManifest", "getServerPackages", "refreshReleasePackages", ...PUBLIC_AUTH_OPERATION_IDS] as const;
 
 export function publicOpenApi(locale: Locale = "zh-CN") {
   const t = translator(locale), registry = new OpenAPIRegistry();
@@ -55,10 +56,12 @@ export function publicOpenApi(locale: Locale = "zh-CN") {
       request: { params: fixed ? serverParams.extend({ releaseId: z.string().uuid() }) : serverParams, query: fixed ? refreshQuery : packageQuery },
       responses: { 200: { description: t("v1 或 v2 的 full／update 下载描述。"), content: json(packages), headers: cacheHeaders }, ...errors(fixed ? [400, 401, 404, 409, 415, 500, 503] : [400, 401, 404, 409, 415, 500, 503]) } });
   }
-  return new OpenApiGeneratorV31(registry.definitions).generateDocument({ openapi: "3.1.0",
+  const launcherAuth = unionOpenApi(locale, true);
+  const document = new OpenApiGeneratorV31(registry.definitions).generateDocument({ openapi: "3.1.0",
     info: { title: `${PROJECT_NAME} API`, version: OPENAPI_VERSION,
-      description: t("公开规范描述 4 个 Launcher 读取接口；客户端自动化、后台及认证接口见受保护的完整规范。API 路由 v1、muapack formatVersion 与文档版本是不同概念。所有示例、代码生成和在线请求都应以此处声明的范围为准。") },
+      description: locale === "en-US" ? "Public Launcher authentication, member directory and four distribution reads. Administrative and automation operations remain private. API routes, package formats and documentation versions are independent." : "公开规范包含启动器认证、成员自查及四个分发读取操作；后台与自动化操作仍仅在受保护完整规范中。路由、包格式与文档版本相互独立。" },
     servers: [{ url: "/", description: t("当前站点；本地、预览和生产使用各自的同源 API。") }],
     tags: [{ name: "Launcher", description: t("服务器发现、发布清单与下载链接。需要成员登录；逐请求检查所属组织、外部授权及分发条件。") }], security: memberSecurity,
   });
+  return { ...document, paths: { ...document.paths, ...launcherAuth.paths }, components: { ...document.components, schemas: { ...document.components?.schemas, ...launcherAuth.components?.schemas } } };
 }

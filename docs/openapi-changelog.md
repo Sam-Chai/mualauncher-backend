@@ -1,5 +1,11 @@
 # OpenAPI 兼容性记录
 
+## 4.0.0 · 2026-10-22 Launcher 游戏令牌换票
+
+同日组织简介增量：目录通过各站 `/api/yggdrasil` 的 `meta.serverName` 自动填充组织简介。既有组织 PATCH 在真实修改／清空简介后永久保留人工内容，省略或原样保存不停止同步；字段、路径、权限及操作数不变，仅补充行为说明。见 [目录同步](union-directory-sync.md)。
+
+新增 providers、yggdrasil/start、yggdrasil/exchange 及超管 launcher-providers GET/PUT，完整 88 操作。公开子集扩至 11 操作，包含启动器必需认证及成员自查，管理 Cookie 与 mul_/mua_ 权限仍隔离。新接口严格 JSON、一次性请求、固定来源在线验证，按 CODE:UID 识别账号，签发不超过 15 分钟的只读 Token。开发期主动调整公开范围，无兼容旁路；新增 public/admin-4.0.0 基线并保留旧记录。见 [实施说明](launcher-game-token-exchange.md)。
+
 ## 3.2.0 · 2026-10-21 PLAYER 与 Union 登录身份
 
 组织成员角色增加 `PLAYER`（玩家），没有管理权限；组织成员 PUT 的空角色输入归一化为 PLAYER，单服授权不接受 PLAYER 或 ORG_ADMIN。账号响应和管理状态 actor 新增可选 `unionSubject`，在成员列表、账号目录和添加成员搜索中展示完整 Union 身份，不伪造本地 username；账号搜索同时支持完整 sub。

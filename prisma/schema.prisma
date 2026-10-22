@@ -71,6 +71,7 @@ model Account {
   accessGrants OrganizationAccessGrant[] @relation("AccessGrantee")
   accessRevocations OrganizationAccessGrant[] @relation("AccessRevoker")
   launcherLoginAttempts LauncherLoginAttempt[]
+  verifiedLauncherProviders LauncherAuthProvider[]
 }
 
 model LocalCredential {
@@ -89,6 +90,17 @@ model Session {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
   kind      String   @default("WEB")
+  authMethod String @default("WEB")
+  providerId String? @db.Uuid
+  providerRevision Int?
+  unionSubject String?
+  gameProfileId String? @db.Char(32)
+  gameProfileName String?
+  upstreamExpiresAt DateTime? @db.Timestamptz(6)
+  verifiedAt DateTime? @db.Timestamptz(6)
+  gameLoginAttemptId String? @unique @db.Uuid
+  provider LauncherAuthProvider? @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  gameLoginAttempt LauncherGameLoginAttempt? @relation(fields: [gameLoginAttemptId], references: [id], onDelete: Restrict)
 
   @@index([accountId])
   @@index([expiresAt])
@@ -104,6 +116,7 @@ model Organization {
   id              String               @id @default(uuid()) @db.Uuid
   displayName     String
   description     String               @default("")
+  descriptionMode String               @default("AUTO")
   avatarObjectKey String?
   avatarMode      String               @default("AUTO")
   avatarRevision  Int                  @default(0)
@@ -501,6 +514,7 @@ model UnionSkinSite {
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   identities     UnionIdentity[]
+  launcherProviders LauncherAuthProvider[]
   @@index([organizationId])
 }
 model UnionSyncState {
@@ -595,5 +609,41 @@ model LauncherLoginAttempt {
   accountId   String? @db.Uuid
   expiresAt   DateTime @db.Timestamptz(6)
   account     Account? @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  @@index([expiresAt])
+}
+
+model LauncherAuthProvider {
+  id String @id @default(uuid()) @db.Uuid
+  siteCode String @db.VarChar(6)
+  displayName String
+  bsRoot String
+  authApiRoot String
+  adapter String @default("MUA_YGGC_ONLINE_V1")
+  enabled Boolean @default(false)
+  revision Int @default(1)
+  siteRevision Int
+  verificationNote String
+  verifiedById String @db.Uuid
+  verifiedAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  site UnionSkinSite @relation(fields: [siteCode], references: [code], onDelete: Restrict)
+  verifiedBy Account @relation(fields: [verifiedById], references: [id], onDelete: Restrict)
+  attempts LauncherGameLoginAttempt[]
+  sessions Session[]
+  @@unique([siteCode, bsRoot])
+}
+
+model LauncherGameLoginAttempt {
+  id String @id @default(uuid()) @db.Uuid
+  providerId String @db.Uuid
+  providerRevision Int
+  codeChallenge String @db.Char(43)
+  nonceHash String @db.Char(64)
+  status String @default("PENDING")
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt DateTime @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  provider LauncherAuthProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  session Session?
   @@index([expiresAt])
 }

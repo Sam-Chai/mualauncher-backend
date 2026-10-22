@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { readFile, readdir, mkdir } from "node:fs/promises";
 import { assertApiResponse } from "../openapi-validation";
+import { PUBLIC_OPERATION_IDS } from "../../src/lib/openapi/document";
+import { apiInventory } from "../../src/lib/openapi/inventory";
 
 const operationCount = (document: { paths: Record<string, object> }) => Object.values(document.paths).reduce((sum, path) => sum + ["get", "post", "patch", "put", "delete"].filter(method => method in path).length, 0);
 
@@ -25,7 +27,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
   for (const locale of ["zh-CN", "en-US"]) {
     const response = await page.request.get(`/openapi.json?locale=${locale}`);
     expect(response.status()).toBe(200); expect(response.headers()["content-language"]).toBe(locale);
-    expect(Object.keys((await response.json()).paths)).toHaveLength(4);
+    expect(Object.keys((await response.json()).paths)).toHaveLength(PUBLIC_OPERATION_IDS.length);
   }
   await page.goto("/admin/api");
   await expect(page).toHaveURL(/\/login$/);
@@ -34,7 +36,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
   const sessionCookie = (await page.context().cookies(baseURL!)).find(value => value.name === "mua_session");
   try {
     const internal = await page.request.get("/api/admin/openapi?locale=en-US"); expect(internal.status()).toBe(200);
-    expect(internal.headers()["cache-control"]).toBe("private, no-store"); expect(operationCount(await internal.json())).toBe(64);
+    expect(internal.headers()["cache-control"]).toBe("private, no-store"); expect(operationCount(await internal.json())).toBe(apiInventory.length);
     const state = await page.request.get("/api/admin/state"); expect(state.status()).toBe(200); assertApiResponse("GET", "/api/admin/state", 200, await state.json());
     const telemetry = await page.request.get("/api/admin/storage-telemetry"); expect(telemetry.status()).toBe(200);
     expect(telemetry.headers()["cache-control"]).toBe("no-store");
@@ -46,14 +48,14 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     }
     await expect(page.getByRole("heading", { name: "API 文档", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Union Link API", exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("获取公开服务器目录", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("获取账号可访问服务器目录", { exact: true }).first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
     await page.screenshot({ path: ".local/api-documentation-light.png" });
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "下载 OpenAPI JSON", exact: true }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe("union-link.zh-CN.openapi.json");
-    expect(operationCount(JSON.parse(await readFile((await download.path())!, "utf8")))).toBe(64);
+    expect(operationCount(JSON.parse(await readFile((await download.path())!, "utf8")))).toBe(apiInventory.length);
     await page.getByRole("button", { name: "切换黑白主题", exact: true }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expect(page.locator(".dark-mode").first()).toBeVisible();
@@ -61,7 +63,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     await page.getByRole("button", { name: "切换语言", exact: true }).click();
     await page.getByRole("menuitem", { name: "English" }).click();
     await expect(page.getByRole("heading", { name: "API reference", exact: true })).toBeVisible();
-    await expect(page.getByText("List public servers", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("List servers accessible to the signed-in account", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("button", { name: "Toggle light / dark theme", exact: true })).toBeVisible();
     await page.screenshot({ path: ".local/api-documentation-english.png" });
     await page.getByRole("button", { name: /^Open Search/ }).click();
@@ -86,7 +88,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     // Source changes can reopen the client. Close it before starting the explicit GET check.
     if (await page.getByRole("dialog").isVisible()) { await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeHidden(); }
     // Inspect the real UI before selecting the request control; the expected request is a read-only GET.
-    await page.getByText("List public servers", { exact: true }).first().click();
+    await page.getByText("List servers accessible to the signed-in account", { exact: true }).first().click();
     const requestButton = page.getByRole("button", { name: /Test Request/i }).first();
     await expect(requestButton).toBeVisible(); await requestButton.click();
     await page.screenshot({ path: ".local/api-documentation-request.png" });

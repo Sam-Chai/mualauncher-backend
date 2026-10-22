@@ -1,5 +1,7 @@
 # Union OAuth 与成员访问：配置、使用和验证
 
+2026-10-22：新增 [Launcher 游戏令牌换票](launcher-game-token-exchange.md)，复用 CODE:UID 和 PLAYER，保留原浏览器桥接、本地密码及 OAuth。直接换票 Token 最长 15 分钟，公开规范扩至 11 操作；真实上游及原生启动器仍待联调。
+
 ## PLAYER 与 Union 身份显示（2026-10-21 增量）
 
 Union 账号在成员列表、账号目录和添加成员搜索中显示昵称与 `Union · CODE:ID`；只有实际拥有本地凭据时才显示 `@username`。账号搜索支持昵称、本地用户名和完整 Union sub，不把昵称作为唯一用户名、不创建密码或合并账号。

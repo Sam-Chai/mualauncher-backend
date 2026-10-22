@@ -48,7 +48,7 @@ export async function claimLauncherLogin(raw: unknown) {
     const account = await db.account.findUnique({ where: { id: attempt.accountId } }); invariant(account?.status === "ACTIVE", 403, "账号已停用");
     await db.launcherLoginAttempt.delete({ where: { id } });
     const token = randomBytes(32).toString("hex"), expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
-    await db.session.create({ data: { tokenHash: tokenDigest(token), accountId: account.id, kind: "LAUNCHER", expiresAt } });
+    await db.session.create({ data: { tokenHash: tokenDigest(token), accountId: account.id, kind: "LAUNCHER", authMethod: "BROWSER_BRIDGE", expiresAt } });
     return { pending: false as const, token: `mul_${token}`, expiresAt };
   }, authPrisma);
 }

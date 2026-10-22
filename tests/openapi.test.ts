@@ -15,15 +15,17 @@ import { currentNavigation } from "../src/components/admin/navigation";
 import { GET as publicDocument } from "../src/app/openapi.json/route";
 import translations from "../src/lib/locales/openapi-en.json";
 
-test("both locale documents are valid OpenAPI 3.1 with exactly four public operations", async () => {
+test("both locale documents expose only Launcher authentication and member resources", async () => {
   for (const locale of ["zh-CN", "en-US"] as const) {
     const document = publicOpenApi(locale), result = await validate(JSON.stringify(document));
     assert(result.valid, JSON.stringify(result.errors));
     assert.equal(document.info.title, "Union Link API"); assert.equal(document.openapi, "3.1.0");
     assert(document.paths);
     assert.deepEqual(document.servers?.map(server => server.url), ["/"]);
-    const ids = Object.entries(document.paths).map(([path, item]) => {
-      assert(path.startsWith("/api/v1/servers")); assert(item?.get); assert.deepEqual(item.get.security, [{SessionCookie:[]},{LauncherToken:[]}]); return item.get.operationId;
+    const ids = Object.entries(document.paths).flatMap(([path, item]) => {
+      assert(path.startsWith("/api/v1/servers") || path.startsWith("/api/auth/launcher/") || path === "/api/member");
+      if(path.startsWith("/api/v1/servers")) assert.deepEqual(item?.get?.security, [{SessionCookie:[]},{LauncherToken:[]}]);
+      return ["get","post"].flatMap(method => item?.[method as "get"]?.operationId ? [item[method as "get"]!.operationId] : []);
     });
     assert.deepEqual(ids.sort(), [...PUBLIC_OPERATION_IDS].sort());
     assert(!JSON.stringify(document).includes("/api/admin/"));
@@ -40,9 +42,10 @@ test("both locale documents are valid OpenAPI 3.1 with exactly four public opera
 
 test("all operations are documented while only Launcher operations are public; ordinary members see the API menu", () => {
   assert.equal(new Set(apiInventory.map(item => `${item.method} ${item.path}`)).size, apiInventory.length);
-  assert.equal(apiInventory.filter(item => item.documented).length, 83);
-  const described = Object.entries(publicOpenApi().paths ?? {}).map(([path]) => `GET ${path}`).sort();
-  assert.deepEqual(described, apiInventory.filter(item => item.group === "Launcher").map(item => `${item.method} ${item.path}`).sort());
+  assert.equal(apiInventory.filter(item => item.documented).length, 88);
+  const described = Object.entries(publicOpenApi().paths ?? {}).flatMap(([path,item]) => ["get","post"].filter(method=>item?.[method as "get"]).map(method=>`${method.toUpperCase()} ${path}`)).sort();
+  assert.equal(described.length, PUBLIC_OPERATION_IDS.length);
+  assert(described.includes("POST /api/auth/launcher/yggdrasil/exchange"));
   assert(apiInventory.some(item => item.path === "/api/v1/clients/uploads/{uploadId}/submit"));
   assert(apiInventory.some(item => item.method === "DELETE" && item.path.endsWith("/motto-image")));
   assert(visiblePaths({ actor: { id: "member", displayName: "Member", isSuperAdmin: false }, organizations: [] }).has("/admin/api"));
@@ -64,7 +67,7 @@ test("full documents validate in both languages and document session/Bearer boun
       if (path.startsWith("/api/v1/clients")) assert.deepEqual(operation.security, [{ SessionCookie: [] }, { ApiToken: [] }]);
       if (path.startsWith("/api/admin")) assert.deepEqual(operation.security, [{ SessionCookie: [] }]);
     }
-    assert.equal(ids.length, 83); assert.equal(new Set(ids).size, 83);
+    assert.equal(ids.length, 88); assert.equal(new Set(ids).size, 88);
     if (locale === "en-US") assert(!/[\u3400-\u9fff]/.test(JSON.stringify(document)));
     const settings = document.paths!["/api/admin/upload-size-settings"]!;
     assert.equal(settings.get?.["x-superadmin-only"], true); assert.equal(settings.patch?.["x-superadmin-only"], true);
@@ -79,7 +82,7 @@ test("full documents validate in both languages and document session/Bearer boun
 });
 
 test("coverage reads actual catch-all branches, expands alternatives and detects missing operations", async () => {
-  assert.equal(await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]), 83);
+  assert.equal(await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]), 88);
   await assert.rejects(verifyCoverage(apiInventory.slice(1)), /coverage mismatch/);
   await assert.rejects(verifyCoverage([...apiInventory, { method: "GET", path: "/api/not-real" }]), /coverage mismatch/);
   const source = `const handler = (request, path) => { const [kind, id, action] = path;

@@ -133,7 +133,7 @@
   ],
   "updateOrganization": [
     "Edit organization details",
-    "Requires organization ORG_EDIT. Only the listed detail fields may change; the internal ID is immutable."
+    "Requires organization ORG_EDIT. Only the listed detail fields may change; the internal ID is immutable. Editing or clearing a description permanently stops automatic skin-site name synchronization. Omitting or saving an unchanged description preserves its synchronization mode."
   ],
   "createServer": [
     "Register an existing MUA server ID",

@@ -4,7 +4,7 @@
 
 ## 目录同步原理
 
-独立 Worker 从固定的 [联盟站点 API](https://skin.mualliance.ltd/api/union) 读取 `servers[].code`、`bs_root` 和 `version`。该接口没有组织名称、负责人或头像字段，因此新组织的初始别名使用 CODE；之后修改本地别名、简介不会被同步覆盖。
+独立 Worker 从固定的 [联盟站点 API](https://skin.mualliance.ltd/api/union) 读取 `servers[].code`、`bs_root` 和 `version`。该接口没有组织名称、负责人或头像字段，因此新组织的初始别名使用 CODE；本地组织别名始终由用户维护。组织简介默认从各站公开 Yggdrasil 元数据同步，人工修改后保留人工内容。
 
 - 每 60 秒同步目录，Worker 每 10 秒检查到期任务。启动即检查；数据库租约保证多 Worker 只执行一次，网络请求不占用业务事务。
 - CODE 接受实际名单中的 1–6 位大写字母／数字，首位必须为字母，例如 `NPU`、`MUA`、`TEST2`。账号仍按完整 `CODE:ID` 区分。
@@ -13,6 +13,18 @@
 - 既有 CODE 对应的 Organization UUID 永不自动改变。自动维护的站点地址可更新；管理员手动修改过的映射优先，不被上游地址覆盖。停用状态、组织归档、成员及角色均保留。
 - 名单移除只改变上游出现标记，不删除组织、停用账号或撤销既有映射；再次出现仍复用原 UUID。网络失败、无效 JSON 或空名单保留原有事实，下个周期重试。
 - 新建组织没有管理员或成员。用户经 Union OAuth 登录后才创建普通成员，仍没有管理、审核或发布角色。
+
+### 皮肤站名称与组织简介（2026-10-22）
+
+[授权页](https://skin.mualliance.ltd/api/union/oauth2/authorize) 的内联脚本先使用 CODE 创建按钮，再请求 `bs_root + /api/yggdrasil`，以 JSON 的 `meta.serverName` 替换文字；之后单独查询 `/api/union/member` 判断 OAuth 支持情况。截图中的先 CODE、后别名就是这些异步请求完成的结果。此次只读核对：MUA 返回“MUA 用户中心”、NPU 返回“NPUskin”、FDC 返回“FDCraft 用户中心”，YITUEM 两个已确认域名均返回“YIT & UEM 联合皮肤站”。站点名称不作为身份或管理权限来源。
+
+- 目录每分钟同步时，Worker 在事务外获取 `meta.serverName`，只写入组织 **简介 description**，不覆盖 `displayName`、CODE、UUID 或成员。使用与头像相同的受保护网络读取器：无凭据 HTTPS、公开地址检查、DNS 固定及逐跳重定向验证，沿用 Worker 代理设置。不会调用登录或用户信息接口。
+- 元数据只接受 JSON，响应上限 64 KiB，名称去首尾空白后为 1–200 字符，拒绝控制和不可见格式字符。以普通文本保存并由 React 转义展示。每地址最多 8 秒，每站包括别名最多 16 秒，并发 6，总元数据阶段最多 60 秒；目录租约调整为 90 秒。优先获取尚无简介的站点，任务完成后立即处理下一个；YITUEM 主站失败或单地址超时后尝试已确认的备用域名。
+- `Organization.descriptionMode` 默认为 `AUTO`。首次导入和之后名称变化都更新简介；同名不重复改写。一个组织有多个 CODE 时，固定选择当前有效来源中字母顺序最前的 CODE，该来源失败时保留旧值。
+- 有 `ORG_EDIT` 的用户仍可在组织编辑中修改简介。数据库触发器在真实修改或清空时将模式锁定为 `MANUAL`，之后目录同步和网页写入均不能恢复自动模式。只编辑组织别名或原样保存简介不停止自动同步；网页不重复提交未改动的简介，避免旧表单覆盖后台刚同步的内容。
+- 迁移 `202610220003_union_site_descriptions` 将既有非空简介、以及审计中曾人工提交简介（包括清空）的组织标记为 `MANUAL`，保守保护已有资料。新建组织直接填写非空简介也归为人工内容。当前不提供恢复自动同步操作。
+- 请求失败、无效或空名称不清空既有简介，也不妨碍创建组织；同步问题列记录 `SITE_NAME_UNAVAILABLE`。停用来源、归档组织和人工简介不抓取名称，也不接受自动写入。提交时再次检查来源地址、启用状态和人工模式，保留抓取期间发生的人工修改。
+- Worker 仍只能通过持有租约的受限 `union_apply_sites` 函数写入，未增加通用组织写权限、业务表或 HTTP 字段。OpenAPI 保持 4.0.0（完整 88／公开 11），补充既有组织 PATCH 的行为说明。
 
 ## 组织皮肤站地址
 
@@ -70,6 +82,9 @@
 本地迁移前备份：`.local/union-before-directory-20261021.dump`。真实 API 首次同步创建 51 个组织并保留重复 CODE 冲突；后续同步幂等。具体测试结果见实施进度记录。
 
 ## 本轮验证记录
+
+- 2026-10-22 简介同步：本地备份 `.local/backups/union-before-descriptions-20261022.dump` 后应用迁移 `202610220003_union_site_descriptions`，Prisma 生成和四运行角色 `db:check` 通过。已重启 Worker，ready 日志与新鲜心跳均确认。真实目录 53 条／52 个组织，已核对 MUA、NPU、FDC、YITUEM 简介来自实际元数据；不可达或无效站点保留旧值并按周期重试。真实 HTTPS 后台列表／编辑框显示 `NPUskin` 及人工修改提示，无页面运行错误，截图 `.local/union-description-list.png`、`.local/union-description-editor.png`。RLS 13 项、界面 23 项、OpenAPI 9 项通过，类型／ESLint／`openapi:check`（88／88）通过。
+- 同日继续补验：使用独立构建目录完成生产构建，并设置 `MUA_HTTP_TEST_DIST`、`MUA_UNION_BROWSER_TEST=1` 运行 Union 专项，27 项全部通过、0 项跳过。生产 HTTP 新增覆盖普通组织管理员原样保存简介后仍可同步、修改／清空简介后拒绝自动覆盖，以及玩家编辑被拒绝。生产模式浏览器覆盖成员分发、跨组织申请／审批／撤销、组织头像与未保存简介保留、超管同步设置及非超管隐藏。配置的 HTTPS 站点另执行登录页浏览器回归，3／3 通过，覆盖默认折叠、无脚本禁用、原生 POST 拒绝及 JSON 密码登录跳转，凭据未进入 URL。当前在线复查已有 44／52 个组织取得过有效名称，Worker 心跳和同步记录正常；该数量可能随上游恢复增加。生产补验使用隔离数据库 schema，没有改写真实组织简介；临时构建和自动添加的 tsconfig 路径均已清理。真实上游 OAuth 登录仍未验收。
 
 - YITUEM 合并增量：已备份到 `.local/union-before-yituem-20261021.dump` 并应用迁移 004、重启 Worker，新 ready 日志与新鲜心跳确认运行。真实目录为 53 条记录、52 个映射组织、`SYNCED` 且无冲突；YITUEM 只创建一个组织，保存两个地址并自动导入头像。浏览器实际点击两个按钮、检查资料中两个只读地址，无页面运行错误，截图 `.local/yituem-two-skin-sites.png`、`.local/yituem-skin-site-details.png`。Union 专项 21 项通过（生产构建 HTTP 条件测试 1 项未启用），RLS 13 项、OpenAPI 9 项通过；另已通过真实开发站浏览器验证、类型／Lint、数据库及 OpenAPI 检查，本增量未重跑完整套件或真实 OAuth 授权。
 - 皮肤站地址增量验证：迁移 `202610210003_organization_skin_site_read` 已应用；RLS 13 项、后台 UI 21 项、OpenAPI 9 项全部通过，TypeScript、ESLint、`db:check` 和 `openapi:check`（83／83）通过。浏览器实测 51 个同步组织已返回地址，按网址搜索 NPU、资料窗口只读地址及新标签页跳转 `skin.npucraft.com` 正常，无页面运行错误。截图：`.local/organization-skin-site-list.png`、`.local/organization-skin-site-details.png`。此增量未重跑下述完整测试套件。

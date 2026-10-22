@@ -10,23 +10,46 @@ import { fetchSiteIcon, siteReader, type SiteReader } from "./union-site-icons";
 import { prepareOrganizationAvatar, readOrganizationAvatar, storeOrganizationAvatar } from "./organization-avatar";
 import { isOrganizationAvatarKey } from "./organization-avatar-contract";
 import { parseUnionDirectory, UNION_DIRECTORY_URL, UNION_SYNC_MS, unionSyncStatusSchema, type UnionSyncStatus } from "./union-directory-contract";
+import { fetchUnionSiteName } from "./union-site-metadata";
 
 type Applied = { created: number; synced: number; issues: { code: string; issue: string }[] };
 export async function syncUnionDirectory(db: PrismaClient, read?: SiteReader) {
   const now = new Date(), lease = randomUUID();
   await db.unionSyncState.upsert({ where: { id: "union" }, create: { id: "union", nextSyncAt: now }, update: {} });
   const claimed = await db.unionSyncState.updateMany({ where: { id: "union", nextSyncAt: { lte: now }, OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] },
-    data: { leaseToken: lease, leaseUntil: new Date(now.getTime() + 45_000), attemptedAt: now } });
+    data: { leaseToken: lease, leaseUntil: new Date(now.getTime() + 90_000), attemptedAt: now } });
   if (!claimed.count) return false;
   try {
     const settings = await workerDownloadSettings(db), network = read ?? siteReader(settings);
     const response = await network(UNION_DIRECTORY_URL, 1024 * 1024, AbortSignal.timeout(15_000));
     const parsed = parseUnionDirectory(JSON.parse(response.bytes.toString("utf8")));
-    // Validate each address without fetching it. DNS pinning happens only when importing its icon.
+    // Validate each address first. The shared reader pins DNS when fetching metadata or icons.
     const sites = parsed.sites.filter(site => { try { for (const root of [site.bsRoot, ...(site.bsRootAliases ?? [])]) remoteSourceUrl(root, { ...settings, remoteSourceWhitelistEnabled: false }); return true; }
       catch { parsed.issues.push({ code: site.code, issue: "INVALID_URL" }); return false; } });
+    const existing = new Map((await db.unionSkinSite.findMany({ include: { organization: true } })).map(site => [site.code, site]));
+    const names = new Map<string, string>(), nameIssues = new Set<string>();
+    const candidates = sites.filter(site => {
+      const saved = existing.get(site.code);
+      return !saved || saved.enabled && !saved.organization.archivedAt && saved.organization.descriptionMode === "AUTO"
+        && (saved.managedBySync || saved.bsRoot === site.bsRoot);
+    }).sort((a, b) => Number(!!existing.get(a.code)?.organization.description) - Number(!!existing.get(b.code)?.organization.description) || a.code.localeCompare(b.code));
+    // Bound the whole metadata pass as well as each site (including its aliases).
+    // External requests finish before opening the database transaction.
+    const budget = AbortSignal.timeout(60_000);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(6, candidates.length) }, async () => {
+      while (next < candidates.length) {
+        const site = candidates[next++];
+        try {
+          budget.throwIfAborted();
+          names.set(site.code, await fetchUnionSiteName([site.bsRoot, ...(site.bsRootAliases ?? [])], network, AbortSignal.any([budget, AbortSignal.timeout(16_000)])));
+        } catch { nameIssues.add(site.code); }
+      }
+    }));
+    parsed.issues.push(...[...nameIssues].sort().map(code => ({ code, issue: "SITE_NAME_UNAVAILABLE" })));
+    const payload = sites.map(site => ({ ...site, ...(names.has(site.code) ? { siteName: names.get(site.code) } : {}) }));
     const applied = await db.$transaction(async tx => {
-      const rows = await tx.$queryRaw<{ value: Applied }[]>`SELECT ${securityFunction("union_apply_sites")}(${JSON.stringify(sites)}::jsonb,${lease}::uuid) AS value`;
+      const rows = await tx.$queryRaw<{ value: Applied }[]>`SELECT ${securityFunction("union_apply_sites")}(${JSON.stringify(payload)}::jsonb,${lease}::uuid) AS value`;
       const issues = [...parsed.issues, ...rows[0].value.issues];
       await tx.unionSyncState.updateMany({ where: { id: "union", leaseToken: lease }, data: { syncedAt: new Date(), nextSyncAt: new Date(now.getTime() + UNION_SYNC_MS),
         leaseToken: null, leaseUntil: null, upstreamVersion: parsed.version, receivedCount: parsed.received, syncedCount: rows[0].value.synced,

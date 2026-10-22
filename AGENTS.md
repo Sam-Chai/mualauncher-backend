@@ -10,6 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-22 Union 组织简介：授权页别名来自各站 `/api/yggdrasil` 的 `meta.serverName`，目录 Worker 每分钟将其同步到 `description`，不改本地组织别名或 CODE。`descriptionMode=AUTO/MANUAL`；已有非空或有简介编辑审计的资料保留，手动修改／清空后数据库永久锁定 MANUAL，原样保存或只改别名不停止同步。站点失败保留原值，停用／归档及抓取期间人工修改均受保护。迁移 `202610220003_union_site_descriptions`，无新增表／接口字段，OpenAPI 仍 4.0.0、完整 88／公开 11。见 [目录同步](docs/union-directory-sync.md)。
+
+- 2026-10-22 Launcher 换票后端：玩家手动选站，固定核准来源在线验游戏 Token，再按 CODE:UID 关联账号并检查 selectedProfile 归属。新增 providers/start/exchange 和超管来源 GET/PUT；只读 mul_ 最长 15 分钟且早于上游 exp 30 秒，游戏 Token 不落库/日志，不凭 UUID/名字登录。来源默认不启用，目录或来源修订/停用使直接换票会话失效；旧版/Janus 未支持时走浏览器桥接。本地密码/OAuth 保留，真实上游及 Fabric 接入未验收。迁移 202610220001/002，33 张 FORCE RLS 表，OpenAPI 4.0.0 完整 88／公开 11。见 [实施说明](docs/launcher-game-token-exchange.md)。
+
 - 2026-10-21 表单安全：共享 SchemaForm 必须明确 POST，hydration 前禁用 fieldset；登录原生 action 固定 `/api/auth/login`，正常仍走 JSON POST。禁止凭据进入查询参数；原生 URL-encoded 请求由 JSON-only API 拒绝，不作为备用认证。回归 `test:auth:browser`，见 [密码链接修复](docs/login-form-security.md)。
 
 - 2026-10-21 PLAYER／Union 身份：Union 成员默认 PLAYER（玩家），管理权限集合为空，不能用角色数组非空判断后台准入；只有实际管理权限才可进入后台。空组织角色回填／保存归一化为 PLAYER，单服授权排除此角色；不改变停用或已有特权。成员／账号／搜索显示 `Union · CODE:ID`，本地用户名继续独立。迁移 005／006，OpenAPI 3.2.0／83 操作，仍 31 张 FORCE RLS 表。见 [成员访问](docs/union-oauth-member-access.md)。

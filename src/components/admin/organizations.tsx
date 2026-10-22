@@ -15,14 +15,17 @@ import { organizationAvatarUrl } from "@/lib/organization-avatar-contract";
 import { OrganizationSkinSiteField, VisitSkinSite } from "./organization-skin-sites";
 import { AddOrganizationMember } from "./organization-member-add";
 const schema = z.object({ displayName: nameSchema, description: textSchema() });
-const fields: Field[] = [{ name: "displayName", label: "组织别名", placeholder: "NPU" }, { name: "description", label: "简介", type: "textarea" }];
+const fields: Field[] = [{ name: "displayName", label: "组织别名", placeholder: "NPU" }, { name: "description", label: "简介", type: "textarea", hint: "简介默认同步皮肤站名称；手动修改或清空后不再自动同步。" }];
 function OrganizationEditor({ org }: { org?: Organization }) {
   const { t } = useI18n();
   const { busy, run } = useAdmin();
   return <EditorDialog title={org ? t("编辑组织") : t("新建组织")} disabled={busy}
     trigger={org ? <Button variant="outline" size="sm" disabled={busy || !!org.archivedAt}><Pencil className="size-3.5" />{t("编辑")}</Button> : undefined}>
     {close => <div className="space-y-6">{org && <><OrganizationAvatarField organization={org} /><OrganizationSkinSiteField id={org.id} sites={org.skinSites} /></>}<SchemaForm schema={schema} fields={fields} defaults={{ displayName: org?.displayName ?? "", description: org?.description ?? "" }} disabled={busy}
-      onSubmit={async values => { const ok = await run(() => api(`/api/admin/organizations${org ? "/" + org.id : ""}`, org ? "PATCH" : "POST", values)); if (ok) close(); return ok; }} /></div>}
+      onSubmit={async values => {
+        const data = org && values.description === org.description ? { displayName: values.displayName } : values;
+        const ok = await run(() => api(`/api/admin/organizations${org ? "/" + org.id : ""}`, org ? "PATCH" : "POST", data)); if (ok) close(); return ok;
+      }} /></div>}
   </EditorDialog>;
 }
 export function OrganizationsPage() {

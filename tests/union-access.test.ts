@@ -20,7 +20,8 @@ import { createServer } from "node:net";
 import { GET as startUnionRoute } from "../src/app/api/auth/union/start/route";
 import { syncUnionDirectory, importUnionAvatars, unionDirectoryStatus, requestUnionSync } from "../src/lib/union-directory";
 import { parseUnionDirectory, UNION_DIRECTORY_URL, YITUEM_ROOTS } from "../src/lib/union-directory-contract";
-import { getState, searchAccounts, setGrant, setMember } from "../src/lib/management";
+import { getState, searchAccounts, setGrant, setMember, updateOrganization } from "../src/lib/management";
+import { fetchUnionSiteName } from "../src/lib/union-site-metadata";
 import { prepareOrganizationAvatar, storeOrganizationAvatar, readOrganizationAvatar, saveOrganizationAvatar } from "../src/lib/organization-avatar";
 import { iconRaster, siteIconCandidates } from "../src/lib/union-site-icons";
 import sharp from "sharp";
@@ -41,6 +42,7 @@ const web = runtime("DATABASE_URL"), auth = runtime("DATABASE_AUTH_URL"), pub = 
 let root: Actor, sourceAdmin: Actor, targetAdmin: Actor, sourceOrg: string, targetOrg: string, memberId: string, memberCookie: string, adminCookie: string;
 let created = false;
 const avatarObjects = new Set<string>();
+const oldDescriptionId = randomUUID(), oldClearedId = randomUUID(), oldUntouchedId = randomUUID();
 const req = (cookie = memberCookie) => new Request("https://link.mualliance.cn/api/member", { headers: { cookie: `mua_session=${cookie}` } });
 async function as<T>(actor: Actor, work: (db: Db) => Promise<T>) { return web.$transaction(async db => { await db.$executeRaw`SELECT pg_advisory_xact_lock(731402,1)`; await setDatabaseActor(db, actor); return work(db); }); }
 async function published(serverId: string, org = targetOrg, publish = true) {
@@ -66,7 +68,15 @@ const transport = (sub: string): typeof fetch => async (url, init) => {
 };
 before(async () => {
   await pool.query(`CREATE SCHEMA "${schema}"`); created = true;
-  for (const dir of (await readdir("prisma/migrations")).filter(x => /^\d/.test(x)).sort()) await pool.query(await readFile(`prisma/migrations/${dir}/migration.sql`, "utf8"));
+  for (const dir of (await readdir("prisma/migrations")).filter(x => /^\d/.test(x)).sort()) {
+    if (dir === "202610220003_union_site_descriptions") {
+      const author = randomUUID();
+      await pool.query('INSERT INTO "Account"(id,"displayName","updatedAt") VALUES($1,\'historical author\',now())', [author]);
+      await pool.query('INSERT INTO "Organization"(id,"displayName",description,"updatedAt") VALUES($1,\'historical prose\',\'原有简介\',now()),($2,\'historical clear\',\'\',now()),($3,\'untouched\',\'\',now())', [oldDescriptionId, oldClearedId, oldUntouchedId]);
+      await pool.query('INSERT INTO "AuditEvent"(id,"actorId",action,"targetType","targetId",details) VALUES($1,$2,\'ORGANIZATION_EDIT\',\'Organization\',$3,\'{"fields":["description"]}\')', [randomUUID(), author, oldClearedId]);
+    }
+    await pool.query(await readFile(`prisma/migrations/${dir}/migration.sql`, "utf8"));
+  }
   root = await owner.account.create({ data: { displayName: "root", isSuperAdmin: true } });
   sourceAdmin = await owner.account.create({ data: { displayName: "MUA admin" } }); targetAdmin = await owner.account.create({ data: { displayName: "NPU admin" } });
   sourceOrg = (await owner.organization.create({ data: { displayName: "MUA" } })).id;
@@ -91,6 +101,10 @@ test("new models force RLS and anonymous distribution projections are gone", asy
   await assert.rejects(web.$queryRaw`SELECT ${securityFunction("distribution_servers")}()`);
   await assert.rejects(auth.organizationAccessGrant.findMany());
   await assert.rejects(worker.organizationAccessGrant.findMany());
+});
+test("description migration preserves existing prose and historical manual clearing", async () => {
+  for (const id of [oldDescriptionId, oldClearedId]) assert.equal((await owner.organization.findUniqueOrThrow({ where: { id } })).descriptionMode, "MANUAL");
+  assert.equal((await owner.organization.findUniqueOrThrow({ where: { id: oldUntouchedId } })).descriptionMode, "AUTO");
 });
 test("automatic membership has no admin roles, credentials or superadmin privilege", async () => {
   const a = await owner.account.findUniqueOrThrow({ where: { id: memberId }, include: { credential:true, memberships:true } });
@@ -207,9 +221,10 @@ test("YITUEM accepts only its confirmed merged domains and preserves one CODE id
   assert.deepEqual(parsed.issues,[]);assert.deepEqual(parsed.sites,[{code:"YITUEM",bsRoot:YITUEM_ROOTS[0],bsRootAliases:[YITUEM_ROOTS[1]]}]);
   const unknown=parseUnionDirectory({servers:[...servers,{code:"YITUEM",bs_root:"https://unknown.example"}]});
   assert.equal(unknown.sites.length,0);assert.deepEqual(unknown.issues,[{code:"YITUEM",issue:"DUPLICATE_CODE"}]);
-  const read=async()=>({bytes:Buffer.from(JSON.stringify({servers})),contentType:"application/json"});
+  const read=async(url:string)=>({bytes:Buffer.from(JSON.stringify(url===UNION_DIRECTORY_URL?{servers}:{meta:{serverName:"YIT & UEM 联合皮肤站"}})),contentType:"application/json"});
   await as(root,db=>requestUnionSync(db,root));const first=await syncUnionDirectory(worker,read);assert(first);assert.equal(first.created,1);assert.equal(first.synced,1);assert.deepEqual(first.issues,[]);
   const site=await owner.unionSkinSite.findUniqueOrThrow({where:{code:"YITUEM"}});assert.deepEqual([site.bsRoot,...site.bsRootAliases],YITUEM_ROOTS);
+  assert.equal((await owner.organization.findUniqueOrThrow({where:{id:site.organizationId}})).description,"YIT & UEM 联合皮肤站");
   assert.equal(await owner.organizationMember.count({where:{organizationId:site.organizationId}}),0);
   assert.deepEqual((await as(root,db=>getState(db,root))).organizations.find(o=>o.id===site.organizationId)?.skinSites,YITUEM_ROOTS.map(url=>({code:"YITUEM",url})));
   await as(root,db=>requestUnionSync(db,root));const second=await syncUnionDirectory(worker,read);assert(second);assert.equal(second.created,0);
@@ -243,6 +258,18 @@ test("upstream failure preserves mappings and schedules the next minute instead 
   assert.equal(await syncUnionDirectory(worker,async()=>{throw Error("network unavailable");}),false);
   assert.equal(await owner.organization.count(),count);assert.equal(await owner.unionSkinSite.count(),mappings);
   const status=await as(root,db=>unionDirectoryStatus(db,root));assert.equal(status.status,"ERROR");assert(status.syncedAt);assert(status.nextSyncAt);
+});
+test("site names come only from bounded Yggdrasil metadata, with merged-domain fallback",async()=>{
+  const attempted:string[]=[];
+  const name=await fetchUnionSiteName([...YITUEM_ROOTS],async(url,limit)=>{
+    attempted.push(url);assert.equal(limit,64*1024);
+    if(url.startsWith(YITUEM_ROOTS[0]))throw Error("unavailable");
+    return{bytes:Buffer.from(JSON.stringify({meta:{serverName:"  YIT & UEM 联合皮肤站  "}})),contentType:"application/json; charset=utf-8"};
+  },AbortSignal.timeout(1000));
+  assert.equal(name,"YIT & UEM 联合皮肤站");assert.deepEqual(attempted,YITUEM_ROOTS.map(root=>`${root}/api/yggdrasil`));
+  for(const serverName of [null,""," ","x".repeat(201),"bad\u0000name","hidden\u202ename",{name:"wrong"}])
+    await assert.rejects(fetchUnionSiteName(["https://name.example"],async()=>({bytes:Buffer.from(JSON.stringify({meta:{serverName}})),contentType:"application/json"}),AbortSignal.timeout(1000)));
+  await assert.rejects(fetchUnionSiteName(["https://name.example"],async()=>({bytes:Buffer.from('<title>HTML is not metadata</title>'),contentType:"text/html"}),AbortSignal.timeout(1000)));
 });
 test("organization avatars retain source, enforce square crops and revisions, and protect manual preferences from automatic import",async()=>{
   const site=await owner.unionSkinSite.findUniqueOrThrow({where:{code:"AUTO"}});
@@ -278,10 +305,50 @@ test("merged YITUEM avatar import falls back to its second retained domain",asyn
   const saved=await owner.organization.findUniqueOrThrow({where:{id:site.organizationId}});assert(saved.avatarObjectKey);avatarObjects.add(saved.avatarObjectKey);
   assert.equal((await owner.unionSkinSite.findUniqueOrThrow({where:{code:"YITUEM"}})).avatarError,null);
 });
-test("production HTTP gates every resource endpoint, preserves password login and confirms Launcher sessions", {skip:!process.env.MUA_HTTP_TEST_DIST,timeout:120_000}, async()=>{
+test("description synchronization updates automatic prose but permanently preserves manual edits and clearing",async()=>{
+  const payload={servers:[{code:"NAME",bs_root:"https://name.example"}]};let siteName="皮肤站别名";
+  const read=async(url:string)=>({bytes:Buffer.from(JSON.stringify(url===UNION_DIRECTORY_URL?payload:{meta:{serverName:siteName}})),contentType:"application/json"});
+  const sync=async()=>{await as(root,db=>requestUnionSync(db,root));const result=await syncUnionDirectory(worker,read);assert(result);return result;};
+  await sync();const mapping=await owner.unionSkinSite.findUniqueOrThrow({where:{code:"NAME"}});
+  const current=()=>owner.organization.findUniqueOrThrow({where:{id:mapping.organizationId}});
+  assert.equal((await current()).displayName,"NAME");assert.equal((await current()).description,siteName);assert.equal((await current()).descriptionMode,"AUTO");
+  await as(root,db=>updateOrganization(db,root,mapping.organizationId,{description:siteName}));assert.equal((await current()).descriptionMode,"AUTO");
+  const previous=await current();await sync();assert.equal((await current()).updatedAt.getTime(),previous.updatedAt.getTime());
+  siteName="更新的皮肤站别名";await sync();assert.equal((await current()).description,siteName);
+  await as(root,db=>updateOrganization(db,root,mapping.organizationId,{displayName:"本地别名"}));
+  assert.equal((await current()).descriptionMode,"AUTO");
+  siteName="新名称";await sync();assert.equal((await current()).description,siteName);
+  await as(root,db=>updateOrganization(db,root,mapping.organizationId,{description:"人工简介"}));
+  assert.equal((await current()).descriptionMode,"MANUAL");siteName="不应覆盖";await sync();assert.equal((await current()).description,"人工简介");
+  await as(root,db=>updateOrganization(db,root,mapping.organizationId,{description:""}));await sync();assert.equal((await current()).description,"");
+  await as(root,db=>db.organization.update({where:{id:mapping.organizationId},data:{descriptionMode:"AUTO"}}));assert.equal((await current()).descriptionMode,"MANUAL");
+  await assert.rejects(as(sourceAdmin,db=>updateOrganization(db,sourceAdmin,mapping.organizationId,{description:"跨组织修改"})));
+  await assert.rejects(worker.organization.update({where:{id:mapping.organizationId},data:{description:"Worker 不能通用写"}}));
+});
+test("metadata failures, disabled mappings, archived organizations and edits during fetching retain saved descriptions",async()=>{
+  const org=await owner.organization.create({data:{displayName:"KEEP"}});
+  const payload={servers:[{code:"KEEP",bs_root:"https://keep.example"}]};let fail=false,editDuringFetch=false;
+  const read=async(url:string)=>{
+    if(url===UNION_DIRECTORY_URL)return{bytes:Buffer.from(JSON.stringify(payload)),contentType:"application/json"};
+    if(fail)throw Error("offline");
+    if(editDuringFetch){editDuringFetch=false;await as(root,db=>updateOrganization(db,root,org.id,{description:"网络请求期间人工修改"}));}
+    return{bytes:Buffer.from(JSON.stringify({meta:{serverName:"自动简介"}})),contentType:"application/json"};
+  };
+  const sync=async()=>{await as(root,db=>requestUnionSync(db,root));return syncUnionDirectory(worker,read);};
+  await sync();fail=true;const result=await sync();assert(result);assert(result.issues.some(issue=>issue.issue==="SITE_NAME_UNAVAILABLE"));
+  assert.equal((await owner.organization.findUniqueOrThrow({where:{id:org.id}})).description,"自动简介");fail=false;
+  await owner.organization.update({where:{id:org.id},data:{description:"保留"}});
+  await owner.unionSkinSite.update({where:{code:"KEEP"},data:{enabled:false}});await sync();assert.equal((await owner.organization.findUniqueOrThrow({where:{id:org.id}})).description,"保留");
+  await owner.unionSkinSite.update({where:{code:"KEEP"},data:{enabled:true}});await owner.organization.update({where:{id:org.id},data:{archivedAt:new Date()}});
+  await sync();assert.equal((await owner.organization.findUniqueOrThrow({where:{id:org.id}})).description,"保留");
+  await owner.organization.update({where:{id:org.id},data:{archivedAt:null}});editDuringFetch=true;await sync();
+  assert.equal((await owner.organization.findUniqueOrThrow({where:{id:org.id}})).description,"网络请求期间人工修改");
+});
+const httpMode=process.env.MUA_HTTP_TEST_DEV==="1"?"development":"production";
+test(`${httpMode} HTTP gates every resource endpoint, preserves password login and confirms Launcher sessions`, {skip:!process.env.MUA_HTTP_TEST_DIST,timeout:180_000}, async()=>{
   const probe=createServer();await new Promise<void>(resolve=>probe.listen(0,"127.0.0.1",resolve));const port=(probe.address() as {port:number}).port;await new Promise<void>(resolve=>probe.close(()=>resolve()));
   const origin=`http://127.0.0.1:${port}`;
-  const processServer=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-p",String(port),"-H","127.0.0.1"],{windowsHide:true,env:{...process.env,NODE_ENV:"production",APP_ORIGIN:origin,NEXT_DIST_DIR:process.env.MUA_HTTP_TEST_DIST!,UNION_OAUTH_CLIENT_ID:"",UNION_OAUTH_CLIENT_SECRET:""},stdio:["ignore","pipe","pipe"]});
+  const processServer=spawn(process.execPath,["node_modules/next/dist/bin/next",httpMode==="development"?"dev":"start","-p",String(port),"-H","127.0.0.1"],{windowsHide:true,env:{...process.env,NODE_ENV:httpMode,APP_ORIGIN:origin,NEXT_DIST_DIR:process.env.MUA_HTTP_TEST_DIST!,UNION_OAUTH_CLIENT_ID:"",UNION_OAUTH_CLIENT_SECRET:""},stdio:["ignore","pipe","pipe"]});
   let output="";processServer.stdout.on("data",chunk=>{output+=chunk.toString();});processServer.stderr.on("data",chunk=>{output+=chunk.toString();});
   const exit=new Promise<void>(resolve=>processServer.once("exit",()=>resolve()));
   try {
@@ -303,6 +370,24 @@ test("production HTTP gates every resource endpoint, preserves password login an
     assert.equal((await fetch(origin+"/api/admin/union-sync",{headers:{Cookie:`mua_session=${adminCookie}`}})).status,403);
     assert.equal((await fetch(origin+"/api/admin/union-sync",{headers:rootHeaders})).status,200);
     assert.equal((await fetch(origin+"/api/admin/union-sync",{method:"POST",headers:rootHeaders,body:"{}"})).status,200);
+    const organizationEndpoint=`/api/admin/organizations/${sourceOrg}`;
+    const adminHeaders={Cookie:`mua_session=${adminCookie}`,Origin:origin,"Content-Type":"application/json"};
+    let siteName="HTTP 皮肤站名称";
+    const syncDescription=async()=>{
+      await as(root,db=>requestUnionSync(db,root));
+      assert(await syncUnionDirectory(worker,async url=>({contentType:"application/json",bytes:Buffer.from(JSON.stringify(url===UNION_DIRECTORY_URL
+        ?{servers:[{code:"MUA",bs_root:"https://skin.mualliance.ltd"}]}:{meta:{serverName:siteName}}))})));
+    };
+    const displayedDescription=async()=>{
+      const response=await fetch(origin+"/api/admin/state",{headers:adminHeaders});assert.equal(response.status,200);
+      return(await response.json()).organizations.find((organization:{id:string})=>organization.id===sourceOrg).description;
+    };
+    const editDescription=async(description:string)=>fetch(origin+organizationEndpoint,{method:"PATCH",headers:adminHeaders,body:JSON.stringify({description})});
+    await syncDescription();assert.equal(await displayedDescription(),siteName);
+    assert.equal((await editDescription(siteName)).status,200);siteName="HTTP 更新的名称";await syncDescription();assert.equal(await displayedDescription(),siteName);
+    assert.equal((await fetch(origin+organizationEndpoint,{method:"PATCH",headers,body:JSON.stringify({description:"玩家不能编辑"})})).status,403);
+    assert.equal((await editDescription("HTTP 人工简介")).status,200);siteName="不应覆盖人工内容";await syncDescription();assert.equal(await displayedDescription(),"HTTP 人工简介");
+    assert.equal((await editDescription("")).status,200);await syncDescription();assert.equal(await displayedDescription(),"");
     const avatarEndpoint=`/api/admin/organizations/${sourceOrg}/avatar-image`;
     assert.equal((await fetch(origin+avatarEndpoint+"?variant=metadata",{headers})).status,403);
     assert.equal((await fetch(origin+`/api/admin/organizations/${targetOrg}/avatar-image?variant=metadata`,{headers:{Cookie:`mua_session=${adminCookie}`}})).status,404);
@@ -321,34 +406,68 @@ test("production HTTP gates every resource endpoint, preserves password login an
     const claim=await fetch(origin+"/api/auth/launcher/claim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:attempt.id,verifier})});assert.equal(claim.status,200);const session=await claim.json();
     const tokenHeader={Authorization:`Bearer ${session.token}`};assert.equal((await fetch(origin+"/api/member",{headers:tokenHeader})).status,200);assert.equal((await fetch(origin+"/api/v1/clients",{headers:tokenHeader})).status,401);
     assert.equal((await fetch(origin+"/api/auth/launcher/logout",{method:"POST",headers:tokenHeader})).status,200);assert.equal((await fetch(origin+"/api/member",{headers:tokenHeader})).status,401);
+    if(process.env.MUA_AUTH_BROWSER_TEST==="1"){
+      // Use only the isolated schema's synthetic credentials and the loopback test server.
+      // Never send local bootstrap credentials to a deployed site from this harness.
+      const browserTests=spawn(process.execPath,["node_modules/@playwright/test/cli.js","test","--config","playwright.auth.config.ts"],{
+        windowsHide:true,env:{...process.env,SMOKE_ORIGIN:origin,SMOKE_USERNAME:"union-local-admin",SMOKE_PASSWORD:"local-password-fixture"},stdio:["ignore","pipe","pipe"]});
+      let browserOutput="";browserTests.stdout.on("data",chunk=>{browserOutput+=chunk.toString();});browserTests.stderr.on("data",chunk=>{browserOutput+=chunk.toString();});
+      const code=await new Promise<number|null>((resolve,reject)=>{browserTests.once("error",reject);browserTests.once("exit",resolve);});
+      assert.equal(code,0,browserOutput);console.log(browserOutput);
+    }
     if(process.env.MUA_UNION_BROWSER_TEST==="1"){
       const {chromium}=await import("@playwright/test");const browser=await chromium.launch({channel:"msedge",headless:true});
-      try{const context=await browser.newContext();await context.addCookies([{name:"mua_session",value:cookie,url:origin}]);const page=await context.newPage();await page.goto(origin+"/member");await page.getByRole("heading",{name:"Union Link",exact:true}).waitFor();assert.equal(await page.getByText("MUA",{exact:true}).count()>0,true);await page.screenshot({path:".local/union-member-preview.png",fullPage:true});
+      try{const context=await browser.newContext();await context.addCookies([{name:"mua_session",value:cookie,url:origin}]);const page=await context.newPage();const browserErrors:string[]=[];
+       page.on("pageerror",error=>browserErrors.push(error.message));page.on("console",message=>{if(/hydrat|server rendered HTML/i.test(message.text()))browserErrors.push(message.text());});
+       await page.goto(origin+"/member");await page.getByRole("heading",{name:"Union Link",exact:true}).waitFor();assert.equal(await page.getByText("MUA",{exact:true}).count()>0,true);await page.screenshot({path:".local/union-member-preview.png",fullPage:true,animations:"disabled",caret:"initial"});
        await context.clearCookies();await context.addCookies([{name:"mua_session",value:adminCookie,url:origin}]);await page.goto(origin+"/admin/access");await page.getByRole("heading",{name:"跨组织访问",exact:true}).waitFor();
-       await page.getByLabel(/^成员/).selectOption({label:"HTTP member"});await page.getByLabel(/^目标组织/).selectOption({label:"NPU"});
+       assert.equal(await page.getByRole("combobox",{name:"源组织",exact:true}).getAttribute("data-slot"),"select-trigger");
+       await page.getByRole("combobox",{name:"成员",exact:true}).click();await page.getByRole("option",{name:"HTTP member",exact:true}).click();
+       await page.getByRole("combobox",{name:"目标组织",exact:true}).click();await page.getByRole("option",{name:"NPU",exact:true}).click();
        await page.getByRole("checkbox",{name:"选择服务器NPA",exact:true}).check();await page.getByLabel("申请理由",{exact:true}).fill("浏览器验证");await page.getByRole("button",{name:"提交申请",exact:true}).click();
        await page.getByRole("row").filter({hasText:"浏览器验证"}).waitFor();
        const targetCookie=randomBytes(32).toString("hex");await owner.session.create({data:{accountId:targetAdmin.id,tokenHash:tokenDigest(targetCookie),expiresAt:new Date(Date.now()+600_000)}});
        await context.clearCookies();await context.addCookies([{name:"mua_session",value:targetCookie,url:origin}]);await page.goto(origin+"/admin/access");
        await page.getByRole("row").filter({hasText:"浏览器验证"}).getByRole("button",{name:"同意",exact:true}).click();await page.getByRole("row").filter({hasText:"浏览器验证"}).getByText("已同意",{exact:true}).waitFor();
-       await context.clearCookies();await context.addCookies([{name:"mua_session",value:cookie,url:origin}]);await page.goto(origin+"/member");await page.getByRole("cell",{name:"NPA",exact:true}).first().waitFor();await page.screenshot({path:".local/union-member-preview.png",fullPage:true});
-       await context.clearCookies();await context.addCookies([{name:"mua_session",value:adminCookie,url:origin}]);await page.goto(origin+"/admin/access");await page.getByRole("heading",{name:"跨组织访问",exact:true}).waitFor();await page.screenshot({path:".local/union-access-preview.png",fullPage:true});
-       await page.getByLabel("审批说明或撤销原因",{exact:true}).fill("浏览器撤销验证");await page.getByRole("row").filter({hasText:"HTTP member"}).getByRole("button",{name:"撤销授权",exact:true}).click();
+       await context.clearCookies();await context.addCookies([{name:"mua_session",value:cookie,url:origin}]);await page.goto(origin+"/member");await page.getByRole("cell",{name:"NPA",exact:true}).first().waitFor();await page.screenshot({path:".local/union-member-preview.png",fullPage:true,animations:"disabled",caret:"initial"});
+       await context.clearCookies();await context.addCookies([{name:"mua_session",value:adminCookie,url:origin}]);await page.goto(origin+"/admin/access");await page.getByRole("heading",{name:"跨组织访问",exact:true}).waitFor();await page.screenshot({path:".local/union-access-preview.png",fullPage:true,animations:"disabled",caret:"initial"});
+       await page.getByLabel("审批说明或撤销原因",{exact:true}).fill("浏览器撤销验证");
+       const revoked=page.waitForResponse(response=>response.url().includes("/api/admin/access/grants/")&&response.url().endsWith("/revoke")&&response.request().method()==="POST");
+       await page.getByRole("row").filter({hasText:"HTTP member"}).getByRole("button",{name:"撤销授权",exact:true}).click();assert.equal((await revoked).status(),200);await page.getByText("已撤销",{exact:true}).waitFor();
        await context.clearCookies();await context.addCookies([{name:"mua_session",value:cookie,url:origin}]);await page.goto(origin+"/member");await page.getByRole("heading",{name:"Union Link",exact:true}).waitFor();assert.equal(await page.getByRole("cell",{name:"NPA",exact:true}).count(),0);
-       await context.clearCookies();await context.addCookies([{name:"mua_session",value:rootCookie,url:origin}]);await page.goto(origin+"/admin/organizations");
+       await context.clearCookies();await context.addCookies([{name:"mua_session",value:rootCookie,url:origin}]);await page.goto(origin+"/admin/access");
+       const mappingTable=page.getByRole("table",{name:"Union 皮肤站组织映射",exact:true});await mappingTable.waitFor();
+       const mappingCard=page.locator('[data-slot="card"]').filter({has:mappingTable});
+       await mappingCard.getByRole("textbox",{name:"搜索皮肤站映射…",exact:true}).fill("YITUEM");
+       const mergedRow=mappingTable.getByRole("row").filter({hasText:"YITUEM"});await mergedRow.waitFor();
+       assert((await mergedRow.textContent())?.includes(YITUEM_ROOTS[0]));assert((await mergedRow.textContent())?.includes(YITUEM_ROOTS[1]));
+       await mappingCard.getByRole("textbox",{name:"搜索皮肤站映射…",exact:true}).fill("TEST2");
+       const mappingRow=mappingTable.getByRole("row").filter({hasText:"TEST2"});await mappingRow.waitFor();
+       const disabled=page.waitForResponse(response=>response.url().endsWith("/api/admin/union-sites")&&response.request().method()==="PUT");
+       await mappingRow.getByRole("button",{name:"停用",exact:true}).click();assert.equal((await disabled).status(),200);await mappingRow.getByRole("button",{name:"启用",exact:true}).waitFor();
+       const enabled=page.waitForResponse(response=>response.url().endsWith("/api/admin/union-sites")&&response.request().method()==="PUT");
+       await mappingRow.getByRole("button",{name:"启用",exact:true}).click();assert.equal((await enabled).status(),200);await mappingRow.getByRole("button",{name:"停用",exact:true}).waitFor();
+       await mappingCard.getByRole("textbox",{name:"搜索皮肤站映射…",exact:true}).fill("");
+       await mappingTable.screenshot({path:".local/union-site-mapping-table.png",animations:"disabled",caret:"initial"});
+       await page.getByRole("combobox",{name:"源组织",exact:true}).scrollIntoViewIfNeeded();
+       await page.getByRole("combobox",{name:"源组织",exact:true}).click();await page.screenshot({path:".local/organization-access-selects.png",animations:"disabled",caret:"initial"});await page.keyboard.press("Escape");
+       await page.getByRole("button",{name:"切换黑白主题",exact:true}).click();await page.getByRole("combobox",{name:"源组织",exact:true}).click();
+       await page.screenshot({path:".local/organization-access-selects-dark.png",animations:"disabled",caret:"initial"});await page.keyboard.press("Escape");
+       await page.getByRole("button",{name:"切换黑白主题",exact:true}).click();
+       await page.goto(origin+"/admin/organizations");
        await page.getByRole("row").filter({hasText:"MUA"}).getByRole("button",{name:"编辑",exact:true}).click();await page.getByLabel("简介",{exact:true}).fill("未保存的组织简介");await page.getByRole("button",{name:"上传头像",exact:true}).click();
        await page.getByLabel("选择组织头像图片",{exact:true}).setInputFiles({name:"avatar.png",mimeType:"image/png",buffer:avatarBytes});
        await page.getByRole("application").press("ArrowRight");await page.getByRole("slider").press("Home");
-       await page.screenshot({path:".local/organization-avatar-crop-preview.png",fullPage:true,animations:"disabled"});
+       await page.screenshot({path:".local/organization-avatar-crop-preview.png",fullPage:true,animations:"disabled",caret:"initial"});
        const uploaded=page.waitForResponse(r=>r.url().includes(avatarEndpoint)&&r.request().method()==="POST");await page.getByRole("button",{name:"上传并保存",exact:true}).click();assert.equal((await uploaded).status(),200);
        await page.getByRole("heading",{name:"编辑组织头像",exact:true}).waitFor({state:"hidden"});avatarObjects.add((await owner.organization.findUniqueOrThrow({where:{id:sourceOrg}})).avatarObjectKey!);
        assert.equal(await page.getByLabel("简介",{exact:true}).inputValue(),"未保存的组织简介");
        await page.getByRole("button",{name:"重新裁剪",exact:true}).click();await page.getByRole("application").waitFor();await page.getByRole("button",{name:"重置选区",exact:true}).click();
        const recropped=page.waitForResponse(r=>r.url().includes(avatarEndpoint)&&r.request().method()==="POST");await page.getByRole("button",{name:"上传并保存",exact:true}).click();assert.equal((await recropped).status(),200);
        avatarObjects.add((await owner.organization.findUniqueOrThrow({where:{id:sourceOrg}})).avatarObjectKey!);
-       await page.goto(origin+"/admin/system/settings");await page.getByText("Union 组织目录同步",{exact:true}).waitFor();await page.getByText("上游记录／已同步",{exact:true}).waitFor();await page.screenshot({path:".local/union-directory-settings-preview.png",fullPage:true});
+       await page.goto(origin+"/admin/system/settings");await page.getByText("Union 组织目录同步",{exact:true}).waitFor();await page.getByText("上游记录／已同步",{exact:true}).waitFor();await page.screenshot({path:".local/union-directory-settings-preview.png",fullPage:true,animations:"disabled",caret:"initial"});
        await context.clearCookies();await context.addCookies([{name:"mua_session",value:adminCookie,url:origin}]);await page.goto(origin+"/admin/system/settings");await page.getByRole("heading",{name:"设置",exact:true}).waitFor();assert.equal(await page.getByText("Union 组织目录同步",{exact:true}).count(),0);
-       await context.close();
+       assert.deepEqual(browserErrors,[]);await context.close();
       }finally{await browser.close();}
     }
   }finally{processServer.kill();await exit;}
