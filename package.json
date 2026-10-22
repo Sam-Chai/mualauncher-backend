@@ -19,9 +19,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "auth:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
-    "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/rls.test.ts tests/prisma-cache.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:storage && npm run test:storage-telemetry && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui && npm run test:openapi && npm run openapi:check && npm run test:union",
+    "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/rls.test.ts tests/prisma-cache.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:storage && npm run test:storage-telemetry && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui && npm run test:api-diagnostics && npm run test:openapi && npm run openapi:check && npm run test:union",
     "test:package-format": "node --import tsx --test tests/package-format.test.ts",
-    "test:admin-ui": "node --import tsx --test tests/server-management.test.tsx tests/preferences.test.tsx tests/recipe-distribution.test.tsx",
+    "test:admin-ui": "node --import tsx --test tests/server-management.test.tsx tests/preferences.test.tsx tests/i18n.test.tsx tests/recipe-distribution.test.tsx",
     "test:server-motto": "node --conditions=react-server --import tsx --test tests/server-motto.test.ts",
     "test:server-probe": "node --conditions=react-server --import tsx --test tests/server-probe.test.ts",
     "test:muapack": "node --conditions=react-server --import tsx --test tests/muapack.test.ts",
@@ -46,7 +46,8 @@
     "client:upload": "node --import tsx scripts/upload-client.ts",
     "runtime:sync": "node --import tsx scripts/sync-minecraft-runtime.ts",
     "test:union": "node --conditions=react-server --import tsx --test tests/union-access.test.ts tests/launcher-game.test.ts",
-    "test:launcher-auth": "node --conditions=react-server --import tsx --test tests/launcher-game.test.ts"
+    "test:launcher-auth": "node --conditions=react-server --import tsx --test tests/launcher-game.test.ts",
+    "test:api-diagnostics": "node --conditions=react-server --import tsx --test tests/api-diagnostics.test.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "7.3.4",
@@ -68,6 +69,7 @@
     "jose": "^6.2.13",
     "lucide-react": "^1.53.0",
     "next": "16.4.0",
+    "next-intl": "^4.14.9",
     "next-themes": "^0.4.6",
     "oauth4webapi": "3.8.8",
     "pg": "8.23.1",
@@ -83,6 +85,7 @@
     "sonner": "^2.0.8",
     "tailwind-merge": "3.7.0",
     "tar-stream": "^3.1.7",
+    "use-intl": "4.14.9",
     "vaul": "^1.1.2",
     "yauzl": "^3.4.0",
     "yazl": "^3.3.1",
@@ -94,6 +97,7 @@
     }
   },
   "devDependencies": {
+    "@formatjs/icu-messageformat-parser": "^3.5.22",
     "@playwright/test": "1.64.0",
     "@scalar/openapi-parser": "0.29.13",
     "@tailwindcss/postcss": "4.3.3",

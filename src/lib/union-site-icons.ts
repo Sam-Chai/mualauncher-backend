@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import sharp from "sharp";
 import type { DownloadSettings } from "./download-settings";
@@ -11,7 +12,7 @@ export function siteReader(settings: DownloadSettings): SiteReader {
     const response = await remoteResponse(url, network, signal, value => remoteSourceUrl(value, network), 6000);
     const chunks: Buffer[] = []; let size = 0;
     try {
-      for await (const chunk of response) { size += chunk.length; invariant(size <= limit, 422, "站点响应超过大小限制"); chunks.push(Buffer.from(chunk)); }
+      for await (const chunk of response) { size += chunk.length; invariant(size <= limit, 422, diagnosticText("diagnostics.unionSiteIcons.theSiteResponseExceedsTheSizeLimit")); chunks.push(Buffer.from(chunk)); }
       return { bytes: Buffer.concat(chunks), contentType: String(response.headers["content-type"] ?? "") };
     } finally { response.destroy(); }
   };
@@ -29,7 +30,7 @@ export function siteIconCandidates(html: string, root: string) {
 // ICO is a container, not an image format accepted from manual uploads. Decode one bounded raster entry only.
 export async function iconRaster(bytes: Buffer) {
   if (bytes.length < 6 || bytes.readUInt32LE(0) !== 0x10000) return bytes;
-  const count = bytes.readUInt16LE(4); invariant(count > 0 && count <= 256 && bytes.length >= 6 + count * 16, 422, "无效的站点图标");
+  const count = bytes.readUInt16LE(4); invariant(count > 0 && count <= 256 && bytes.length >= 6 + count * 16, 422, diagnosticText("diagnostics.unionSiteIcons.invalidSiteIcon"));
   const entries = Array.from({ length: count }, (_, i) => { const at = 6 + i * 16; return { width: bytes[at] || 256, height: bytes[at + 1] || 256, size: bytes.readUInt32LE(at + 8), offset: bytes.readUInt32LE(at + 12) }; }).sort((a, b) => b.width * b.height - a.width * a.height);
   for (const e of entries) {
     if (e.offset < 6 + count * 16 || e.size > 8 * 1024 * 1024 || e.offset + e.size > bytes.length) continue;

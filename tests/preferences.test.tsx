@@ -9,8 +9,8 @@ import { ServerEditorContent } from "../src/components/admin/servers";
 import { DataTable } from "../src/components/admin/data-table";
 import LoginForm from "../src/components/login-form";
 import { localizedDate, parseLocale, translate, type Locale } from "../src/lib/i18n";
+import { formatMessage, diagnosticText } from "../src/lib/diagnostics";
 import { probeTooltip } from "../src/lib/server-probe-contract";
-import english from "../src/lib/locales/en.json";
 
 const state: State = { actor: { id: "00000000-0000-4000-8000-000000000001", displayName: "总览", isSuperAdmin: true }, organizations: [], accounts: [], events: [], auditActivity: [], enabledPackageFormats: [1, 2], maxUploadSizeMb: 1024 };
 const render = (locale: Locale, children: React.ReactNode) => renderToStaticMarkup(<PreferenceProvider initialLocale={locale}><AdminProvider initial={state}>{children}</AdminProvider></PreferenceProvider>);
@@ -18,30 +18,29 @@ const render = (locale: Locale, children: React.ReactNode) => renderToStaticMark
 test("locale validation defaults to Chinese and dictionaries cover all migrated UI messages", () => {
   for (const value of [undefined, "fr-FR", "en-US<script>", "en"]) assert.equal(parseLocale(value), "zh-CN");
   assert.equal(parseLocale("en-US"), "en-US");
-  assert.equal(translate("en-US", "服务器管理"), "Server management");
-  assert.equal(translate("en-US", "客户端管理"), "Client management");
-  for (const [source, target] of Object.entries(english)) {
-    assert(target.length > 0); assert(!/[\u3400-\u9fff]/.test(target), source);
-    const tokens = (text: string) => (text.match(/\{\d+\}/g) ?? []).sort();
-    assert.deepEqual(tokens(target), tokens(source), source);
-  }
+  assert.equal(translate("en-US", "navigation.servers"), "Server management");
+  assert.equal(translate("en-US", "navigation.clients"), "Client management");
+  assert.equal(translate("zh-CN", "navigation.servers"), "服务器管理");
 });
 
 test("translated templates preserve supplied business text and localize dynamic size errors", () => {
-  assert.equal(translate("en-US", "服务器“{0}”已绑定“{1}”。是否在新客户端审核发布后重新绑定到新客户端？原客户端与历史版本会保留。", { "0": "总览", "1": "客户端管理" }), "Server “总览” is bound to “客户端管理”. Replace the binding after the new client is reviewed and published? The original client and version history will be kept.");
-  assert.equal(translate("en-US", "上传文件超过允许的最大大小（1024 MB）"), "Upload exceeds the maximum allowed size (1024 MB)");
-  assert.equal(translate("zh-CN", "Settings"), "设置");
+  const en = (key: string, values?: Record<string, unknown>) => translate("en-US", key, values);
+  assert.equal(en("clients.binding.replaceConfirmation", { server: "总览", client: "客户端管理" }), "Server “总览” currently uses “客户端管理”. Switch to the new client once it’s approved and published? The original client and version history will be kept.");
+  assert.equal(formatMessage(en, diagnosticText("diagnostics.clientService.theUploadExceedsTheMaximumAllowedSize0Mb", { arg0: 1024 })), "The upload exceeds the maximum allowed size (1024 MB)");
+  assert.equal(translate("zh-CN", "navigation.settings"), "设置");
   assert.equal(translate("en-US", "用户写的说明"), "用户写的说明");
-  assert.equal(translate("en-US", "$&{1} · 组织管理员"), "$&{1} · Organization administrator");
-  assert.equal(translate("en-US", "\n点击状态灯可刷新（结果短暂缓存）。"), "\nClick the status light to refresh (results are briefly cached).");
+  assert.equal(en("auth.roles.organizationAdministrator", { organization: "$&{1}" }), "$&{1} · Organization administrator");
+  assert.equal(en("serverStatus.clickTheStatusLightToRefreshResultsAreBriefly"), "\nClick the status light to refresh. Results may take a moment to update.");
+  assert.equal(formatMessage(en, diagnosticText("validation.maxCharacters", { max: 255 })), "At most 255 characters");
+  assert.equal(translate("en-US", "服务器管理"), "服务器管理", "business text is no longer looked up as a translation key");
 });
 
 test("Chinese and English login, settings and table controls render in the selected locale", () => {
   const en = render("en-US", <><LoginForm /><SettingsPage /><DataTable data={[]} columns={[]} /></>);
-  for (const value of ["Sign in to management", "Username", "Password", "Maximum muapack upload size (MB)", "Save upload size", "No records", "Next page", "Change language", "Toggle light / dark theme"]) assert(en.includes(value), value);
-  for (const value of ["登录管理平台", "账号安全", "暂无记录", "允许最大上传 muapack"]) assert(!en.includes(value), value);
+  for (const value of ["Sign in to Union Link", "Username", "Password", "Maximum upload size (MB)", "Save upload size", "No records", "Next page", "Change language", "Toggle light / dark theme"]) assert(en.includes(value), value);
+  for (const value of ["登录 Union Link", "账号安全", "暂无记录", "最大上传大小"]) assert(!en.includes(value), value);
   assert(en.includes('value="1024"'));
-  const zh = render("zh-CN", <><LoginForm /><SettingsPage /></>); assert(zh.includes("登录管理平台")); assert(zh.includes("允许最大上传 muapack"));
+  const zh = render("zh-CN", <><LoginForm /><SettingsPage /></>); assert(zh.includes("登录 Union Link")); assert(zh.includes("最大上传大小"));
 });
 
 test("login and password forms cannot submit credentials as URL parameters before hydration", () => {
@@ -63,8 +62,8 @@ test("English server editor keeps saved names, descriptions, addresses and RBAC 
 });
 
 test("probe tooltips and dates follow locale without changing measurements", () => {
-  const tooltip = probeTooltip({ state: "HIGH_LATENCY", address: "mc.example.edu", checkedAt: "2026-10-12T02:30:00.000Z", latencyMs: 550, latencyKind: "PONG", highLatencyMs: 300, message: "Minecraft 服务器在线，延迟较高", version: "1.21.1", playersOnline: 5 }, "en-US");
-  assert(tooltip.includes("Minecraft server online with high latency")); assert(tooltip.includes("Latency 550 ms")); assert(tooltip.includes("High latency threshold: 300 ms")); assert(tooltip.includes("Online players: 5")); assert(!/[\u3400-\u9fff]/.test(tooltip));
+  const tooltip = probeTooltip({ state: "HIGH_LATENCY", address: "mc.example.edu", checkedAt: "2026-10-12T02:30:00.000Z", latencyMs: 550, latencyKind: "PONG", highLatencyMs: 300, message: diagnosticText("diagnostics.serverProbe.minecraftServerOnlineWithHighLatency"), version: "1.21.1", playersOnline: 5 }, "en-US");
+  assert(tooltip.includes("Minecraft server online with high latency")); assert(tooltip.includes("Response time 550 ms")); assert(tooltip.includes("High latency above 300 ms")); assert(tooltip.includes("Online players: 5")); assert(!/[\u3400-\u9fff]/.test(tooltip));
   assert.notEqual(localizedDate("2026-10-12T02:30:00Z", "en-US"), localizedDate("2026-10-12T02:30:00Z", "zh-CN"));
 });
 

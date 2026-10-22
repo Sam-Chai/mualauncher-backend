@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
@@ -15,9 +16,9 @@ export type Db = Prisma.TransactionClient;
 export type Actor = { id: string; displayName: string; isSuperAdmin: boolean; username?: string; unionSubject?: string | null; canManage?: boolean; sessionKind?: string; apiScope?: { tokenId?: string; permissions: Permission[]; serverIds: string[] } };
 
 export async function actorFromToken(db: Db, token: string | undefined): Promise<Actor> {
-  invariant(token && /^[0-9a-f]{64}$/.test(token), 401, "请先登录");
+  invariant(token && /^[0-9a-f]{64}$/.test(token), 401, diagnosticText("diagnostics.auth.signInFirst"));
   const rows = await db.$queryRaw<{ actor: Actor | null }[]>`SELECT ${securityFunction("session_actor")}(${tokenDigest(token)}) AS actor`;
-  invariant(rows[0]?.actor, 401, "会话已失效，请重新登录");
+  invariant(rows[0]?.actor, 401, diagnosticText("diagnostics.auth.sessionExpiredSignInAgain"));
   return rows[0].actor;
 }
 export async function currentActor() {
@@ -36,7 +37,7 @@ export async function locked<T>(work: (db: Db) => Promise<T>, client = prisma): 
 }
 export async function authorized<T>(token: string | undefined, write: boolean, work: (db: Db, actor: Actor) => Promise<T>) {
   await validateDatabase("web");
-  const run = async (db: Db) => { const actor = await actorFromToken(db, token); invariant(actor.sessionKind !== "LAUNCHER" && actor.canManage !== false, 403, "此账号没有后台管理权限"); await setDatabaseActor(db, actor); return work(db, actor); };
+  const run = async (db: Db) => { const actor = await actorFromToken(db, token); invariant(actor.sessionKind !== "LAUNCHER" && actor.canManage !== false, 403, diagnosticText("diagnostics.apiAuth.thisAccountHasNoAdministrationPermissions")); await setDatabaseActor(db, actor); return work(db, actor); };
   return write ? locked(run) : prisma.$transaction(run);
 }
 
@@ -47,7 +48,7 @@ export async function login(name: string, password: string, oldToken?: string, c
     for (const [key, limit, seconds] of [["global", 60, 300], [`user:${name}`, 10, 900]] as const) {
       const digest = tokenDigest(`login:${key}`);
       const prior = await db.loginThrottle.findUnique({ where: { key: digest } });
-      invariant(!prior || prior.resetAt <= now || prior.attempts < limit, 429, "登录尝试过多，请稍后重试");
+      invariant(!prior || prior.resetAt <= now || prior.attempts < limit, 429, diagnosticText("diagnostics.auth.tooManySignInAttemptsTryAgainLater"));
       await db.loginThrottle.upsert({ where: { key: digest }, create: { key: digest, attempts: 1, resetAt: new Date(now.getTime() + seconds * 1000) },
         update: prior && prior.resetAt > now ? { attempts: { increment: 1 } } : { attempts: 1, resetAt: new Date(now.getTime() + seconds * 1000) } });
     }
@@ -55,12 +56,12 @@ export async function login(name: string, password: string, oldToken?: string, c
   }, client);
   const credential = await client.localCredential.findUnique({ where: { username: name }, include: { account: true } });
   const valid = await verifyPassword(password, credential?.passwordHash ?? dummyHash);
-  invariant(valid && credential?.account.status === "ACTIVE", 401, "用户名或密码错误，或账号已停用");
+  invariant(valid && credential?.account.status === "ACTIVE", 401, diagnosticText("diagnostics.auth.incorrectUsernameOrPasswordOrAccountDisabled"));
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);
   await locked(async db => {
     const fresh = await db.localCredential.findUnique({ where: { accountId: credential.accountId }, include: { account: true } });
-    invariant(fresh?.account.status === "ACTIVE" && fresh.passwordHash === credential.passwordHash, 401, "账号状态已变化，请重新登录");
+    invariant(fresh?.account.status === "ACTIVE" && fresh.passwordHash === credential.passwordHash, 401, diagnosticText("diagnostics.auth.accountStatusChangedSignInAgain"));
     if (oldToken) await db.session.deleteMany({ where: { tokenHash: tokenDigest(oldToken) } });
     await db.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
     await db.session.create({ data: { tokenHash: tokenDigest(token), accountId: credential.accountId, expiresAt } });

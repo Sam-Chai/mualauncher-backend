@@ -325,7 +325,7 @@ model PackageBuild {
   revision          Int         @default(1)
   required          Boolean     @default(true)
   status            String      @default("QUEUED")
-  phase             String      @default("等待环境准备")
+  phase             String      @default("Queued")
   progress          Int         @default(0)
   attempts          Int         @default(0)
   leaseToken        String?     @db.Uuid

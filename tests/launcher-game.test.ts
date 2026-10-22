@@ -11,6 +11,7 @@ import { startGameLogin, exchangeGameLogin, listGameProviders, saveGameProvider,
 import { GameLoginError, verifyGameIdentity } from "../src/lib/launcher-game-identity";
 import { gameTransport, type GameTransport } from "../src/lib/launcher-game-network";
 import { actorFromToken, tokenDigest, type Actor, type Db } from "../src/lib/auth";
+import { AppError } from "../src/lib/errors";
 import { securityFunction, setDatabaseActor } from "../src/lib/database-security";
 import { disconnectDatabases, validateDatabase } from "../src/lib/prisma";
 import { POST as startRoute } from "../src/app/api/auth/launcher/yggdrasil/start/route";
@@ -138,7 +139,7 @@ test("credential POST contracts reject URLs, profiles with properties, cookie fa
   const response = await startRoute(new Request("https://link.mualliance.cn/api/auth/launcher/yggdrasil/start", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", cookie: "mua_session=anything" }, body: "password=secret" }));
   assert.equal(response.status, 415); assert.equal(response.headers.get("cache-control"), "private, no-store"); assert.equal(response.headers.get("set-cookie"), null);
   const invalid = await exchangeRoute(new Request("https://link.mualliance.cn/api/auth/launcher/yggdrasil/exchange", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ gameAccessToken: "private-secret" }) }));
-  assert.equal(invalid.status, 400); const error = await invalid.json(); assert.equal(error.code, "INVALID_REQUEST"); assert(!JSON.stringify(error).includes("private-secret"));
+  assert.equal(invalid.status, 400); const error = await invalid.json(); assert.equal(error.code, "diagnostics.game.INVALID_REQUEST"); assert(!JSON.stringify(error).includes("private-secret"));
   process.env.LAUNCHER_AUTH_CLIENT_IP_HEADER = "x-client-ip";
   assert.throws(() => gameClientKey(new Request("https://link.mualliance.cn/api")), /INVALID_CLIENT_ADDRESS/);
   assert.match(gameClientKey(new Request("https://link.mualliance.cn/api", { headers: { "x-client-ip": "203.0.113.2" } }))!, /^ip:[a-f0-9]{64}$/);
@@ -163,7 +164,7 @@ test("production HTTP and optional browser expose Launcher contracts without gra
   const port = (probe.address() as {port:number}).port; await new Promise<void>(resolve => probe.close(()=>resolve()));
   const base = `http://127.0.0.1:${port}`;
   const server = spawn(process.execPath,["node_modules/next/dist/bin/next","start","--hostname","127.0.0.1","--port",String(port)],{
-    env:{...process.env,APP_ORIGIN:base,NODE_ENV:"production"},windowsHide:true,stdio:["ignore","ignore","ignore"]});
+    env:{...process.env,APP_ORIGIN:base,NODE_ENV:"production",NEXT_DIST_DIR:process.env.MUA_HTTP_TEST_DIST},windowsHide:true,stdio:["ignore","ignore","ignore"]});
   try {
     let ready = false;
     for(let i=0;i<120;i++){try{if((await fetch(base+"/openapi.json")).ok){ready=true;break;}}catch{} await new Promise(resolve=>setTimeout(resolve,250));}
@@ -181,7 +182,7 @@ test("production HTTP and optional browser expose Launcher contracts without gra
     const verifier = randomBytes(32).toString("base64url");
     const start = await fetch(base+"/api/auth/launcher/yggdrasil/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({providerId:provider.id,codeChallenge:createHash("sha256").update(verifier).digest("base64url"),codeChallengeMethod:"S256"})});
     assert.equal(start.status,201); assert.equal(start.headers.get("set-cookie"),null);
-    const bad = await fetch(base+"/api/auth/launcher/yggdrasil/exchange",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameProfile:{id:profileA},sub:"MUA:999"})});assert.equal(bad.status,400);assert.equal((await bad.json()).code,"INVALID_REQUEST");
+    const bad = await fetch(base+"/api/auth/launcher/yggdrasil/exchange",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({gameProfile:{id:profileA},sub:"MUA:999"})});assert.equal(bad.status,400);assert.equal((await bad.json()).code,"diagnostics.game.INVALID_REQUEST");
     const blocked = await fetch(base+"/api/auth/launcher/yggdrasil/start",{method:"POST",headers:{Origin:"https://evil.invalid","Content-Type":"application/json"},body:"{}"});assert.equal(blocked.status,403);
     const configHeaders={Origin:base,"Content-Type":"application/json",cookie:`mua_session=${cookie}`};
     const noOrigin=await fetch(base+"/api/admin/launcher-providers",{method:"PUT",headers:{"Content-Type":"application/json",cookie:`mua_session=${cookie}`},body:JSON.stringify(cfg())});assert.equal(noOrigin.status,403);
@@ -205,7 +206,7 @@ test("provider revision/disable and local stop flags invalidate sessions and in-
   const input = await attempt();
   const stopped: GameTransport = async (u,b,s) => { const result = await transport(u,b,s); if (b) provider = await as(root, db => saveGameProvider(db, root, { ...cfg(), enabled: false })); return result; };
   await assert.rejects(exchangeGameLogin(input, stopped), /PROVIDER_DISABLED/);
-  await assert.rejects(actorFromToken(web, session.token.slice(4)), /会话已失效/);
+  await assert.rejects(actorFromToken(web, session.token.slice(4)), error => error instanceof AppError && error.status === 401 && error.diagnostic.code === "diagnostics.auth.sessionExpiredSignInAgain");
   assert.deepEqual(await listGameProviders(), []);
   provider = await as(root, db => saveGameProvider(db, root, cfg()));
   const fresh = await exchangeGameLogin(await attempt(other, "999"), transport);
@@ -213,7 +214,7 @@ test("provider revision/disable and local stop flags invalidate sessions and in-
   assert.deepEqual(await as(actor, db => db.launcherAuthProvider.findMany()), []);
   await assert.rejects(as(actor, db => saveGameProvider(db, actor, cfg())));
   await owner.organizationMember.update({ where: { organizationId_accountId: { organizationId: orgId, accountId: fresh.account.id } }, data: { status: "DISABLED" } });
-  await assert.rejects(actorFromToken(web, fresh.token.slice(4)), /会话已失效/);
+  await assert.rejects(actorFromToken(web, fresh.token.slice(4)), error => error instanceof AppError && error.status === 401 && error.diagnostic.code === "diagnostics.auth.sessionExpiredSignInAgain");
   await assert.rejects(exchangeGameLogin(await attempt(other,"999"), transport), /ACCOUNT_OR_PROVIDER_UNAVAILABLE/);
   await owner.unionSkinSite.update({ where: { code: "MUA" }, data: { revision: { increment: 1 } } });
   assert.deepEqual(await listGameProviders(), []);

@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { invariant } from "./errors";
 import { MAX_MODS, type PackFile } from "./client-contract";
@@ -23,13 +24,13 @@ function minecraftRoot(paths: readonly string[]) {
     const parts = path.split("/"); const at = parts.indexOf(".minecraft");
     return at >= 0 ? [parts.slice(0, at + 1).join("/") + "/"] : [];
   }));
-  invariant(roots.size <= 1, 422, "ZIP 中包含多个 .minecraft 目录，请只上传一个完整客户端");
+  invariant(roots.size <= 1, 422, diagnosticText("diagnostics.packInspection.theZipContainsMultipleMinecraftDirectoriesUploadOneCompleteClient"));
   if (roots.size) return [...roots][0];
   const recognizable = /^(mods|config|versions|libraries|assets|resourcepacks|shaderpacks|saves)\//;
   if (paths.some(path => recognizable.test(path))) return "";
   const first = paths[0]?.split("/")[0];
   if (first && paths.every(path => path.startsWith(first + "/")) && paths.some(path => recognizable.test(path.slice(first.length + 1)))) return first + "/";
-  invariant(false, 422, "未找到 .minecraft 客户端目录；可压缩 .minecraft 目录或其内部文件");
+  invariant(false, 422, diagnosticText("diagnostics.packInspection.noMinecraftClientDirectoryWasFoundZipTheMinecraftDirectory"));
 }
 function minecraftMods(files: readonly PackFile[], instanceId?: string | null) {
   // Paths are relative to the normalized game root and have already passed ZIP validation.
@@ -39,14 +40,14 @@ function minecraftMods(files: readonly PackFile[], instanceId?: string | null) {
   const mods = files.filter(file => isolated ? file.path.startsWith(instancePrefix + "mods/") && /\.jar$/i.test(file.path) : /^mods\/.+\.jar$/i.test(file.path))
     .map(file => isolated ? file.path : file.path.slice(5))
     .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
-  invariant(mods.length <= MAX_MODS, 422, `模组数量超过 ${MAX_MODS}，请精简客户端后重新上传`);
+  invariant(mods.length <= MAX_MODS, 422, diagnosticText("diagnostics.packInspection.theModCountExceeds0RemoveUnusedModsAndUpload", { arg0: MAX_MODS }));
   return mods;
 }
 // A format's detection, game-root normalization and mod inspection live in one adapter.
 // Unsupported formats keep detection here; Modrinth/PCL share the normalized import pipeline.
 const adapters: readonly PackAdapter[] = [
   { format: "modrinth", matches: paths => hasMarker(paths, "modrinth.index.json"), rootPrefix: paths => {
-    invariant(paths.includes("modrinth.index.json"), 422, "modrinth.index.json 必须位于包根目录"); return "";
+    invariant(paths.includes("modrinth.index.json"), 422, diagnosticText("diagnostics.packInspection.modrinthIndexJsonMustBeAtThePackRoot")); return "";
   }, mods: minecraftMods, runtime: async (_paths, reader) => inspectModrinthIndex(await reader.json("modrinth.index.json")).info },
   { format: "pcl", matches: paths => paths.some(path => /\.mrpack$/i.test(path)) && paths.includes("PCL/Setup.ini"), rootPrefix: () => "", mods: minecraftMods },
   { format: "curseforge", matches: paths => hasMarker(paths, "manifest.json") },
@@ -55,21 +56,21 @@ const adapters: readonly PackAdapter[] = [
 ];
 export function detectPackFormat(paths: readonly string[]): PackFormat {
   const marked = adapters.filter(adapter => adapter.format !== "minecraft-zip" && adapter.matches(paths));
-  invariant(marked.length <= 1, 422, "ZIP 中包含多个整合包类型标记，请上传单一整合包");
+  invariant(marked.length <= 1, 422, diagnosticText("diagnostics.packInspection.theZipContainsMultiplePackFormatMarkersUploadASingle"));
   return (marked[0] ?? adapters[adapters.length - 1]).format;
 }
 export function inspectPackLayout(paths: readonly string[]) {
   const format = detectPackFormat(paths); const adapter = adapters.find(adapter => adapter.format === format)!;
-  invariant(adapter.rootPrefix && adapter.mods, 422, "当前支持 .minecraft ZIP、Modrinth 和 PCL 封装；CurseForge 和 MultiMC 尚未接入");
+  invariant(adapter.rootPrefix && adapter.mods, 422, diagnosticText("diagnostics.packInspection.supportedFormatsAreMinecraftZipModrinthAndWrappedPclPacks"));
   return { format, rootPrefix: adapter.rootPrefix(paths) };
 }
 export function inspectPackMods(format: PackFormat, files: readonly PackFile[], instanceId?: string | null) {
   const adapter = adapters.find(adapter => adapter.format === format);
-  invariant(adapter?.mods, 422, "此整合包格式尚未接入模组识别");
+  invariant(adapter?.mods, 422, diagnosticText("diagnostics.packInspection.modDetectionIsNotImplementedForThisPackFormat"));
   return adapter.mods(files, instanceId);
 }
 export function inspectPackRuntime(format: PackFormat, paths: readonly string[], reader: MetadataReader, selectedInstanceId?: string | null) {
   const adapter = adapters.find(adapter => adapter.format === format);
-  invariant(adapter?.runtime, 422, "此整合包格式尚未接入运行环境识别");
+  invariant(adapter?.runtime, 422, diagnosticText("diagnostics.packInspection.runtimeDetectionIsNotImplementedForThisPackFormat"));
   return adapter.runtime(paths, reader, selectedInstanceId);
 }

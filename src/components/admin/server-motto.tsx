@@ -1,4 +1,8 @@
 "use client";
+import { diagnosticText } from "@/lib/diagnostics";
+import { serializeError } from "@/lib/diagnostics";
+import { formatMessage } from "@/lib/diagnostics";
+
 import { useI18n } from "@/components/preferences";
 import { useEffect, useRef, useState, type PointerEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
@@ -18,7 +22,7 @@ export async function uploadMotto(serverId: string, expectedIconObjectKey: strin
   form.append("crop", JSON.stringify(crop)); form.append("expectedIconObjectKey", JSON.stringify(expectedIconObjectKey));
   const response = await fetch(`/api/admin/servers/${serverId}/motto-image`, { method: "POST", body: form });
   const result = await response.json();
-  if (!response.ok) throw new RequestError(result.error ?? "图片上传失败", response.status);
+  if (!response.ok) throw new RequestError(result.error ?? "Image upload failed", response.status, result);
   return result;
 }
 
@@ -29,7 +33,7 @@ export function MottoPreview({ src, alt, draft, table = false, className = "w-48
     {draft ? <svg className="size-full" viewBox={`${draft.crop.left * draft.width} ${draft.crop.top * draft.height} ${draft.crop.width * draft.width} ${draft.crop.height * draft.height}`} role="img" aria-label={alt}>
       <image href={draft.previewUrl} width={draft.width} height={draft.height} />
     </svg> : src ? <Image unoptimized src={src} alt={alt} fill sizes={table ? "240px" : "384px"} className={table ? "object-cover" : "object-contain"} />
-      : <span className="flex size-full items-center justify-center text-xs text-muted-foreground">{t("未上传箴言")}</span>}
+      : <span className="flex size-full items-center justify-center text-xs text-muted-foreground">{t("serverMotto.noMottoImage")}</span>}
     </div>
   </div>;
 }
@@ -52,7 +56,7 @@ export function MottoCropGrid({ source, crop, onChange, disabled = false }: { so
   };
   const x = crop.left * source.width, y = crop.top * source.height, width = crop.width * source.width, height = crop.height * source.height;
   const stroke = Math.max(source.width, source.height) / 400;
-  return <svg viewBox={`0 0 ${source.width} ${source.height}`} className="block max-h-[50vh] w-full touch-none cursor-move rounded-md bg-neutral-900 outline-offset-4 focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="application" aria-label={t("图片裁剪网格，拖动选区或使用方向键移动")} onKeyDown={onKeyDown}
+  return <svg viewBox={`0 0 ${source.width} ${source.height}`} className="block max-h-[50vh] w-full touch-none cursor-move rounded-md bg-neutral-900 outline-offset-4 focus-visible:outline-2 focus-visible:outline-primary" tabIndex={0} role="application" aria-label={t("serverMotto.imageCropGridDragTheSelectionOrMoveIt")} onKeyDown={onKeyDown}
     onPointerDown={event => {
       if (disabled || event.button !== 0) return;
       event.currentTarget.setPointerCapture(event.pointerId); const p = point(event);
@@ -86,13 +90,13 @@ export function ServerMottoField({ server, editable, pending, onPrepare }: { ser
     setError(""); setLoading(true);
     let url: string | undefined;
     try {
-      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error(t("请选择静态 PNG、JPEG 或 WebP 图片。"));
-      if (file.size > MAX_MOTTO_UPLOAD_BYTES) throw new Error(t("图片不能超过 8 MiB。"));
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error(diagnosticText("organizationAvatar.selectAStaticPngJpegOrWebpImage"));
+      if (file.size > MAX_MOTTO_UPLOAD_BYTES) throw new Error(diagnosticText("organizationAvatar.imageMustNotExceed8Mib"));
       url = URL.createObjectURL(file);
       const image = new window.Image(); image.src = url; await image.decode();
-      if (image.naturalWidth * image.naturalHeight > MAX_MOTTO_PIXELS) throw new Error(t("图片像素总量过大，请缩小图片后重试。"));
+      if (image.naturalWidth * image.naturalHeight > MAX_MOTTO_PIXELS) throw new Error(diagnosticText("organizationAvatar.tooManyImagePixelsResizeTheImageAndRetry"));
       setSource({ url, width: image.naturalWidth, height: image.naturalHeight, file }); setCrop(mottoCrop(image.naturalWidth, image.naturalHeight)); url = undefined;
-    } catch (error) { setError(error instanceof Error ? error.message : t("无法读取图片")); }
+    } catch (error) { setError(error instanceof Error ? serializeError(error) : t("organizationAvatar.cannotReadImage")); }
     finally { if (url) URL.revokeObjectURL(url); setLoading(false); }
   }
   async function start(edit: boolean) {
@@ -104,39 +108,39 @@ export function ServerMottoField({ server, editable, pending, onPrepare }: { ser
     try {
       const metadata = await api<MottoMetadata>(`${server.mottoImageUrl}&variant=metadata`);
       const response = await fetch(`${server.mottoImageUrl}&variant=source`, { cache: "no-store" });
-      if (!response.ok) throw new Error(t("原图读取失败，请刷新后重试。"));
+      if (!response.ok) throw new Error(diagnosticText("serverMotto.couldNotReadOriginalImageRefreshAndRetry"));
       const url = URL.createObjectURL(await response.blob());
       setSource({ url, width: metadata.width, height: metadata.height }); setCrop(currentMottoCrop(metadata.crop, metadata.width, metadata.height));
-    } catch (error) { setError(error instanceof Error ? error.message : t("无法读取原图")); }
+    } catch (error) { setError(error instanceof Error ? serializeError(error) : t("organizationAvatar.cannotReadOriginalImage")); }
     finally { setLoading(false); }
   }
   const scale = source && crop ? crop.width / mottoCrop(source.width, source.height).width : 1;
-  return <section className="space-y-3" aria-label={t("服务器箴言")}>
-    <div><h3 className="text-sm font-medium">{t("服务器箴言")}</h3><p className="text-xs text-muted-foreground">{t("推荐宽高比") + " "}{SERVER_MOTTO_RATIO_LABEL}{t("，上传后可移动、缩放裁剪选区。")}</p></div>
-    <MottoPreview src={server?.mottoImageUrl ?? null} draft={pending} alt={t("{0}箴言", { "0": server?.displayName ?? t("服务器") })} className="w-full max-w-sm" />
+  return <section className="space-y-3" aria-label={t("serverMotto.serverMotto")}>
+    <div><h3 className="text-sm font-medium">{t("serverMotto.serverMotto")}</h3><p className="text-xs text-muted-foreground">{t("serverMotto.recommendedAspectRatio") + " "}{SERVER_MOTTO_RATIO_LABEL}{t("serverMotto.moveAndResizeTheCropSelectionAfterUploading")}</p></div>
+    <MottoPreview src={server?.mottoImageUrl ?? null} draft={pending} alt={t("serverMotto.imageAlt", { "server": server?.displayName ?? t("clients.server") })} className="w-full max-w-sm" />
     {editable && <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" variant="outline" disabled={busy || loading} onClick={() => void start(false)}><ImagePlus className="size-4" />{t("上传图片")}</Button>
-      {(server?.mottoImageUrl || pending) && <><Button type="button" size="sm" variant="outline" disabled={busy || loading} onClick={() => void start(true)}><Crop className="size-4" />{t("重新裁剪")}</Button>
+      <Button type="button" size="sm" variant="outline" disabled={busy || loading} onClick={() => void start(false)}><ImagePlus className="size-4" />{t("serverMotto.uploadImage")}</Button>
+      {(server?.mottoImageUrl || pending) && <><Button type="button" size="sm" variant="outline" disabled={busy || loading} onClick={() => void start(true)}><Crop className="size-4" />{t("organizationAvatar.cropAgain")}</Button>
         <Button type="button" size="sm" variant="ghost" disabled={busy || loading} onClick={async () => {
           if (pending) { onPrepare?.(null); return; }
-          if (server) await run(() => api(`/api/admin/servers/${server.serverId}/motto-image`, "DELETE", { expectedIconObjectKey: server.iconObjectKey }), t("已移除服务器箴言"));
-        }}>{t("移除图片")}</Button></>}
+          if (server) await run(() => api(`/api/admin/servers/${server.serverId}/motto-image`, "DELETE", { expectedIconObjectKey: server.iconObjectKey }), t("serverMotto.serverMottoRemoved"));
+        }}>{t("organizationAvatar.removeImage")}</Button></>}
     </div>}
-    {pending && <p className="text-xs text-muted-foreground">{t("图片已裁剪，将随服务器资料一起保存。")}</p>}
+    {pending && <p className="text-xs text-muted-foreground">{t("serverMotto.imageCroppedItWillBeSavedWithTheServer")}</p>}
     <Dialog open={open} onOpenChange={value => { if (!busy && !loading) setOpen(value); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{t("编辑服务器箴言")}</DialogTitle><DialogDescription>{t("默认裁剪比例") + " "}{SERVER_MOTTO_RATIO_LABEL}{t("。拖动网格移动选区，调整滑杆缩放；方向键可微调位置。")}</DialogDescription></DialogHeader>
-        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("选择服务器箴言图片")} disabled={busy || loading} onChange={event => { void choose(event.target.files?.[0]); event.target.value = ""; }} />
-        <Button type="button" variant="outline" disabled={busy || loading} onClick={() => input.current?.click()}>{source ? t("更换原图") : t("选择图片")}</Button>
-        {loading && <p role="status" className="text-sm text-muted-foreground">{t("正在读取图片…")}</p>}
-        {error && <Alert variant="destructive"><AlertDescription>{t(error)}</AlertDescription></Alert>}
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{t("serverMotto.editServerMotto")}</DialogTitle><DialogDescription>{t("serverMotto.defaultCropRatio") + " "}{SERVER_MOTTO_RATIO_LABEL}{t("serverMotto.dragTheGridToMoveTheSelectionUseThe")}</DialogDescription></DialogHeader>
+        <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("serverMotto.selectServerMottoImage")} disabled={busy || loading} onChange={event => { void choose(event.target.files?.[0]); event.target.value = ""; }} />
+        <Button type="button" variant="outline" disabled={busy || loading} onClick={() => input.current?.click()}>{source ? t("organizationAvatar.replaceOriginalImage") : t("organizationAvatar.selectImage")}</Button>
+        {loading && <p role="status" className="text-sm text-muted-foreground">{t("organizationAvatar.readingImage")}</p>}
+        {error && <Alert variant="destructive"><AlertDescription>{formatMessage(t, error)}</AlertDescription></Alert>}
         {source && crop && <>
           <MottoCropGrid source={source} crop={crop} onChange={setCrop} disabled={busy || loading} />
-          <label className="space-y-2 text-sm">{t("选区大小")}<input type="range" className="block w-full accent-primary" min={10} max={100} step={1} value={Math.round(scale * 100)} disabled={busy || loading} onChange={event => setCrop(mottoCrop(source.width, source.height, Number(event.target.value) / 100, { x: crop.left + crop.width / 2, y: crop.top + crop.height / 2 }))} /></label>
-          <div className="flex justify-between gap-3"><Button type="button" variant="ghost" disabled={busy || loading} onClick={() => setCrop(mottoCrop(source.width, source.height))}><RotateCcw className="size-4" />{t("重置选区")}</Button>
+          <label className="space-y-2 text-sm">{t("organizationAvatar.selectionSize")}<input type="range" className="block w-full accent-primary" min={10} max={100} step={1} value={Math.round(scale * 100)} disabled={busy || loading} onChange={event => setCrop(mottoCrop(source.width, source.height, Number(event.target.value) / 100, { x: crop.left + crop.width / 2, y: crop.top + crop.height / 2 }))} /></label>
+          <div className="flex justify-between gap-3"><Button type="button" variant="ghost" disabled={busy || loading} onClick={() => setCrop(mottoCrop(source.width, source.height))}><RotateCcw className="size-4" />{t("organizationAvatar.resetSelection")}</Button>
             <Button type="button" disabled={busy || loading} onClick={async () => {
               if (!server && source.file) { onPrepare?.({ file: source.file, crop, width: source.width, height: source.height, previewUrl: URL.createObjectURL(source.file) }); setOpen(false); return; }
-              if (server && await run(() => uploadMotto(server.serverId, expectedKey.current, source.file, crop), t("服务器箴言已保存"))) { onPrepare?.(null); setOpen(false); }
-            }}>{busy ? t("正在保存…") : server ? t("上传并保存") : t("使用选区")}</Button>
+              if (server && await run(() => uploadMotto(server.serverId, expectedKey.current, source.file, crop), t("serverMotto.serverMottoSaved"))) { onPrepare?.(null); setOpen(false); }
+            }}>{busy ? t("serverMotto.saving") : server ? t("organizationAvatar.uploadAndSave") : t("serverMotto.useSelection")}</Button>
           </div>
         </>}
       </DialogContent>

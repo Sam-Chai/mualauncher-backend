@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
@@ -26,7 +27,7 @@ export function environmentRules(rules: Rule[] | undefined, platform: MuaPlatfor
   const [system, arch] = platform.split("-"); const os = system === "macos" ? "osx" : system;
   for (const rule of rules) {
     // Version-dependent OS rules cannot be resolved from the six platform identifiers.
-    if (rule.os?.version) throw new Error("此环境包含 OS 版本规则，不能仅按系统/架构组包");
+    if (rule.os?.version) throw new Error(diagnosticText("diagnostics.environmentResolver.thisEnvironmentHasOsVersionRulesAndCannotBePackaged"));
     if (rule.os?.name && rule.os.name !== os) continue;
     if (rule.os?.arch && !(arch === "amd64" ? ["x86_64", "amd64", "x64"] : ["aarch64", "arm64"]).includes(rule.os.arch)) continue;
     if (rule.features && Object.entries(rule.features).some(([, expected]) => expected)) continue;
@@ -50,7 +51,7 @@ export type EnvironmentRequest = { minecraft: string; javaMajor: number; loader:
 export type EnvironmentResolver = (request: EnvironmentRequest, directory: string, signal: AbortSignal, progress: (phase: string) => Promise<void>) => Promise<ResolvedEnvironment>;
 async function storeFile(sha256: string, path: string, size: number) {
   const bucket = environmentsBucket(), key = casKey(sha256); const found = await storedHead(bucket, key);
-  if (found) { invariant(found.ContentLength === size && found.Metadata?.sha256 === sha256, 422, "环境缓存对象不一致"); return; }
+  if (found) { invariant(found.ContentLength === size && found.Metadata?.sha256 === sha256, 422, diagnosticText("diagnostics.environmentResolver.environmentCacheObjectDoesNotMatch")); return; }
   try { await storageClient().putObject({ Bucket: bucket, Key: key, Body: createReadStream(path), ContentLength: size,
     Metadata: { sha256 }, ChecksumSHA256: Buffer.from(sha256, "hex").toString("base64"), IfNoneMatch: "*" }); }
   catch (error) { if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 412) throw error; }
@@ -78,10 +79,10 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
   const downloader = createEnvironmentDownloader(settings);
   try {
     const bytes = await readObject(cacheKey, environmentsBucket(), 16 * 1024 ** 2); const head = await storedHead(environmentsBucket(), cacheKey);
-    invariant(head?.Metadata?.sha256 === muaDigest(bytes), 422, "环境缓存索引摘要不一致");
+    invariant(head?.Metadata?.sha256 === muaDigest(bytes), 422, diagnosticText("diagnostics.environmentResolver.environmentCacheIndexDigestDoesNotMatch"));
     const cached = resolvedSchema.parse(decodeMuaJson(bytes));
-    invariant(cached.minecraft === request.minecraft && cached.java.major === request.javaMajor && cached.java.imageType === settings.javaImageType && JSON.stringify(cached.loader) === JSON.stringify(request.loader), 422, "环境缓存身份不一致");
-    await progress("复用已校验的环境缓存"); return cached;
+    invariant(cached.minecraft === request.minecraft && cached.java.major === request.javaMajor && cached.java.imageType === settings.javaImageType && JSON.stringify(cached.loader) === JSON.stringify(request.loader), 422, diagnosticText("diagnostics.environmentResolver.environmentCacheIdentityDoesNotMatch"));
+    await progress(diagnosticText("diagnostics.environmentResolver.reusingVerifiedEnvironmentCache")); return cached;
   } catch (error) { if (!missingObject(error)) throw error; }
   const files: MuaFile[] = []; const environments: ResolvedEnvironment["environments"] = []; const classpath: string[] = [];
   const common = { format: "mua-environment-manifest", formatVersion: 1, resolverVersion: resolverVersion(request), platform: request.platform };
@@ -95,9 +96,9 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
     let stored: { sha256: string; size: number };
     try {
       const bytes = await readObject(sourceKey, environmentsBucket(), 1024), head = await storedHead(environmentsBucket(), sourceKey);
-      invariant(head?.Metadata?.sha256 === muaDigest(bytes), 422, "源文件缓存索引校验失败");
+      invariant(head?.Metadata?.sha256 === muaDigest(bytes), 422, diagnosticText("diagnostics.environmentResolver.sourceCacheIndexValidationFailed"));
       stored = z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), size: z.number().int().nonnegative().max(2 * 1024 ** 3) }).parse(decodeMuaJson(bytes));
-      invariant(expected.size === undefined || stored.size === expected.size, 422, "源文件缓存大小不一致");
+      invariant(expected.size === undefined || stored.size === expected.size, 422, diagnosticText("diagnostics.environmentResolver.sourceCacheSizeDoesNotMatch"));
       await downloadStoredFile(environmentsBucket(), casKey(stored.sha256), local, stored.sha256, stored.size, signal);
     } catch (error) {
       if (!missingObject(error)) throw error;
@@ -108,38 +109,38 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
   }
   async function storeLocal(path: string, local: string): Promise<MuaFile> {
     const { createHash } = await import("node:crypto"); const hash = createHash("sha256"); let size = 0;
-    for await (const bytes of createReadStream(local)) { signal.throwIfAborted(); size += bytes.length; invariant(size <= 2 * 1024 ** 3, 422, "加载器文件过大"); hash.update(bytes); }
+    for await (const bytes of createReadStream(local)) { signal.throwIfAborted(); size += bytes.length; invariant(size <= 2 * 1024 ** 3, 422, diagnosticText("diagnostics.environmentResolver.theLoaderFileIsTooLarge")); hash.update(bytes); }
     const sha256 = hash.digest("hex"); await storeFile(sha256, local, size);
     return { root: "instance", path: safePackPath(path), sha256, size, policy: "managed", executable: false };
   }
   const indexSchema = z.object({ versions: z.array(z.object({ id: z.string(), url: z.string().url(), sha1: z.string().regex(/^[a-f0-9]{40}$/) })) });
   const indexBytes = await downloader.bytes("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", signal, undefined,
-    { validate: bytes => { const index = indexSchema.parse(JSON.parse(bytes.toString("utf8"))); invariant(index.versions.some(value => value.id === request.minecraft), 422, "镜像版本目录尚未同步目标 Minecraft"); } });
+    { validate: bytes => { const index = indexSchema.parse(JSON.parse(bytes.toString("utf8"))); invariant(index.versions.some(value => value.id === request.minecraft), 422, diagnosticText("diagnostics.environmentResolver.theMirrorVersionCatalogHasNotSynchronizedTheRequestedMinecraft")); } });
   const index = indexSchema.parse(JSON.parse(indexBytes.toString("utf8")));
-  const version = index.versions.find(value => value.id === request.minecraft); invariant(version, 422, "官方 Minecraft 版本不存在");
+  const version = index.versions.find(value => value.id === request.minecraft); invariant(version, 422, diagnosticText("diagnostics.environmentResolver.theOfficialMinecraftVersionDoesNotExist"));
   const source = await downloader.bytes(version.url, signal, undefined, { expected: { algorithm: "sha1", hash: version.sha1 },
-    validate: bytes => { const profile = profileSchema.parse(JSON.parse(bytes.toString("utf8"))); invariant(profile.id === request.minecraft, 422, "Minecraft 元数据版本不一致"); } });
-  const game = profileSchema.parse(JSON.parse(source.toString("utf8"))); invariant(game.downloads?.client && game.assetIndex, 422, "此游戏版本缺少客户端或资源索引");
-  invariant(request.javaMajor >= (game.javaVersion?.majorVersion ?? 8), 422, "所选 Java 低于 Minecraft 官方要求");
+    validate: bytes => { const profile = profileSchema.parse(JSON.parse(bytes.toString("utf8"))); invariant(profile.id === request.minecraft, 422, diagnosticText("diagnostics.environmentResolver.minecraftMetadataVersionDoesNotMatch")); } });
+  const game = profileSchema.parse(JSON.parse(source.toString("utf8"))); invariant(game.downloads?.client && game.assetIndex, 422, diagnosticText("diagnostics.environmentResolver.thisGameVersionHasNoClientOrAssetIndex"));
+  invariant(request.javaMajor >= (game.javaVersion?.majorVersion ?? 8), 422, diagnosticText("diagnostics.environmentResolver.theSelectedJavaVersionIsBelowMinecraftSOfficialRequirement"));
   const [system, architecture] = request.platform.split("-"); const os = system === "macos" ? "mac" : system; const arch = architecture === "amd64" ? "x64" : "aarch64";
   const javaBytes = await downloader.bytes(`https://api.adoptium.net/v3/assets/latest/${request.javaMajor}/hotspot?architecture=${arch}&image_type=${settings.javaImageType}&os=${os}&vendor=eclipse`, signal);
   const javaVersions = z.array(z.object({ release_name: z.string(), binary: z.object({ architecture: z.string(), os: z.string(), image_type: z.enum(["jre", "jdk"]),
     package: z.object({ link: z.string(), checksum: z.string().regex(/^[a-f0-9]{64}$/), name: z.string(), size: z.number().int().positive() }) }) })).parse(JSON.parse(javaBytes.toString("utf8")));
   const java = javaVersions.find(value => value.binary.architecture === arch && value.binary.os === os && value.binary.image_type === settings.javaImageType);
-  invariant(java, 422, `Java ${request.javaMajor} 暂无 ${request.platform} 可用 ${settings.javaImageType.toUpperCase()}，请调整发布平台、Java 版本或由超管在设置中选择 JDK`);
+  invariant(java, 422, diagnosticText("diagnostics.environmentResolver.java0HasNo2For1ChangeThePlatform", { arg0: request.javaMajor, arg1: request.platform, arg2: settings.javaImageType.toUpperCase() }));
   const nativeCompatible = (name: string) => {
     const match = /:natives-(windows|linux|macos)(?:-([^:]+))?$/.exec(name);
     return !match || match[1] === system && (architecture === "aarch64" ? ["arm64", "aarch64"].includes(match[2]) : !match[2] || match[2] === "patch");
   };
   const nativeGroups = new Map<string, boolean>();
   for (const library of game.libraries.filter(library => environmentRules(library.rules, request.platform))) {
-    if (library.natives?.[system === "macos" ? "osx" : system] && architecture === "aarch64" && !/arm64|aarch64/.test(library.natives[system === "macos" ? "osx" : system])) throw new Error(`Minecraft ${request.minecraft} 缺少 ${request.platform} 官方原生库`);
+    if (library.natives?.[system === "macos" ? "osx" : system] && architecture === "aarch64" && !/arm64|aarch64/.test(library.natives[system === "macos" ? "osx" : system])) throw new Error(diagnosticText("diagnostics.environmentResolver.minecraft0HasNoOfficialNativeLibraryFor1", { arg0: request.minecraft, arg1: request.platform }));
     const match = /^(.*):natives-(windows|linux|macos)(?:-[^:]+)?$/.exec(library.name);
     if (match) nativeGroups.set(match[1], (nativeGroups.get(match[1]) ?? false) || nativeCompatible(library.name));
   }
-  invariant([...nativeGroups.values()].every(Boolean), 422, `Minecraft ${request.minecraft} 缺少 ${request.platform} 官方原生库，不能生成完整运行环境`);
+  invariant([...nativeGroups.values()].every(Boolean), 422, diagnosticText("diagnostics.environmentResolver.minecraft0HasNoOfficialNativeLibraryFor1A", { arg0: request.minecraft, arg1: request.platform }));
   const gameFiles: MuaFile[] = [];
-  await progress("下载 Minecraft 与平台依赖");
+  await progress(diagnosticText("diagnostics.environmentResolver.downloadingMinecraftAndPlatformDependencies"));
   const jarPath = `versions/${request.minecraft}/${request.minecraft}.jar`;
   const gameJar = await remote(jarPath, game.downloads.client.url, { algorithm: "sha1", hash: game.downloads.client.sha1, size: game.downloads.client.size });
   gameFiles.push(gameJar.file); classpath.push(jarPath);
@@ -156,40 +157,40 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
       }
       const artifact = library.downloads?.artifact;
       if (!artifact && !library.downloads?.classifiers) {
-        const match = /^([^:]+):([^:]+):([^:]+)(?::([^:]+))?$/.exec(library.name); invariant(match, 422, "加载器 Maven 坐标无效");
+        const match = /^([^:]+):([^:]+):([^:]+)(?::([^:]+))?$/.exec(library.name); invariant(match, 422, diagnosticText("diagnostics.environmentResolver.invalidLoaderMavenCoordinates"));
         const path = `${match[1].replaceAll(".", "/")}/${match[2]}/${match[3]}/${match[2]}-${match[3]}${match[4] ? `-${match[4]}` : ""}.jar`;
         const url = `${library.url ?? "https://libraries.minecraft.net/"}${path}`;
-        const sha1 = (await downloader.bytes(`${url}.sha1`, signal, 1024, { validate: bytes => invariant(/^[a-f0-9]{40}$/.test(bytes.toString("utf8").trim().split(/\s/)[0]), 422, "加载器库缺少 SHA-1") })).toString("utf8").trim().split(/\s/)[0];
+        const sha1 = (await downloader.bytes(`${url}.sha1`, signal, 1024, { validate: bytes => invariant(/^[a-f0-9]{40}$/.test(bytes.toString("utf8").trim().split(/\s/)[0]), 422, diagnosticText("diagnostics.environmentResolver.theLoaderLibraryHasNoSha1")) })).toString("utf8").trim().split(/\s/)[0];
         const downloaded = await remote(`libraries/${path}`, url, { algorithm: "sha1", hash: sha1 }); output.push(downloaded.file); classpath.push(downloaded.file.path);
       } else if (artifact) {
-        invariant(artifact.path, 422, "游戏库缺少安装路径"); const downloaded = await remote(`libraries/${artifact.path}`, artifact.url, { algorithm: "sha1", hash: artifact.sha1, size: artifact.size });
+        invariant(artifact.path, 422, diagnosticText("diagnostics.environmentResolver.theGameLibraryHasNoInstallationPath")); const downloaded = await remote(`libraries/${artifact.path}`, artifact.url, { algorithm: "sha1", hash: artifact.sha1, size: artifact.size });
         output.push(downloaded.file); classpath.push(downloaded.file.path);
         if (nativeName) await extractNatives(downloaded.local, output);
       }
       if (library.natives?.[os]) {
         hasNative = true; const classifier = library.natives[os].replace("${arch}", "64");
-        invariant(arch === "amd64" || /arm64|aarch64/.test(classifier), 422, `Minecraft ${request.minecraft} 没有 ${request.platform} 官方原生库`);
-        const native = library.downloads?.classifiers?.[classifier]; invariant(native, 422, "Minecraft 原生库不存在"); platformNative = true;
+        invariant(arch === "amd64" || /arm64|aarch64/.test(classifier), 422, diagnosticText("diagnostics.environmentResolver.minecraft0HasNoOfficialNativeLibraryFor1Detail", { arg0: request.minecraft, arg1: request.platform }));
+        const native = library.downloads?.classifiers?.[classifier]; invariant(native, 422, diagnosticText("diagnostics.environmentResolver.theMinecraftNativeLibraryDoesNotExist")); platformNative = true;
         const downloaded = await remote(`libraries/${native.path ?? `${library.name.replaceAll(":", "-")}-${classifier}.jar`}`, native.url, { algorithm: "sha1", hash: native.sha1, size: native.size });
         output.push(downloaded.file); await extractNatives(downloaded.local, output);
       }
     });
-    invariant(!hasNative || platformNative, 422, `Minecraft ${request.minecraft} 没有 ${request.platform} 官方原生库`);
+    invariant(!hasNative || platformNative, 422, diagnosticText("diagnostics.environmentResolver.minecraft0HasNoOfficialNativeLibraryFor1Detail", { arg0: request.minecraft, arg1: request.platform }));
   }
   async function extractNatives(local: string, output: MuaFile[]) {
     const folder = join(directory, randomUUID()); await mkdir(folder); const extracted = await unpackEnvironment(local, folder, "zip", false, signal);
     for (const entry of extracted) { await storeFile(entry.sha256, entry.local, entry.size); output.push({ root: "instance", path: `natives/${entry.path}`, sha256: entry.sha256, size: entry.size, policy: "managed", executable: entry.executable }); }
   }
   await libraries(game.libraries, gameFiles);
-  await progress("下载并缓存 Minecraft 资源");
+  await progress(diagnosticText("diagnostics.environmentResolver.downloadingAndCachingMinecraftAssets"));
   const assets = await remote(`assets/indexes/${game.assetIndex.id}.json`, game.assetIndex.url, { algorithm: "sha1", hash: game.assetIndex.sha1, size: game.assetIndex.size }); gameFiles.push(assets.file);
   const assetsBytes = await readObject(casKey(assets.file.sha256), environmentsBucket(), 16 * 1024 ** 2);
   const assetIndex = z.object({ objects: z.record(z.object({ hash: z.string().regex(/^[a-f0-9]{40}$/), size: z.number().int().nonnegative().max(2 * 1024 ** 3) })), virtual: z.boolean().optional(), map_to_resources: z.boolean().optional() }).parse(JSON.parse(assetsBytes.toString("utf8")));
-  invariant(Object.keys(assetIndex.objects).length <= 60000, 422, "游戏资源数量超过限制");
+  invariant(Object.keys(assetIndex.objects).length <= 60000, 422, diagnosticText("diagnostics.environmentResolver.tooManyGameAssets"));
   let done = 0; const assetsByHash = [...new Map(Object.values(assetIndex.objects).map(item => [item.hash, item])).values()];
   await mapConcurrent(assetsByHash, async asset => {
     const prefix = asset.hash.slice(0, 2); const downloaded = await remote(`assets/objects/${prefix}/${asset.hash}`, `https://resources.download.minecraft.net/${prefix}/${asset.hash}`, { algorithm: "sha1", hash: asset.hash, size: asset.size }); gameFiles.push(downloaded.file);
-    done++; if (done % 100 === 0) await progress(`下载 Minecraft 资源 ${done}/${assetsByHash.length}`);
+    done++; if (done % 100 === 0) await progress(diagnosticText("diagnostics.environmentResolver.downloadingMinecraftAssets01", { arg0: done, arg1: assetsByHash.length }));
   });
   if (assetIndex.virtual || assetIndex.map_to_resources) {
     const byHash = new Map(gameFiles.filter(file => file.path.startsWith("assets/objects/")).map(file => [file.path.split("/").at(-1), file]));
@@ -203,12 +204,12 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
   const profilePath = `versions/${request.minecraft}/${request.minecraft}.json`; const profileLocal = join(directory, randomUUID()); await writeFile(profileLocal, source);
   await storeFile(muaDigest(source), profileLocal, source.length); gameFiles.push({ root: "instance", path: profilePath, sha256: muaDigest(source), size: source.length, policy: "managed", executable: false });
   function unique(values: MuaFile[]) { const map = new Map<string, MuaFile>(); for (const file of values) {
-    const key = `${file.root}/${file.path}`; const old = map.get(key); invariant(!old || old.sha256 === file.sha256, 422, "平台环境文件冲突"); map.set(key, file); }
+    const key = `${file.root}/${file.path}`; const old = map.get(key); invariant(!old || old.sha256 === file.sha256, 422, diagnosticText("diagnostics.environmentResolver.conflictingPlatformEnvironmentFiles")); map.set(key, file); }
     return [...map.values()].sort((a, b) => a.path < b.path ? -1 : 1); }
   await document({ ...common, kind: "minecraft", minecraft: request.minecraft, sourceMetadataSha256: muaDigest(source), files: unique(gameFiles) });
   let loaderProfile: z.infer<typeof profileSchema> | null = null;
   if (request.loader) {
-    await progress(`下载 ${request.loader.type} ${request.loader.version}`);
+    await progress(diagnosticText("diagnostics.environmentResolver.downloading01", { arg0: request.loader.type, arg1: request.loader.version }));
     if (request.loader.type === "forge" || request.loader.type === "neoforge") {
       const prepared = await prepareForgeInstaller(request.loader.type, request.minecraft, request.loader.version, directory, signal, { downloader, remote, store: storeLocal });
       // Forge validates and installs its own libraries, including embedded jars
@@ -231,7 +232,7 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
     await document({ ...common, kind: "loader", minecraft: request.minecraft, loader: request.loader, sourceMetadataSha256: muaDigest(bytes), files: unique(loaderFiles) });
     }
   }
-  await progress(`下载 Java ${request.javaMajor} ${settings.javaImageType.toUpperCase()} · ${request.platform}`);
+  await progress(diagnosticText("diagnostics.environmentResolver.downloadingJava012", { arg0: request.javaMajor, arg1: settings.javaImageType.toUpperCase(), arg2: request.platform }));
   const archive = await remote("java-archive", java.binary.package.link, { algorithm: "sha256", hash: java.binary.package.checksum, size: java.binary.package.size }, "java");
   const folder = join(directory, randomUUID()); await mkdir(folder); const extracted = await unpackEnvironment(archive.local, folder, java.binary.package.name.endsWith(".zip") ? "zip" : "tar.gz", true, signal);
   const javaFiles: MuaFile[] = []; for (const entry of extracted) { await storeFile(entry.sha256, entry.local, entry.size);
@@ -251,6 +252,6 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
 export async function readEnvironmentDocuments(environment: Pick<ResolvedEnvironment, "environments">) {
   const documents = new Map<string, Buffer>();
   for (const ref of environment.environments) { const bytes = await readObject(`manifests/${ref.sha256}.json`, environmentsBucket(), 16 * 1024 ** 2);
-    invariant(muaDigest(bytes) === ref.sha256, 422, "缓存环境清单校验失败"); muaEnvironmentManifestSchema.parse(decodeMuaJson(bytes)); documents.set(ref.sha256, bytes); }
+    invariant(muaDigest(bytes) === ref.sha256, 422, diagnosticText("diagnostics.environmentResolver.cachedEnvironmentManifestValidationFailed")); muaEnvironmentManifestSchema.parse(decodeMuaJson(bytes)); documents.set(ref.sha256, bytes); }
   return documents;
 }

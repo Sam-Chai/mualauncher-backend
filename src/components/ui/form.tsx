@@ -1,4 +1,5 @@
 "use client"
+import { formatMessage } from "@/lib/diagnostics";
 
 import * as React from "react"
 import { useI18n } from "@/components/preferences"
@@ -152,7 +153,7 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
       className={cn("text-sm text-destructive", className)}
       {...props}
     >
-      {typeof body === "string" ? t(body) : body}
+      {typeof body === "string" ? formatMessage(t, body) : body}
     </p>
   )
 }

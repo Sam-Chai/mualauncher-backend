@@ -43,7 +43,7 @@ test("v2 distribution display is bilingual and keeps unknown totals distinct fro
   for (const locale of ["zh-CN", "en-US"] as const) {
     const statistics = recipeDistribution([local, remote], null);
     const html = renderToStaticMarkup(<PreferenceProvider initialLocale={locale}><RecipeDistributionDetails statistics={statistics} /></PreferenceProvider>);
-    if (locale === "en-US") { assert(html.includes("Pending Launcher resolution")); assert(html.includes("Available after packaging")); assert(!/[\u3400-\u9fff]/.test(html)); }
-    else { assert(html.includes("待 Launcher 解析")); assert(html.includes("CAS 复用率仅表示后台存储复用")); }
+    if (locale === "en-US") { assert(html.includes("Determined by the launcher")); assert(html.includes("Available after packaging")); assert(!/[\u3400-\u9fff]/.test(html)); }
+    else { assert(html.includes("由启动器确定")); assert(html.includes("文件复用率仅反映后台存储")); }
   }
 });

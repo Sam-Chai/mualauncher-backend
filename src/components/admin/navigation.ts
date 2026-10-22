@@ -1,25 +1,25 @@
 import { LayoutDashboard, Building2, Users, ShieldCheck, Server, Boxes, ClipboardCheck, Send, Undo2, Workflow, HardDrive, KeyRound, ScrollText, Settings, Braces } from "lucide-react";
 export const navigation = [
-  { title: "", items: [{ title: "总览", href: "/admin", icon: LayoutDashboard }, { title: "API", href: "/admin/api", icon: Braces }] },
-  { title: "联盟管理", items: [
-    { title: "组织", href: "/admin/organizations", icon: Building2 },
-    { title: "成员", href: "/admin/members", icon: Users },
-    { title: "跨组织访问", href: "/admin/access", icon: ShieldCheck },
-    { title: "权限", href: "/admin/permissions", icon: ShieldCheck }] },
-  { title: "服务器", items: [
-    { title: "服务器管理", href: "/admin/servers", icon: Server }] },
-  { title: "客户端", items: [
-    { title: "客户端管理", href: "/admin/clients", icon: Boxes }] },
-  { title: "发布", items: [
-    { title: "待审核", href: "/admin/releases/review", icon: ClipboardCheck },
-    { title: "已发布", href: "/admin/releases/published", icon: Send },
-    { title: "已归档", href: "/admin/releases/archived", icon: Undo2 }] },
-  { title: "系统", items: [
-    { title: "Worker", href: "/admin/system/workers", icon: Workflow },
-    { title: "Storage", href: "/admin/system/storage", icon: HardDrive },
-    { title: "Signing Keys", href: "/admin/system/signing-keys", icon: KeyRound },
-    { title: "Audit Log", href: "/admin/system/audit", icon: ScrollText },
-    { title: "Settings", href: "/admin/system/settings", icon: Settings }] },
+  { title: "", items: [{ title: "dashboard.overview", href: "/admin", icon: LayoutDashboard }, { title: "API", href: "/admin/api", icon: Braces }] },
+  { title: "navigation.allianceManagement", items: [
+    { title: "dashboard.organization", href: "/admin/organizations", icon: Building2 },
+    { title: "members.members", href: "/admin/members", icon: Users },
+    { title: "navigation.crossOrganizationAccess", href: "/admin/access", icon: ShieldCheck },
+    { title: "members.permission", href: "/admin/permissions", icon: ShieldCheck }] },
+  { title: "clients.server", items: [
+    { title: "navigation.servers", href: "/admin/servers", icon: Server }] },
+  { title: "clients.client", items: [
+    { title: "navigation.clients", href: "/admin/clients", icon: Boxes }] },
+  { title: "clients.publish", items: [
+    { title: "clients.pendingReview", href: "/admin/releases/review", icon: ClipboardCheck },
+    { title: "clients.published", href: "/admin/releases/published", icon: Send },
+    { title: "clients.archived", href: "/admin/releases/archived", icon: Undo2 }] },
+  { title: "navigation.system", items: [
+    { title: "navigation.taskProcessing", href: "/admin/system/workers", icon: Workflow },
+    { title: "navigation.storage", href: "/admin/system/storage", icon: HardDrive },
+    { title: "navigation.signingKeys", href: "/admin/system/signing-keys", icon: KeyRound },
+    { title: "navigation.auditLog", href: "/admin/system/audit", icon: ScrollText },
+    { title: "navigation.settings", href: "/admin/system/settings", icon: Settings }] },
 ];
 
 export function currentNavigation(pathname: string) {

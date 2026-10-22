@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Actor, Db } from "./auth";
@@ -115,7 +116,7 @@ export async function createServer(db: Db, actor: Actor, raw: unknown) {
   await requireOrganization(db, actor, organizationId, "ORG_EDIT");
   const id = input.serverId(input.text(data, "serverId"));
   const schedule = displayScheduleSchema.safeParse({ displayMode: "displayMode" in data ? data.displayMode : "PERMANENT", displayStartsAt: data.displayStartsAt ?? null, displayEndsAt: data.displayEndsAt ?? null });
-  invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? "展示配置无效");
+  invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? diagnosticText("diagnostics.management.invalidDisplaySettings"));
   await db.server.create({ data: { serverId: id, organizationId, displayName: input.text(data, "displayName"),
     ...schedule.data,
     description: data.description === undefined ? "" : input.text(data, "description", 5000, false),
@@ -134,17 +135,17 @@ export async function updateServer(db: Db, actor: Actor, id: string, raw: unknow
   if ("description" in data) update.description = input.text(data, "description", 5000, false);
   if ("gameAddress" in data) update.gameAddress = input.optionalText(data, "gameAddress", 255);
   if ("sortOrder" in data) {
-    invariant(Number.isSafeInteger(data.sortOrder) && Math.abs(data.sortOrder as number) <= 2147483647, 400, "排序须为有效整数");
+    invariant(Number.isSafeInteger(data.sortOrder) && Math.abs(data.sortOrder as number) <= 2147483647, 400, diagnosticText("diagnostics.management.theSortOrderMustBeAValidInteger"));
     update.sortOrder = data.sortOrder as number;
   }
   if ("themeColor" in data) {
     const color = input.optionalText(data, "themeColor", 7);
-    invariant(color === null || /^#[0-9a-f]{6}$/i.test(color), 400, "颜色须为 #RRGGBB");
+    invariant(color === null || /^#[0-9a-f]{6}$/i.test(color), 400, diagnosticText("diagnostics.management.theColorMustBeRrggbb"));
     update.themeColor = color;
   }
   if ("isListed" in data) {
     update.isListed = input.bool(data, "isListed");
-    invariant(!update.isListed || !server.client?.archivedAt, 409, "客户端已归档，不能上架");
+    invariant(!update.isListed || !server.client?.archivedAt, 409, diagnosticText("diagnostics.management.anArchivedClientCannotBeListed"));
   }
   if (["displayMode", "displayStartsAt", "displayEndsAt"].some(key => key in data)) {
     const schedule = displayScheduleSchema.safeParse({
@@ -152,7 +153,7 @@ export async function updateServer(db: Db, actor: Actor, id: string, raw: unknow
       displayStartsAt: "displayStartsAt" in data ? data.displayStartsAt : data.displayMode === "PERMANENT" ? null : server.displayStartsAt?.toISOString() ?? null,
       displayEndsAt: "displayEndsAt" in data ? data.displayEndsAt : data.displayMode === "PERMANENT" ? null : server.displayEndsAt?.toISOString() ?? null,
     });
-    invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? "展示配置无效");
+    invariant(schedule.success, 400, schedule.error?.issues[0]?.message ?? diagnosticText("diagnostics.management.invalidDisplaySettings"));
     Object.assign(update, schedule.data);
   }
   await db.server.update({ where: { serverId: id }, data: update });
@@ -199,12 +200,12 @@ export async function archiveResource(db: Db, actor: Actor, kind: "organizations
 async function checkMemberChange(db: Db, actor: Actor, organizationId: string, accountId: string, roles: ReturnType<typeof input.roles>) {
   await requireOrganization(db, actor, organizationId, "ORG_MEMBERS_MANAGE");
   const account = await db.account.findUnique({ where: { id: accountId } });
-  invariant(account, 404, "白名单账号不存在");
+  invariant(account, 404, diagnosticText("diagnostics.management.theAllowlistedAccountDoesNotExist"));
   const member = await db.organizationMember.findUnique({ where: { organizationId_accountId: { organizationId, accountId } }, include: { serverGrants: true } });
   if (!actor.isSuperAdmin) {
     invariant(!account.isSuperAdmin && !roles.some(role => reservedRoles.includes(role)) &&
       !member?.roles.some(role => reservedRoles.includes(role)) && !member?.serverGrants.some(grant => grant.roles.some(role => reservedRoles.includes(role))), 403,
-      "管理员、审核、发布或切换角色及其成员资格只能由 MUA 超管调整");
+      diagnosticText("diagnostics.management.onlyAMuaSuperAdministratorMayChangeAdministratorReviewerPublisher"));
   }
   return { account, member };
 }
@@ -213,9 +214,9 @@ export async function setMember(db: Db, actor: Actor, organizationId: string, ac
   const data = input.fields(raw, ["roles", "status"]);
   const selectedRoles = input.roles(data.roles);
   const roles = selectedRoles.length ? selectedRoles : ["PLAYER" as const];
-  invariant(data.status === "ACTIVE" || data.status === "DISABLED", 400, "成员状态无效");
+  invariant(data.status === "ACTIVE" || data.status === "DISABLED", 400, diagnosticText("diagnostics.management.invalidMembershipStatus"));
   const { account, member } = await checkMemberChange(db, actor, organizationId, accountId, roles);
-  invariant(member || account.status === "ACTIVE", 409, "不能添加已停用的账号");
+  invariant(member || account.status === "ACTIVE", 409, diagnosticText("diagnostics.management.aDisabledAccountCannotBeAdded"));
   await db.organizationMember.upsert({ where: { organizationId_accountId: { organizationId, accountId } },
     create: { organizationId, accountId, roles, status: data.status, grantedById: actor.id },
     update: { roles, status: data.status, grantedById: actor.id } });
@@ -225,12 +226,12 @@ export async function setMember(db: Db, actor: Actor, organizationId: string, ac
 
 export async function setGrant(db: Db, actor: Actor, organizationId: string, accountId: string, id: string, raw: unknown) {
   const roles = input.roles(input.fields(raw, ["roles"]).roles);
-  invariant(!roles.includes("ORG_ADMIN"), 400, "组织管理员不能按单服授权");
-  invariant(!roles.includes("PLAYER"), 400, "玩家角色仅可用于组织成员");
+  invariant(!roles.includes("ORG_ADMIN"), 400, diagnosticText("diagnostics.management.organizationAdministratorsCannotBeGrantedPerServerRoles"));
+  invariant(!roles.includes("PLAYER"), 400, diagnosticText("diagnostics.management.thePlayerRoleAppliesOnlyToOrganizationMemberships"));
   const { member } = await checkMemberChange(db, actor, organizationId, accountId, roles);
-  invariant(member, 404, "请先将该账号加入组织");
+  invariant(member, 404, diagnosticText("diagnostics.management.addThisAccountToTheOrganizationFirst"));
   const { server } = await requireServer(db, actor, id, "SERVER_READ");
-  invariant(server.organizationId === organizationId, 404, "服务器不属于此组织");
+  invariant(server.organizationId === organizationId, 404, diagnosticText("diagnostics.management.theServerDoesNotBelongToThisOrganization"));
   await db.serverGrant.upsert({ where: { accountId_serverId: { accountId, serverId: id } },
     create: { organizationId, accountId, serverId: id, roles, grantedById: actor.id }, update: { roles, grantedById: actor.id } });
   await audit(db, actor, "SERVER_GRANT_SET", "ServerGrant", accountId, organizationId, id, { roles });
@@ -239,7 +240,7 @@ export async function setGrant(db: Db, actor: Actor, organizationId: string, acc
 
 export async function searchAccounts(db: Db, actor: Actor, organizationId: string, query: string) {
   await requireOrganization(db, actor, organizationId, "ORG_MEMBERS_READ");
-  invariant(query.trim().length >= 3 && query.length <= 64, 400, "请至少输入 3 个字符搜索白名单账号");
+  invariant(query.trim().length >= 3 && query.length <= 64, 400, diagnosticText("diagnostics.management.enterAtLeast3CharactersToSearchAllowlistedAccounts"));
   const search = query.trim().toLowerCase();
   return (await accountDirectory(db)).filter(account => account.status === "ACTIVE" && (account.displayName.toLowerCase().includes(search) || account.username?.toLowerCase().includes(search) || account.unionSubject?.toLowerCase().includes(search)))
     .sort((a, b) => a.displayName.localeCompare(b.displayName)).slice(0, 10).map(account => accountDto(account, account));
@@ -259,12 +260,12 @@ export async function updateAccount(db: Db, actor: Actor, id: string, raw: unkno
   superOnly(actor);
   const data = input.fields(raw, ["displayName", "status", "isSuperAdmin", "password"]);
   const existing = await db.account.findUnique({ where: { id } });
-  invariant(existing, 404, "账号不存在");
+  invariant(existing, 404, diagnosticText("diagnostics.management.theAccountDoesNotExist"));
   const status = "status" in data ? data.status : existing.status;
-  invariant(status === "ACTIVE" || status === "DISABLED", 400, "账号状态无效");
+  invariant(status === "ACTIVE" || status === "DISABLED", 400, diagnosticText("diagnostics.management.invalidAccountStatus"));
   const isSuperAdmin = "isSuperAdmin" in data ? input.bool(data, "isSuperAdmin") : existing.isSuperAdmin;
   if (existing.isSuperAdmin && existing.status === "ACTIVE" && (!isSuperAdmin || status === "DISABLED")) {
-    invariant(await db.account.count({ where: { isSuperAdmin: true, status: "ACTIVE", id: { not: id } } }) > 0, 409, "至少保留一个启用的 MUA 超管");
+    invariant(await db.account.count({ where: { isSuperAdmin: true, status: "ACTIVE", id: { not: id } } }) > 0, 409, diagnosticText("diagnostics.management.atLeastOneActiveMuaSuperAdministratorMustRemain"));
   }
   await db.account.update({ where: { id }, data: { status, isSuperAdmin, ...(data.displayName !== undefined ? { displayName: input.text(data, "displayName") } : {}) } });
   if (data.password !== undefined) await credentialUpdate(db, id, await hashPassword(input.password(data.password)));

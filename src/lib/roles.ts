@@ -15,7 +15,7 @@ export const rolePermissions: Record<Role, readonly Permission[]> = {
 };
 export const reservedRoles: readonly Role[] = ["ORG_ADMIN", "REVIEWER", "PUBLISHER", "RELEASE_OPERATOR"];
 export const roleLabels: Record<Role, string> = {
-  PLAYER: "玩家",
-  ORG_ADMIN: "组织管理员", SERVER_ADMIN: "服务器管理员", CLIENT_EDITOR: "客户端编辑", SERVER_EDITOR: "服务器编辑",
-  REVIEWER: "审核员", PUBLISHER: "发布人员", RELEASE_OPERATOR: "版本切换人员", READ_ONLY: "只读人员",
+  PLAYER: "roles.player",
+  ORG_ADMIN: "roles.organizationAdministrator", SERVER_ADMIN: "roles.serverAdministrator", CLIENT_EDITOR: "roles.clientEditor", SERVER_EDITOR: "roles.serverEditor",
+  REVIEWER: "roles.reviewer", PUBLISHER: "roles.publisher", RELEASE_OPERATOR: "roles.releaseOperator", READ_ONLY: "roles.readOnlyMember",
 };

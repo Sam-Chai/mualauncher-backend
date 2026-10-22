@@ -8,20 +8,20 @@ export function PackageBuildOptions({ packageFormatVersion, ...props }: { packag
   value: MuaPlatform[]; onChange: (value: MuaPlatform[]) => void; disabled?: boolean }) {
   const { t } = useI18n();
   if (packageFormatVersion === null) return null;
-  if (packageFormatVersion === 2) return <p className="text-sm text-muted-foreground">{t("v2 生成一个通用配方包，各系统下载相同的文件。模组下载和运行环境由 Launcher 解析、校验与安装，无需选择组包架构。")}</p>;
+  if (packageFormatVersion === 2) return <p className="text-sm text-muted-foreground">{t("packagePlatforms.v2GeneratesOneUniversalRecipeDownloadedByAllSystems")}</p>;
   return <PackagePlatforms {...props} />;
 }
 export function PackagePlatforms({ value, onChange, disabled }: { value: MuaPlatform[]; onChange: (value: MuaPlatform[]) => void; disabled?: boolean }) {
   const { t } = useI18n();
   const hintId = useId();
-  return <fieldset disabled={disabled} className="space-y-3"><legend className="mb-2 text-sm font-medium">{t("发布平台")}</legend>
+  return <fieldset disabled={disabled} className="space-y-3"><legend className="mb-2 text-sm font-medium">{t("packagePlatforms.releasePlatforms")}</legend>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{MUA_PLATFORMS.map(platform => {
       const unavailable = platform === "linux-aarch64", checked = value.includes(platform);
       return <label key={platform} className={`flex items-center gap-2 text-sm${unavailable ? " text-muted-foreground" : ""}`}>
         <Checkbox checked={checked} disabled={disabled || (unavailable && !checked)} aria-describedby={unavailable ? hintId : undefined}
           onCheckedChange={next => { if (unavailable && next) return; onChange(next ? [...value, platform] : value.filter(item => item !== platform)); }} />{platform}
       </label>;
-    })}</div><p id={hintId} className="text-xs text-muted-foreground">{t("Minecraft 目前暂未支持 ARM 版 Linux 系统")}</p>
-    <p className="text-xs text-muted-foreground">{t("默认选择其余五个平台。Worker 在后台准备环境并生成整包／更新包，关闭页面不影响任务；所选平台全部完成后才可发布。")}</p>
+    })}</div><p id={hintId} className="text-xs text-muted-foreground">{t("packagePlatforms.minecraftDoesNotCurrentlySupportLinuxArm")}</p>
+    <p className="text-xs text-muted-foreground">{t("packagePlatforms.theOtherFivePlatformsAreSelectedByDefaultWorker")}</p>
   </fieldset>;
 }

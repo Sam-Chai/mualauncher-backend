@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { createReadStream, createWriteStream } from "node:fs";
 import { createHash } from "node:crypto";
@@ -18,15 +19,15 @@ export async function unpackEnvironment(path: string, directory: string, type: "
     const safe = safePackPath(raw);
     if (!stripRoot) return safe;
     const root = safe.split("/")[0]; archiveRoot ??= root;
-    invariant(root === archiveRoot, 422, "环境归档必须只有一个根目录");
+    invariant(root === archiveRoot, 422, diagnosticText("diagnostics.environmentArchive.anEnvironmentArchiveMustContainExactlyOneRootDirectory"));
     return safePackPath(safe.split("/").slice(1).join("/"));
   };
   async function consume(raw: string, stream: Readable, executable: boolean) {
-    signal.throwIfAborted(); const normalized = normalize(raw); invariant(!paths.has(normalized.toLowerCase()), 422, "环境压缩包路径重复"); paths.add(normalized.toLowerCase());
-    invariant(paths.size <= 20000, 422, "环境压缩包文件过多"); const local = join(directory, `entry-${entries.length}`); const hash = createHash("sha256"); let size = 0;
+    signal.throwIfAborted(); const normalized = normalize(raw); invariant(!paths.has(normalized.toLowerCase()), 422, diagnosticText("diagnostics.environmentArchive.duplicatePathInEnvironmentArchive")); paths.add(normalized.toLowerCase());
+    invariant(paths.size <= 20000, 422, diagnosticText("diagnostics.environmentArchive.tooManyFilesInEnvironmentArchive")); const local = join(directory, `entry-${entries.length}`); const hash = createHash("sha256"); let size = 0;
     await pipeline(stream, new Transform({ transform(chunk, _, callback) {
       size += chunk.length; total += chunk.length;
-      if (size > 2 * 1024 ** 3 || total > 10 * 1024 ** 3) { callback(new Error("环境解包大小超过限制")); return; }
+      if (size > 2 * 1024 ** 3 || total > 10 * 1024 ** 3) { callback(new Error(diagnosticText("diagnostics.environmentArchive.theExtractedEnvironmentExceedsTheSizeLimit"))); return; }
       hash.update(chunk); callback(null, chunk);
     } }), createWriteStream(local, { flags: "wx" }), { signal });
     entries.push({ path: normalized, local, sha256: hash.digest("hex"), size, executable });
@@ -37,9 +38,9 @@ export async function unpackEnvironment(path: string, directory: string, type: "
       const abort = () => { zip.close(); reject(signal.reason); }; signal.addEventListener("abort", abort, { once: true });
       zip.on("error", reject); zip.on("end", () => { signal.removeEventListener("abort", abort); resolve(); });
       zip.on("entry", (entry: yauzl.Entry) => { void (async () => {
-        invariant(!(entry.generalPurposeBitFlag & 1), 422, "环境 ZIP 不能加密"); const mode = entry.externalFileAttributes >>> 16;
+        invariant(!(entry.generalPurposeBitFlag & 1), 422, diagnosticText("diagnostics.environmentArchive.encryptedEnvironmentZipsAreNotAllowed")); const mode = entry.externalFileAttributes >>> 16;
         if (entry.fileName.endsWith("/")) { zip.readEntry(); return; }
-        invariant((mode & 0xf000) !== 0xa000, 422, "环境 ZIP 不支持符号链接");
+        invariant((mode & 0xf000) !== 0xa000, 422, diagnosticText("diagnostics.environmentArchive.symbolicLinksAreNotAllowedInEnvironmentZips"));
         if (!stripRoot && /^META-INF\//i.test(entry.fileName)) { zip.readEntry(); return; }
         const stream = await new Promise<Readable>((yes, no) => zip.openReadStream(entry, (error, value) => error ? no(error) : yes(value!)));
         await consume(entry.fileName, stream, !!(mode & 0o111)); zip.readEntry();
@@ -49,11 +50,11 @@ export async function unpackEnvironment(path: string, directory: string, type: "
     const extract = tar.extract();
     extract.on("entry", (header, stream, next) => { void (async () => {
       if (header.type === "directory") { stream.resume(); next(); return; }
-      invariant(["file", "symlink", "link"].includes(header.type ?? "file"), 422, "环境 TAR 包含特殊文件");
+      invariant(["file", "symlink", "link"].includes(header.type ?? "file"), 422, diagnosticText("diagnostics.environmentArchive.theEnvironmentTarContainsASpecialFile"));
       if (header.type === "file") await consume(header.name, stream, !!((header.mode ?? 0) & 0o111));
       else {
-        invariant(header.linkname && !header.linkname.startsWith("/") && !header.linkname.includes("\\"), 422, "环境链接目标无效");
-        const normalized = normalize(header.name); invariant(!paths.has(normalized.toLowerCase()) && paths.size < 20000, 422, "环境链接路径重复或过多"); paths.add(normalized.toLowerCase());
+        invariant(header.linkname && !header.linkname.startsWith("/") && !header.linkname.includes("\\"), 422, diagnosticText("diagnostics.environmentArchive.invalidEnvironmentLinkTarget"));
+        const normalized = normalize(header.name); invariant(!paths.has(normalized.toLowerCase()) && paths.size < 20000, 422, diagnosticText("diagnostics.environmentArchive.duplicateOrExcessiveEnvironmentLinkPaths")); paths.add(normalized.toLowerCase());
         const target = normalize(header.type === "link" ? header.linkname! : posix.normalize(posix.join(posix.dirname(header.name), header.linkname!)));
         links.push({ path: normalized, target }); stream.resume();
       }
@@ -65,7 +66,7 @@ export async function unpackEnvironment(path: string, directory: string, type: "
       const link = links[i], target = byPath.get(link.target); if (!target) continue;
       const entry = { ...target, path: link.path }; entries.push(entry); byPath.set(link.path, entry); links.splice(i, 1);
     }
-    invariant(!links.length, 422, "环境链接不能指向外部、目录或循环链接");
+    invariant(!links.length, 422, diagnosticText("diagnostics.environmentArchive.environmentLinksMustNotTargetExternalFilesDirectoriesOrCyclic"));
   }
   return entries;
 }

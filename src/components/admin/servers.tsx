@@ -18,19 +18,19 @@ import { MottoPreview, ServerMottoField, uploadMotto, type MottoDraft } from "./
 import { ServerStatusLight } from "./server-status";
 
 function directoryStatus(server: Server, organizationArchived: boolean) {
-  if (organizationArchived) return "组织已归档";
-  if (server.archivedAt) return "服务器已归档";
-  if (server.clientArchivedAt) return "客户端已归档";
-  if (!server.isListed) return "未上架";
-  if (server.currentReleaseActive && !displayWindowOpen(server)) return "展示区间外";
-  return server.currentReleaseActive ? "公开分发" : "等待有效发布";
+  if (organizationArchived) return "servers.organizationArchived";
+  if (server.archivedAt) return "servers.serverArchived";
+  if (server.clientArchivedAt) return "clients.clientArchived";
+  if (!server.isListed) return "servers.notListed";
+  if (server.currentReleaseActive && !displayWindowOpen(server)) return "servers.outsideDisplayWindow";
+  return server.currentReleaseActive ? "dashboard.publicDistribution" : "servers.waitingForAValidRelease";
 }
 
 function releaseStatus(server: Server) {
-  if (server.clientArchivedAt) return "客户端已归档";
-  if (server.currentReleaseActive) return "已绑定当前发布";
-  if (server.currentReleaseId) return "当前发布已归档";
-  return server.boundClientId ? "已绑定，尚未发布" : "未绑定客户端";
+  if (server.clientArchivedAt) return "clients.clientArchived";
+  if (server.currentReleaseActive) return "servers.currentReleaseBound";
+  if (server.currentReleaseId) return "servers.currentReleaseArchived";
+  return server.boundClientId ? "servers.boundUnpublished" : "servers.noClientBound";
 }
 
 // The same content serves editors and readers; only permitted controls are rendered.
@@ -48,52 +48,52 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
   const listing = !!server && superAdmin;
   const base = { displayName: nameSchema, description: textSchema(), gameAddress: textSchema(255) };
   const scheduleFields = { displayMode: z.enum(["PERMANENT", "RANGE"]), displayStartsAt: z.string(), displayEndsAt: z.string() };
-  const colorField = { themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, t("请输入 #RRGGBB 或留空")) };
+  const colorField = { themeColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, t("servers.enterRrggbbOrLeaveBlank")) };
   const listingFields = {
-    sortOrder: z.string().refine(value => value.trim() !== "" && Number.isSafeInteger(Number(value)) && Math.abs(Number(value)) <= 2147483647, t("请输入有效排序整数")),
+    sortOrder: z.string().refine(value => value.trim() !== "" && Number.isSafeInteger(Number(value)) && Math.abs(Number(value)) <= 2147483647, t("servers.enterAValidIntegerSortOrder")),
     isListed: z.boolean(),
   };
   const profileSchema = z.object(base).extend(scheduleFields);
   const validateSchedule = (value: z.infer<typeof profileSchema>, ctx: z.RefinementCtx) => {
     if (value.displayMode === "RANGE") {
       const start = displayTimeIso(value.displayStartsAt), end = displayTimeIso(value.displayEndsAt);
-      if (!start || !end || start >= end) ctx.addIssue({ code: "custom", path: ["displayEndsAt"], message: t("请选择有效展示区间，结束时间须晚于开始时间") });
+      if (!start || !end || start >= end) ctx.addIssue({ code: "custom", path: ["displayEndsAt"], message: t("servers.chooseAValidDisplayWindowWithAnEndLater") });
     }
   };
   const schema = server ? listing ? profileSchema.extend({ ...colorField, ...listingFields }).superRefine(validateSchedule) : profileSchema.extend(colorField).superRefine(validateSchedule)
-    : profileSchema.extend({ organizationId: z.string().uuid(t("请选择组织")), serverId: z.string().regex(/^[A-Za-z]{3,5}$/, t("ID 须为已有的 3–5 位英文字母")) }).superRefine(validateSchedule);
+    : profileSchema.extend({ organizationId: z.string().uuid(t("servers.selectAnOrganization")), serverId: z.string().regex(/^[A-Za-z]{3,5}$/, t("servers.idMustBeTheExisting35EnglishLetters")) }).superRefine(validateSchedule);
   const fields: Field[] = [
-    ...(!server ? [{ name: "organizationId", label: t("所属组织"), type: "select" as const, options: organizations.filter(org => !org.archivedAt).map(org => ({ value: org.id, label: org.displayName, translate: false })) }, { name: "serverId", label: "MUA server ID", hint: t("使用已有 MUA ID，创建后不可更改。"), placeholder: "NPUR" }] : []),
-    { name: "displayName", label: t("显示别名"), placeholder: "NPU RELEASE" },
-    { name: "description", label: t("简介"), type: "textarea" },
-    { name: "gameAddress", label: t("连接地址"), placeholder: "play.example.edu:25565" },
+    ...(!server ? [{ name: "organizationId", label: t("clientUpload.organization"), type: "select" as const, options: organizations.filter(org => !org.archivedAt).map(org => ({ value: org.id, label: org.displayName, translate: false })) }, { name: "serverId", label: "MUA server ID", hint: t("servers.useTheExistingMuaIdItCannotBeChanged"), placeholder: "NPUR" }] : []),
+    { name: "displayName", label: t("servers.displayAlias"), placeholder: "NPU RELEASE" },
+    { name: "description", label: t("organizations.description"), type: "textarea" },
+    { name: "gameAddress", label: t("servers.connectionAddress"), placeholder: "play.example.edu:25565" },
     ...(canEdit ? [
-      { name: "displayMode", label: t("展示模式"), type: "select" as const, options: [{ value: "PERMANENT", label: t("永久展示") }, { value: "RANGE", label: t("区间展示") }], hint: t("区间仅控制目录展示，到期不会下架客户端或停止下载。") },
-      { name: "displayStartsAt", label: t("展示开始时间（北京时间）"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" } },
-      { name: "displayEndsAt", label: t("展示结束时间（北京时间）"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" }, hint: t("包含开始时间，不包含结束时间。") },
+      { name: "displayMode", label: t("servers.displayMode"), type: "select" as const, options: [{ value: "PERMANENT", label: t("servers.permanentDisplay") }, { value: "RANGE", label: t("servers.scheduledDisplay") }], hint: t("servers.theWindowControlsDirectoryVisibilityOnlyExpiryDoesNot") },
+      { name: "displayStartsAt", label: t("servers.displayStartsUtc0800"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" } },
+      { name: "displayEndsAt", label: t("servers.displayEndsUtc0800"), type: "datetime-local" as const, visibleWhen: { name: "displayMode", value: "RANGE" }, hint: t("servers.theStartIsInclusiveAndTheEndIsExclusive") },
     ] : []),
-    ...(server && canEdit ? [{ name: "themeColor", label: t("展示颜色"), placeholder: "#3b82f6" }] : []),
+    ...(server && canEdit ? [{ name: "themeColor", label: t("servers.displayColor"), placeholder: "#3b82f6" }] : []),
     ...(listing ? [
-      { name: "sortOrder", label: t("排序"), type: "number" as const, hint: t("数字越小，在 Launcher 中越靠前。") },
-      { name: "isListed", label: t("标记上架"), type: "checkbox" as const, hint: t("只有存在有效当前发布且组织、服务器、客户端均启用时，才会出现在公开列表。") },
+      { name: "sortOrder", label: t("servers.sortOrder"), type: "number" as const, hint: t("servers.smallerNumbersAppearEarlierInLauncher") },
+      { name: "isListed", label: t("servers.markAsListed"), type: "checkbox" as const, hint: t("servers.appearsPubliclyOnlyWithAValidCurrentReleaseAnd") },
     ] : []),
   ];
   if (!server && !superAdmin) return null;
   return <div className="space-y-6">
-    {server && <section className="space-y-3" aria-label={t("服务器状态")}>
-      <h3 className="font-medium">{t("服务器状态")}</h3>
+    {server && <section className="space-y-3" aria-label={t("servers.serverStatus")}>
+      <h3 className="font-medium">{t("servers.serverStatus")}</h3>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">MUA server ID</dt><dd><code>{server.serverId}</code></dd>
-        <dt className="text-muted-foreground">{t("所属组织")}</dt><dd>{organization?.displayName}</dd>
-        <dt className="text-muted-foreground">{t("资源状态")}</dt><dd>{organization?.archivedAt ? t("组织已归档") : server.archivedAt ? t("服务器已归档") : t("启用中")}</dd>
-        <dt className="text-muted-foreground">{t("上架标记")}</dt><dd>{server.isListed ? t("已标记上架") : t("未上架")}</dd>
-        <dt className="text-muted-foreground">{t("目录状态")}</dt><dd>{t(directoryStatus(server, !!organization?.archivedAt))}</dd>
-        <dt className="text-muted-foreground">{t("展示模式")}</dt><dd>{t(server.displayMode === "RANGE" ? "区间展示" : "永久展示")}</dd>
-        <dt className="text-muted-foreground">{t("展示颜色")}</dt><dd><code>{server.themeColor || t("默认")}</code></dd>
-        <dt className="text-muted-foreground">{t("连接探测")}</dt><dd><ServerStatusLight serverId={server.serverId} address={server.gameAddress} archived={archived} showLabel /></dd>
-        <dt className="text-muted-foreground">{t("当前客户端")}</dt><dd className="break-words">{server.boundClientName || t("未绑定")} · {t(releaseStatus(server))}<DisplayScheduleNote schedule={server} /></dd>
+        <dt className="text-muted-foreground">{t("clientUpload.organization")}</dt><dd>{organization?.displayName}</dd>
+        <dt className="text-muted-foreground">{t("servers.resourceStatus")}</dt><dd>{organization?.archivedAt ? t("servers.organizationArchived") : server.archivedAt ? t("servers.serverArchived") : t("common.active")}</dd>
+        <dt className="text-muted-foreground">{t("servers.listingFlag")}</dt><dd>{server.isListed ? t("servers.markedAsListed") : t("servers.notListed")}</dd>
+        <dt className="text-muted-foreground">{t("servers.directoryStatus")}</dt><dd>{t(directoryStatus(server, !!organization?.archivedAt))}</dd>
+        <dt className="text-muted-foreground">{t("servers.displayMode")}</dt><dd>{t(server.displayMode === "RANGE" ? "servers.scheduledDisplay" : "servers.permanentDisplay")}</dd>
+        <dt className="text-muted-foreground">{t("servers.displayColor")}</dt><dd><code>{server.themeColor || t("servers.default")}</code></dd>
+        <dt className="text-muted-foreground">{t("servers.connectionProbe")}</dt><dd><ServerStatusLight serverId={server.serverId} address={server.gameAddress} archived={archived} showLabel /></dd>
+        <dt className="text-muted-foreground">{t("servers.currentClient")}</dt><dd className="break-words">{server.boundClientName || t("clients.unbound")} · {t(releaseStatus(server))}<DisplayScheduleNote schedule={server} /></dd>
       </dl>
-      {archived && <p className="text-sm text-muted-foreground">{t("归档期间不能修改服务器资料与展示设置。")}{organization?.archivedAt ? t("请先恢复所属组织。") : t("恢复服务器后可继续编辑。")}</p>}
+      {archived && <p className="text-sm text-muted-foreground">{t("servers.serverDetailsAndDisplaySettingsCannotBeChangedWhile")}{organization?.archivedAt ? t("servers.restoreTheOrganizationFirst") : t("servers.restoreTheServerToContinueEditing")}</p>}
     </section>}
     <ServerMottoField server={server} editable={canEdit} pending={pendingMotto} onPrepare={setPendingMotto} />
     {canEdit ? <SchemaForm key={server?.serverId ?? "new"} schema={schema} fields={fields} disabled={busy} defaults={{
@@ -118,13 +118,13 @@ export function ServerEditorContent({ server: initialServer, onSaved }: { server
       if (ok) { setPendingMotto(null); onSaved(); }
       return ok;
     }} /> : server && <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-      <dt className="text-muted-foreground">{t("显示别名")}</dt><dd className="break-words">{server.displayName}</dd>
-      <dt className="text-muted-foreground">{t("简介")}</dt><dd className="whitespace-pre-wrap break-words">{server.description || t("未设置")}</dd>
-      <dt className="text-muted-foreground">{t("连接地址")}</dt><dd className="break-all">{server.gameAddress || t("未设置")}</dd>
-      <dt className="text-muted-foreground">{t("排序")}</dt><dd>{server.sortOrder}</dd>
+      <dt className="text-muted-foreground">{t("servers.displayAlias")}</dt><dd className="break-words">{server.displayName}</dd>
+      <dt className="text-muted-foreground">{t("organizations.description")}</dt><dd className="whitespace-pre-wrap break-words">{server.description || t("servers.notSet")}</dd>
+      <dt className="text-muted-foreground">{t("servers.connectionAddress")}</dt><dd className="break-all">{server.gameAddress || t("servers.notSet")}</dd>
+      <dt className="text-muted-foreground">{t("servers.sortOrder")}</dt><dd>{server.sortOrder}</dd>
     </dl>}
-    {server && superAdmin && <section className="flex items-center justify-between gap-4 border-t pt-4" aria-label={t("归档管理")}>
-      <div><h3 className="text-sm font-medium">{server.archivedAt ? t("恢复服务器") : t("归档服务器")}</h3><p className="text-xs text-muted-foreground">{server.archivedAt ? t("恢复后需重新绑定客户端并确认上架。") : t("停止分发，保留服务器记录与历史。")}</p></div>
+    {server && superAdmin && <section className="flex items-center justify-between gap-4 border-t pt-4" aria-label={t("servers.archiveManagement")}>
+      <div><h3 className="text-sm font-medium">{server.archivedAt ? t("servers.restoreServer") : t("servers.archiveServer")}</h3><p className="text-xs text-muted-foreground">{server.archivedAt ? t("servers.rebindAClientAndConfirmListingAfterRestoration") : t("servers.stopDistributionRetainServerRecordsAndHistory")}</p></div>
       <ArchiveButton kind="servers" id={server.serverId} archived={!!server.archivedAt} />
     </section>}
   </div>;
@@ -134,10 +134,10 @@ function ServerEditor({ server }: { server?: Server }) {
   const { t } = useI18n();
   const { state, organizations, busy } = useAdmin();
   const canManage = state.actor.isSuperAdmin || !!server?.permissions.includes("SERVER_EDIT");
-  const title = server ? canManage ? t("编辑服务器") : t("服务器详情") : t("登记服务器");
-  return <EditorDialog title={title} description={server ? t("集中查看服务器资料、上架与绑定状态；按当前权限提供控制选项。") : t("使用已有 MUA server ID 登记服务器，保存后可设置展示信息。")}
+  const title = server ? canManage ? t("servers.editServer") : t("servers.serverDetails") : t("servers.registerServer");
+  return <EditorDialog title={title} description={server ? t("servers.viewServerDetailsListingAndBindingStatusInOne") : t("servers.registerAServerUsingItsExistingMuaServerId")}
     disabled={busy || !organizations.some(org => !org.archivedAt)}
-    trigger={server ? <Button variant="outline" size="sm" disabled={busy}>{canManage ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />}{canManage ? t("编辑") : t("查看")}</Button> : undefined}>
+    trigger={server ? <Button variant="outline" size="sm" disabled={busy}>{canManage ? <Pencil className="size-3.5" /> : <Eye className="size-3.5" />}{canManage ? t("clientUpload.edit") : t("servers.view")}</Button> : undefined}>
     {close => <ServerEditorContent server={server} onSaved={close} />}
   </EditorDialog>;
 }
@@ -147,27 +147,27 @@ export function ServersPage() {
   const { state, servers } = useAdmin();
   const organization = (server: Server) => state.organizations.find(org => org.id === server.organizationId);
   const columns: ColumnDef<Server>[] = [
-    { id: "motto", header: t("服务器箴言"), enableSorting: false, enableHiding: false, cell: ({ row }) => <MottoPreview table className="w-full min-w-48" src={row.original.mottoImageUrl} alt={t("{0}箴言", { "0": row.original.displayName })} /> },
-    { accessorKey: "displayName", header: t("服务器"), cell: ({ row }) => <div className="flex items-center gap-3">
+    { id: "motto", header: t("serverMotto.serverMotto"), enableSorting: false, enableHiding: false, cell: ({ row }) => <MottoPreview table className="w-full min-w-48" src={row.original.mottoImageUrl} alt={t("serverMotto.imageAlt", { "server": row.original.displayName })} /> },
+    { accessorKey: "displayName", header: t("clients.server"), cell: ({ row }) => <div className="flex items-center gap-3">
       <ServerStatusLight serverId={row.original.serverId} address={row.original.gameAddress} archived={!!row.original.archivedAt || !!organization(row.original)?.archivedAt} />
       <div><p className="font-medium">{row.original.displayName}</p><p className="text-xs text-muted-foreground">{row.original.serverId}</p></div>
     </div> },
-    { id: "organization", header: t("组织"), accessorFn: server => organization(server)?.displayName ?? "" },
-    { accessorKey: "gameAddress", header: t("连接地址"), cell: ({ row }) => <code className="text-xs">{row.original.gameAddress || t("未设置")}</code> },
-    { accessorKey: "sortOrder", header: t("排序") },
-    { accessorKey: "themeColor", header: t("展示颜色"), cell: ({ row }) => <code>{row.original.themeColor || t("默认")}</code> },
-    { id: "status", header: t("目录状态"), accessorFn: server => t(directoryStatus(server, !!organization(server)?.archivedAt)), cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge> },
-    { id: "release", header: t("当前客户端"), accessorFn: server => `${server.boundClientName || ""} ${releaseStatus(server)}`, cell: ({ row }) => <div className="space-y-1">
+    { id: "organization", header: t("dashboard.organization"), accessorFn: server => organization(server)?.displayName ?? "" },
+    { accessorKey: "gameAddress", header: t("servers.connectionAddress"), cell: ({ row }) => <code className="text-xs">{row.original.gameAddress || t("servers.notSet")}</code> },
+    { accessorKey: "sortOrder", header: t("servers.sortOrder") },
+    { accessorKey: "themeColor", header: t("servers.displayColor"), cell: ({ row }) => <code>{row.original.themeColor || t("servers.default")}</code> },
+    { id: "status", header: t("servers.directoryStatus"), accessorFn: server => t(directoryStatus(server, !!organization(server)?.archivedAt)), cell: ({ getValue }) => <Badge variant="outline">{String(getValue())}</Badge> },
+    { id: "release", header: t("servers.currentClient"), accessorFn: server => `${server.boundClientName || ""} ${releaseStatus(server)}`, cell: ({ row }) => <div className="space-y-1">
       {row.original.boundClientId && (row.original.permissions.includes("DRAFT_READ") || row.original.permissions.includes("RELEASE_READ"))
         ? <Link className="font-medium hover:underline" href={`/admin/clients/${row.original.boundClientId}`}>{row.original.boundClientName}</Link>
         : row.original.boundClientName && <p className="font-medium">{row.original.boundClientName}</p>}
       <p className="text-xs text-muted-foreground">{t(releaseStatus(row.original))}</p><DisplayScheduleNote schedule={row.original} />
     </div> },
-    { id: "actions", header: t("操作"), enableHiding: false, cell: ({ row }) => <ServerEditor server={row.original} /> },
+    { id: "actions", header: t("clients.actions"), enableHiding: false, cell: ({ row }) => <ServerEditor server={row.original} /> },
   ];
   return <>
-    <Heading title={t("服务器管理")} description={t("统一管理服务器资料、Launcher 展示与分发状态。")} action={state.actor.isSuperAdmin && <ServerEditor />} />
-    <Alert><AlertDescription>{t("状态灯每分钟探测一次 Minecraft Java 服务器，悬停查看延迟与原因，点击可刷新。延迟从后端测得；目录状态仍表示上架与客户端发布配置。")}</AlertDescription></Alert>
-    <DataTable data={servers} columns={columns} columnClassNames={{ motto: { header: "w-48", cell: "relative w-48 p-0" } }} getRowId={server => server.serverId} empty={t("暂无可访问服务器。请先创建组织并登记 MUA server ID。")} />
+    <Heading title={t("navigation.servers")} description={t("servers.manageServerDetailsLauncherDisplayAndDistributionStatusTogether")} action={state.actor.isSuperAdmin && <ServerEditor />} />
+    <Alert><AlertDescription>{t("servers.statusLightsProbeMinecraftJavaServersEveryMinuteHover")}</AlertDescription></Alert>
+    <DataTable data={servers} columns={columns} columnClassNames={{ motto: { header: "w-48", cell: "relative w-48 p-0" } }} getRowId={server => server.serverId} empty={t("servers.noAccessibleServersCreateAnOrganizationAndRegisterA")} />
   </>;
 }

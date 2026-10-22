@@ -6,10 +6,55 @@ const hydrationErrors = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => {
   const errors: string[] = [];
   hydrationErrors.set(page, errors);
-  page.on("console", message => { if (/hydrat|server rendered HTML/i.test(message.text())) errors.push(message.text()); });
+  page.on("console", message => { if (/hydrat|server rendered HTML|IntlError|MISSING_MESSAGE|FORMATTING_ERROR/i.test(message.text())) errors.push(message.text()); });
   page.on("pageerror", error => { if (/hydrat|server rendered HTML/i.test(error.message)) errors.push(error.message); });
 });
 test.afterEach(({ page }) => { expect(hydrationErrors.get(page)).toEqual([]); });
+
+test("client-side validation keeps its semantic messages when the language changes", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "使用账号密码登录", exact: true }).click();
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page.getByText("请输入用户名", { exact: true })).toBeVisible();
+  await expect(page.getByText("请输入密码", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "切换语言", exact: true }).click();
+  await page.getByRole("menuitem", { name: /English/ }).click();
+  await expect(page.getByText("Enter your username", { exact: true })).toBeVisible();
+  await expect(page.getByText("Enter your password", { exact: true })).toBeVisible();
+});
+
+test("an English API error stays bilingual in the interface after a language switch", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "使用账号密码登录", exact: true }).click();
+  await page.locator('input[name="username"]').fill("missing-diagnostic-user");
+  await page.locator('input[name="password"]').fill(dummyPassword);
+  const response = page.waitForResponse(value => value.url().endsWith("/api/auth/login") && value.request().method() === "POST");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  const result = await response;
+  expect(result.status()).toBe(401);
+  const payload = await result.json();
+  expect(payload).toEqual({ error: "Incorrect username or password, or account disabled", code: "diagnostics.auth.incorrectUsernameOrPasswordOrAccountDisabled", params: {} });
+  await expect(page.getByText("用户名或密码错误，或账号已停用", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "切换语言", exact: true }).click();
+  await page.getByRole("menuitem", { name: /English/ }).click();
+  await expect(page.getByText(payload.error, { exact: true })).toBeVisible();
+});
+
+test("language switching preserves form state and the selected locale survives a reload", async ({ page, context }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "切换语言", exact: true }).click();
+  await page.getByRole("menuitem", { name: /English/ }).click();
+  await expect(page.getByText("Sign in to Union Link", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sign in with username and password", exact: true }).click();
+  await page.locator('input[name="username"]').fill("draft-user");
+  await page.getByRole("button", { name: "Change language", exact: true }).click();
+  await page.getByRole("menuitem", { name: /简体中文/ }).click();
+  await expect(page.locator('input[name="username"]')).toHaveValue("draft-user");
+  await expect(page.getByRole("button", { name: "使用账号密码登录", exact: true })).toHaveAttribute("aria-expanded", "true");
+  expect((await context.cookies()).find(cookie => cookie.name === "mua-locale")?.value).toBe("zh-CN");
+  await page.reload();
+  await expect(page.getByText("登录 Union Link", { exact: true })).toBeVisible();
+});
 async function credentials() {
   if (process.env.SMOKE_USERNAME && process.env.SMOKE_PASSWORD) return { username: process.env.SMOKE_USERNAME, password: process.env.SMOKE_PASSWORD };
   const file = (await readdir(".local")).filter(name => /^initial-admin-\d+\.txt$/.test(name)).sort().at(-1);
@@ -67,6 +112,12 @@ test("saved dark theme hydrates consistently on login and admin pages and keeps 
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
     await expect(toggle).toBeEnabled();
     await expect(page.locator("html")).toHaveClass(/dark/);
+    await page.getByRole("button", { name: "切换语言", exact: true }).click();
+    await page.getByRole("menuitem", { name: /English/ }).click();
+    await expect(page.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Toggle light / dark theme", exact: true })).toHaveAttribute("aria-pressed", "true");
   } finally { await page.request.post("/api/auth/logout", { headers: { Origin: baseURL! }, data: {} }); }
 });
 

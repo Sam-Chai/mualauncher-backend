@@ -229,11 +229,11 @@ test("actual multipart HTTP upload, authenticated image reads, re-crop and remov
     assert.equal(unset.status, 200); assert.equal((await unset.json()).state, "UNKNOWN", "only stored addresses may be probed");
     await client.server.update({ where: { serverId: "NPA" }, data: { gameAddress: "127.0.0.1:25565" } });
     const blocked = await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } });
-    assert.equal(blocked.status, 200); const blockedData = await blocked.json(); assert.equal(blockedData.state, "OFFLINE"); assert(blockedData.message.includes("公网地址"));
+    assert.equal(blocked.status, 200); const blockedData = await blocked.json(); assert.equal(blockedData.state, "OFFLINE"); assert(blockedData.message.message.includes("public"));
     assert.equal((await fetch(origin + "/api/admin/servers/NPB/probe", { headers: { Cookie: cookies.get(editor.id)! } })).status, 404);
     await locked(db => m.archiveResource(db, root, "servers", "NPA", { archived: true }), client);
     const archived = await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } });
-    assert.equal(archived.status, 200); const archivedData = await archived.json(); assert.equal(archivedData.state, "UNKNOWN"); assert(archivedData.message.includes("已归档"));
+    assert.equal(archived.status, 200); const archivedData = await archived.json(); assert.equal(archivedData.state, "UNKNOWN"); assert(archivedData.message.message.includes("archived"));
     await locked(db => m.setMember(db, root, organizationId, reader.id, { roles: [], status: "ACTIVE" }), client);
     assert.equal((await fetch(probePath, { headers: { Cookie: cookies.get(reader.id)! } })).status, 403, "after all management roles are removed, the management gate rejects the session");
     // Exercise administrative and authentication contracts against this disposable schema.

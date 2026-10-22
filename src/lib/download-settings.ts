@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { z } from "zod";
 import type { Db, Actor } from "./auth";
@@ -8,18 +9,18 @@ import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "./download-sources";
 
 export const DEFAULT_REMOTE_HOSTS = ["cdn.modrinth.com", "github.com", "raw.githubusercontent.com", "release-assets.githubusercontent.com",
   "objects.githubusercontent.com", "gitlab.com", "edge.forgecdn.net", "mediafilez.forgecdn.net"];
-const host = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, "请填写完整域名，不包含协议、路径或通配符");
+const host = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, diagnosticText("diagnostics.downloadSettings.enterACompleteDomainWithoutAProtocolPathOrWildcard"));
 export const downloadSettingsSchema = z.object({ remoteSourceWhitelistEnabled: z.boolean(), remoteSourceHosts: z.array(host).max(100),
   downloadProxyEnabled: z.boolean(), downloadProxyUrl: z.string().trim().max(2000).refine(value => {
     if (!value) return true;
     try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash; }
     catch { return false; }
-  }, "代理地址应为 http(s)://主机:端口，不含账号、密码或路径"),
-  minecraftDownloadSources: z.array(z.enum(["bmclapi", "ustc", "nju"])).max(3).refine(value => new Set(value).size === value.length, "镜像源不能重复").default([...DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS.minecraftDownloadSources]),
+  }, diagnosticText("diagnostics.downloadSettings.theProxyMustBeHttpSHostPortWithoutCredentials")),
+  minecraftDownloadSources: z.array(z.enum(["bmclapi", "ustc", "nju"])).max(3).refine(value => new Set(value).size === value.length, diagnosticText("diagnostics.downloadSettings.mirrorSourcesMustNotBeRepeated")).default([...DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS.minecraftDownloadSources]),
   javaDownloadSources: z.array(z.enum(["tuna"])).max(1).default(["tuna"]),
   mirrorProxyEnabled: z.boolean().default(false), javaImageType: z.enum(["jre", "jdk"]).default("jre"),
   }).strict()
-  .refine(value => !value.downloadProxyEnabled || !!value.downloadProxyUrl, "启用代理时请填写地址");
+  .refine(value => !value.downloadProxyEnabled || !!value.downloadProxyUrl, diagnosticText("diagnostics.downloadSettings.enterAnAddressWhenEnablingTheProxy"));
 export type DownloadSettings = z.infer<typeof downloadSettingsSchema>;
 export async function workerDownloadSettings(db: Db): Promise<DownloadSettings> {
   const row = await db.platformSettings.findUnique({ where: { id: "platform" } });
@@ -38,7 +39,7 @@ export async function updateDownloadSettings(db: Db, actor: Actor, raw: unknown)
     minecraftDownloadSources: current.minecraftDownloadSources, javaDownloadSources: current.javaDownloadSources,
     mirrorProxyEnabled: current.mirrorProxyEnabled, javaImageType: current.javaImageType, ...raw,
   } : raw);
-  invariant(result.success, 400, result.success ? "" : result.error.issues[0]?.message ?? "下载设置无效");
+  invariant(result.success, 400, result.success ? "" : result.error.issues[0]?.message ?? diagnosticText("diagnostics.downloadSettings.invalidDownloadSettings"));
   const data = { ...result.data, remoteSourceHosts: [...new Set(result.data.remoteSourceHosts)].sort() };
   await db.platformSettings.upsert({ where: { id: "platform" }, create: { id: "platform", ...data }, update: data });
   await audit(db, actor, "DOWNLOAD_SETTINGS_UPDATE", "PlatformSettings", "platform", undefined, undefined,

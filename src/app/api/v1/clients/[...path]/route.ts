@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { COOKIE_NAME } from "@/lib/auth";
@@ -55,7 +56,7 @@ async function handle(request: Request, context: { params: Promise<{ path: strin
         }
         if (path.length === 4 && id === "releases" && draftId === "activate") return clients.activateClient(db, actor, clientId(kind), uuid(action), raw);
       }
-      throw new AppError(404, "客户端接口不存在");
+      throw new AppError(404, diagnosticText("diagnostics.route.theClientEndpointDoesNotExist"));
     });
     return json(result, write && kind === "uploads" && path.length === 1 ? 201 : 200);
   } catch (error) { return failure(error); }

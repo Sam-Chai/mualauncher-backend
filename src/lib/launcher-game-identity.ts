@@ -4,9 +4,15 @@ import { z } from "zod";
 import { gameUuid, profileName } from "./launcher-game-contract";
 import { gameTransport, type GameTransport } from "./launcher-game-network";
 import { AppError } from "./errors";
+import { diagnosticText } from "./diagnostics";
+import { hasMessage } from "./i18n";
 
 export class GameLoginError extends AppError {
-  constructor(status: number, public code: string) { super(status, code); }
+  constructor(status: number, public code: string) {
+    const key = `diagnostics.game.${code}`;
+    super(status, diagnosticText(hasMessage(key) ? key : "diagnostics.game.SERVICE_UNAVAILABLE"));
+  }
+  override toString() { return `${super.toString()} [${this.code}]`; }
 }
 export function gameCheck(condition: unknown, status: number, code: string): asserts condition {
   if (!condition) throw new GameLoginError(status, code);

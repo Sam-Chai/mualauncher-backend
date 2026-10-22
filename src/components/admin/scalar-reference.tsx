@@ -10,8 +10,8 @@ export function ScalarReference() {
   const { locale, t } = useI18n();
   const { resolvedTheme } = useTheme();
   const configuration = useMemo(() => ({
-    sources: [{ title: t("后台完整接口"), slug: "admin", default: true, url: `/api/admin/openapi?locale=${locale}` },
-      { title: t("Launcher 公开接口"), slug: "launcher", url: `/openapi.json?locale=${locale}` }],
+    sources: [{ title: t("scalarReference.completeAdministrationApi"), slug: "admin", default: true, url: `/api/admin/openapi?locale=${locale}` },
+      { title: t("scalarReference.publicLauncherApi"), slug: "launcher", url: `/openapi.json?locale=${locale}` }],
     // Scalar's request builder otherwise concatenates the root '/' with '/api/...' as '//api/...'.
     servers: [{ url: window.location.origin }],
     localization: { locale: locale === "en-US" ? "en" : "zh-CN" },
@@ -27,7 +27,7 @@ export function ScalarReference() {
       return window.fetch(input, { ...init, headers, credentials: "same-origin" });
     },
   }), [locale, resolvedTheme, t]);
-  return <div className={`${styles.reference} min-w-0 overflow-hidden rounded-lg border`}>
+  return <div data-slot="scalar-reference" className={`${styles.reference} min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border`}>
     <ApiReferenceReact key={locale} configuration={configuration} />
   </div>;
 }

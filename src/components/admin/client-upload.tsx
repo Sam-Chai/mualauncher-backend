@@ -1,4 +1,7 @@
 "use client";
+import { serializeError } from "@/lib/diagnostics";
+import { formatMessage } from "@/lib/diagnostics";
+
 import { useI18n } from "@/components/preferences";
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -27,11 +30,11 @@ function putPart(url: string, bytes: Blob, onProgress: (value: number) => void, 
     const xhr = new XMLHttpRequest(); const abort = () => xhr.abort();
     xhr.open("PUT", url); xhr.timeout = 300000;
     xhr.upload.onprogress = event => onProgress(event.loaded);
-    xhr.onload = () => { const etag = xhr.getResponseHeader("ETag"); if (xhr.status >= 200 && xhr.status < 300 && etag) resolve(etag); else reject(new Error("分片上传失败，请检查对象存储连接")); };
-    xhr.onerror = () => reject(new Error("无法连接对象存储，请检查网络"));
-    xhr.ontimeout = () => reject(new Error("分片上传超时")); xhr.onabort = () => reject(new Error("上传已取消"));
+    xhr.onload = () => { const etag = xhr.getResponseHeader("ETag"); if (xhr.status >= 200 && xhr.status < 300 && etag) resolve(etag); else reject(new Error("clientUpload.partUploadFailedCheckObjectStorageConnectivity")); };
+    xhr.onerror = () => reject(new Error("clientUpload.cannotConnectToObjectStorageCheckYourNetwork"));
+    xhr.ontimeout = () => reject(new Error("clientUpload.partUploadTimedOut")); xhr.onabort = () => reject(new Error("clientUpload.uploadCancelled"));
     xhr.onloadend = () => signal.removeEventListener("abort", abort);
-    signal.addEventListener("abort", abort, { once: true }); if (signal.aborted) { reject(new Error("上传已取消")); return; }
+    signal.addEventListener("abort", abort, { once: true }); if (signal.aborted) { reject(new Error("clientUpload.uploadCancelled")); return; }
     xhr.send(bytes);
   });
 }
@@ -43,11 +46,11 @@ export function ClientUploadDialog(props: Props) {
   const { refresh } = useAdmin();
   const [open, setOpen] = useState(false);
   const [editorProps, setEditorProps] = useState<Props | null>(null);
-  function changeOpen(next: boolean) { if (next) { setEditorProps(props); void refresh().catch(() => toast.error(t("无法刷新上传设置，请刷新页面后重试"))); } setOpen(next); }
+  function changeOpen(next: boolean) { if (next) { setEditorProps(props); void refresh().catch(() => toast.error(t("clientUpload.couldNotRefreshUploadSettingsRefreshThePageAnd"))); } setOpen(next); }
   return <Dialog open={open} onOpenChange={changeOpen}><DialogTrigger asChild><Button variant={props.clientId ? "outline" : "default"} size={props.clientId ? "sm" : "default"} disabled={props.disabled}>
-    {!props.clientId && <Plus className="size-4" />}{props.resume ? t("继续填写") : props.clientId ? t("更新") : t("添加客户端")}
+    {!props.clientId && <Plus className="size-4" />}{props.resume ? t("clientUpload.continueEditing") : props.clientId ? t("clientUpload.update") : t("clientUpload.addClient")}
   </Button></DialogTrigger><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl" onInteractOutside={event => event.preventDefault()}><DialogHeader>
-    <DialogTitle>{props.clientId ? t("更新客户端") : t("添加客户端")}</DialogTitle><DialogDescription>{t("上传完整 .minecraft ZIP、Modrinth mrpack 或 PCL 导出包，识别并填写资料后提交审核。审核并发布后才会切换服务器当前版本。")}</DialogDescription>
+    <DialogTitle>{props.clientId ? t("clientUpload.updateClient") : t("clientUpload.addClient")}</DialogTitle><DialogDescription>{t("clientUpload.uploadACompleteMinecraftZipModrinthMrpackOrPcl")}</DialogDescription>
   </DialogHeader>{open && editorProps && <UploadEditor {...editorProps} onDone={() => { props.onDone(); setOpen(false); }} />}</DialogContent></Dialog>;
 }
 function UploadEditor({ targets, organizations, client: originalClient, current, clientId: fixedClient, defaultPackageFormatVersion, comparisonDrafts = [], resume, onDone }: Props) {
@@ -71,8 +74,7 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
   const packBaseline = useRef({ name: form.getValues("name"), versionLabel: form.getValues("versionLabel"), summary: form.getValues("summary") });
   const version = useWatch({ control: form.control, name: "versionLabel" }); const description = useWatch({ control: form.control, name: "description" }); const uploadId = upload?.id; const uploadStatus = upload?.status;
   const mods = upload ? upload.detectedMods : file ? [] : initialMods;
-  // Older uploads can retain this warning from before Forge/NeoForge support.
-  const warnings = (upload?.warnings ?? []).filter(warning => warning !== t("已识别 Forge／NeoForge，但当前环境组装尚不支持该加载器，无法完成 muapack 发布。"));
+  const warnings = upload?.warnings ?? [];
   useEffect(() => () => { controller.current?.abort(); }, []);
   useEffect(() => {
     const info = upload?.detectedInfo;
@@ -95,21 +97,21 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
     let active = true; let fetching = false;
     const timer = setInterval(() => { if (fetching) return; fetching = true; void api<UploadView>(`/api/v1/clients/uploads/${uploadId}`).then(next => {
       if (!active) return; setUpload(next);
-      if (next.status === "READY") { form.setValue("mods", next.detectedMods, { shouldDirty: true }); toast.success(next.packageFormatVersion === 2 ? t("v2 信息识别与本地校验完成，请核对资料并提交审核") : t("完整客户端处理完成，请核对资料并提交审核")); }
-    }).catch(error => { if (active) setError(error instanceof Error ? error.message : t("读取任务失败")); }).finally(() => { fetching = false; }); }, 1500);
+      if (next.status === "READY") { form.setValue("mods", next.detectedMods, { shouldDirty: true }); toast.success(next.packageFormatVersion === 2 ? t("clientUpload.v2DetectionAndLocalValidationCompletedCheckDetailsAnd") : t("clientUpload.fullClientProcessingCompletedCheckDetailsAndSubmitFor")); }
+    }).catch(error => { if (active) setError(error instanceof Error ? serializeError(error) : t("clientUpload.couldNotReadTask")); }).finally(() => { fetching = false; }); }, 1500);
     return () => { active = false; clearInterval(timer); };
   }, [uploadId, uploadStatus, form, t]);
   async function startUpload(selected: File) {
-    if (!packageFormatVersion) { setError(t("请先选择制作 muapack v1 还是 v2")); return; }
+    if (!packageFormatVersion) { setError(t("clientUpload.chooseMuapackV1OrV2First")); return; }
     const fileError = uploadFileError(selected.name, selected.size, state.maxUploadSizeMb);
-    if (fileError) { setError(t(fileError)); return; }
-    if (!organizationId) { setError(t("请先选择所属组织")); return; }
-    if (!form.getValues("name").trim()) { setError(t("请先填写客户端名称，再点击“开始上传”")); return; }
+    if (fileError) { setError(formatMessage(t, fileError)); return; }
+    if (!organizationId) { setError(t("clientUpload.selectAnOrganizationFirst")); return; }
+    if (!form.getValues("name").trim()) { setError(t("clientUpload.enterTheClientNameBeforeStartingTheUpload")); return; }
     const target = serverId === "none" ? undefined : targets.find(target => target.serverId === serverId && target.organizationId === organizationId);
-    if (!identity && !target && !organizations.find(org => org.id === organizationId)?.canUnbound) { setError(t("此账号仅有服务器授权，请选择管理范围内的服务器")); return; }
+    if (!identity && !target && !organizations.find(org => org.id === organizationId)?.canUnbound) { setError(t("clientUpload.thisAccountOnlyHasServerPermissionsSelectAServer")); return; }
     let replaceConfirmed = false;
     if (!identity && target?.boundClientId) {
-      replaceConfirmed = window.confirm(t("服务器“{0}”已绑定“{1}”。是否在新客户端审核发布后重新绑定到新客户端？原客户端与历史版本会保留。", { "0": target.displayName, "1": target.boundClientName }));
+      replaceConfirmed = window.confirm(t("clients.binding.replaceConfirmation", { "server": target.displayName, "client": target.boundClientName }));
       if (!replaceConfirmed) return;
     }
     runtimeBaseline.current = { minecraftVersion: form.getValues("minecraftVersion"), javaVersion: form.getValues("javaVersion") };
@@ -140,7 +142,7 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
         parts.push({ partNumber: number, etag });
       }
       setUpload(await api<UploadView>(`/api/v1/clients/uploads/${next.id}/complete`, "POST", { parts })); setPercent(100);
-    } catch (error) { setError(error instanceof Error ? error.message : t("上传失败")); }
+    } catch (error) { setError(error instanceof Error ? serializeError(error) : t("clientUpload.uploadFailed")); }
     finally { setUploading(false); }
   }
   function chooseFile(next: File | undefined) {
@@ -154,72 +156,72 @@ function UploadEditor({ targets, organizations, client: originalClient, current,
   }
   const processing = !!upload && ["QUEUED", "PROCESSING"].includes(upload.status); const submitting = form.formState.isSubmitting;
   return <Form {...form}><form className="space-y-6" onSubmit={form.handleSubmit(async metadata => {
-    if (!upload || upload.status !== "READY") { setError(t("请先上传并等待解析完成")); return; }
-    if (current && metadata.versionLabel === current.versionLabel) { form.setError("versionLabel", { message: t("更新必须设置一个新的版本号") }); return; }
+    if (!upload || upload.status !== "READY") { setError(t("clientUpload.uploadAndWaitForProcessingFirst")); return; }
+    if (current && metadata.versionLabel === current.versionLabel) { form.setError("versionLabel", { message: t("clientUpload.anUpdateMustUseANewVersionNumber") }); return; }
     const { mods: _mods, modDetails: _modDetails, ...submission } = metadata;
     void _mods; void _modDetails;
-    if (await run(() => api(`/api/v1/clients/uploads/${upload.id}/submit`, "POST", { ...submission, ...(packageFormatVersion === 1 ? { platforms } : {}) }), t("客户端已提交审核，组包任务将在后台继续"))) onDone();
+    if (await run(() => api(`/api/v1/clients/uploads/${upload.id}/submit`, "POST", { ...submission, ...(packageFormatVersion === 1 ? { platforms } : {}) }), t("clientUpload.clientSubmittedForReviewPackagingWillContinueInThe"))) onDone();
   })}>
     <PackageFormatChoice value={packageFormatVersion} onChange={setPackageFormatVersion} enabledFormats={enabledFormats} locked={!!upload} busy={uploading || submitting} />
-    <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-organization">{t("所属组织")}</label>
-      <Select value={organizationId} disabled={!!identity || uploading || processing} onValueChange={value => { setOrganizationId(value); setServerId("none"); }}><SelectTrigger id="upload-organization" className="w-full"><SelectValue placeholder={t("选择所属组织")} /></SelectTrigger><SelectContent>{organizations.map(org => <SelectItem key={org.id} value={org.id}>{org.displayName}</SelectItem>)}</SelectContent></Select></div>
-      {!fixedClient && <div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-server">{t("绑定服务器（可选）")}</label>
+    <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-organization">{t("clientUpload.organization")}</label>
+      <Select value={organizationId} disabled={!!identity || uploading || processing} onValueChange={value => { setOrganizationId(value); setServerId("none"); }}><SelectTrigger id="upload-organization" className="w-full"><SelectValue placeholder={t("clientUpload.selectOrganization")} /></SelectTrigger><SelectContent>{organizations.map(org => <SelectItem key={org.id} value={org.id}>{org.displayName}</SelectItem>)}</SelectContent></Select></div>
+      {!fixedClient && <div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-server">{t("clientUpload.bindServerOptional")}</label>
       <Select value={serverId} disabled={!!identity || uploading || processing} onValueChange={setServerId}><SelectTrigger id="upload-server" className="w-full"><SelectValue /></SelectTrigger><SelectContent>
-        <SelectItem value="none" disabled={!organizations.find(org => org.id === organizationId)?.canUnbound}>{t("暂不绑定")}</SelectItem>
-        {targets.filter(target => target.organizationId === organizationId).map(target => <SelectItem key={target.serverId} value={target.serverId}>{target.displayName} ({target.serverId}){target.boundClientName ? t(" · 已绑定 {0}", { "0": target.boundClientName }) : ""}</SelectItem>)}
+        <SelectItem value="none" disabled={!organizations.find(org => org.id === organizationId)?.canUnbound}>{t("clientUpload.leaveUnbound")}</SelectItem>
+        {targets.filter(target => target.organizationId === organizationId).map(target => <SelectItem key={target.serverId} value={target.serverId}>{target.displayName} ({target.serverId}){target.boundClientName ? t("clientUpload.boundServerSuffix", { "server": target.boundClientName }) : ""}</SelectItem>)}
       </SelectContent></Select></div>}</div>
-    {fixedClient && comparisonDrafts.length > 0 && <div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-comparison">{t("对比并替代未发布版本")}</label>
+    {fixedClient && comparisonDrafts.length > 0 && <div className="space-y-2"><label className="text-sm font-medium" htmlFor="upload-comparison">{t("clientUpload.compareAndReplaceAnUnpublishedVersion")}</label>
       <Select value={comparisonDraftId} onValueChange={setComparisonDraftId} disabled={uploading || !!upload}><SelectTrigger id="upload-comparison" className="w-full"><SelectValue /></SelectTrigger><SelectContent>
-        <SelectItem value="none">{t("独立提交，不替代旧草稿")}</SelectItem>{comparisonDrafts.map(draft => <SelectItem key={draft.id} value={draft.id}>{draft.versionLabel ?? t("未填写版本")}</SelectItem>)}
-      </SelectContent></Select><p className="text-xs text-muted-foreground">{t("用于查看上次上传的差异。本版本成功发布后，才归档所选旧草稿及其替代链。玩家更新仍以已发布版本为基准。")}</p></div>}
+        <SelectItem value="none">{t("clientUpload.independentSubmissionKeepOldDrafts")}</SelectItem>{comparisonDrafts.map(draft => <SelectItem key={draft.id} value={draft.id}>{draft.versionLabel ?? t("clientUpload.versionNotEntered")}</SelectItem>)}
+      </SelectContent></Select><p className="text-xs text-muted-foreground">{t("clientUpload.compareChangesAgainstThePreviousUploadTheSelectedDraft")}</p></div>}
     <input ref={input} className="hidden" type="file" accept=".zip,.mrpack,application/zip,application/x-modrinth-modpack+zip" disabled={!packageFormatVersion || uploading || processing} onChange={event => chooseFile(event.target.files?.[0])} />
     <button type="button" disabled={!packageFormatVersion || uploading || processing} className={`flex min-h-52 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${dragging ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/60 hover:bg-muted/40"} disabled:cursor-not-allowed`}
       onClick={() => input.current?.click()} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); chooseFile(event.dataTransfer.files[0]); }}>
       {uploading || processing ? <LoaderCircle className="size-10 animate-spin text-primary" /> : upload || file ? <FileArchive className="size-10 text-primary" /> : <UploadCloud className="size-10 text-muted-foreground" />}
-      <span className="font-medium" role="status" aria-live="polite">{!packageFormatVersion ? t("请先选择 v1 或 v2") : uploading ? t("上传中 {0}%", { "0": percent }) : processing ? t(uploadProcessingLabel(upload!)) : upload?.status === "READY" ? t("处理完成 · 点击更换完整整合包") : file?.name ?? t("拖拽 ZIP／mrpack 到这里，或点击选择文件")}</span>
-      <span className="text-sm text-muted-foreground">{upload ? `${upload.fileName} · ${formatBytes(upload.size)}` : t(".minecraft ZIP／Modrinth mrpack／PCL 导出 ZIP · 最大 {0} MB", { "0": state.maxUploadSizeMb })}</span>
+      <span className="font-medium" role="status" aria-live="polite">{!packageFormatVersion ? t("clientUpload.chooseV1OrV2First") : uploading ? t("clientUpload.uploadProgress", { "percent": percent }) : processing ? uploadProcessingLabel(upload!, t) : upload?.status === "READY" ? t("clientUpload.processingCompleteClickToReplaceTheFullPack") : file?.name ?? t("clientUpload.dropAZipMrpackHereOrClickToSelect")}</span>
+      <span className="text-sm text-muted-foreground">{upload ? `${upload.fileName} · ${formatBytes(upload.size)}` : t("clientUpload.acceptedFiles", { "maxMb": state.maxUploadSizeMb })}</span>
       {uploading && <span className="h-2 w-64 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${percent}%` }} /></span>}
     </button>
-    {upload?.packageFormatVersion === 2 && upload.status === "READY" && <Alert><AlertDescription>{t("v2 信息识别与本地文件校验完成，远程声明已保存。核对并提交审核后，Worker 会在后台生成跨平台完整 .muapack；审核、签名和产物校验完成后才可发布。")}</AlertDescription></Alert>}
+    {upload?.packageFormatVersion === 2 && upload.status === "READY" && <Alert><AlertDescription>{t("clientUpload.v2DetectionAndLocalValidationCompletedRemoteDeclarationsSaved")}</AlertDescription></Alert>}
     {upload && ["UPLOADING", "QUEUED", "READY", "FAILED"].includes(upload.status) && !uploading && <Button type="button" variant="outline" onClick={() => void run(async () => {
       await api(`/api/v1/clients/uploads/${upload.id}/cancel`, "POST", {});
       selectedUpload.current = null; setUpload(null); setFile(null); setPackageFormatVersion(null); setError(""); if (input.current) input.current.value = "";
-    }, t("已取消上传，可以重新选择格式"), false)}>{t("取消上传／重新选择格式")}</Button>}
-    {upload?.processingPhase === "SELECT_INSTANCE" && upload.detectedInfo && <Alert><AlertDescription className="space-y-3"><p>{t("整合包包含多个实例，请选择要发布的客户端。选择后继续识别与文件处理。")}</p>
+    }, t("clientUpload.uploadCancelledYouCanChooseADifferentFormat"), false)}>{t("clientUpload.cancelUploadChooseFormatAgain")}</Button>}
+    {upload?.processingPhase === "SELECT_INSTANCE" && upload.detectedInfo && <Alert><AlertDescription className="space-y-3"><p>{t("clientUpload.thePackContainsMultipleInstancesSelectTheClientTo")}</p>
       <Select onValueChange={instanceId => void run(async () => {
         appliedInspection.current = null;
         runtimeBaseline.current = { minecraftVersion: form.getValues("minecraftVersion"), javaVersion: form.getValues("javaVersion") };
         setUpload(await api<UploadView>(`/api/v1/clients/uploads/${upload.id}/select-instance`, "POST", { instanceId }));
-      }, t("已选择实例，等待 Worker 继续处理"), false)}><SelectTrigger className="w-full" aria-label={t("选择客户端实例")}><SelectValue placeholder={t("选择要发布的实例")} /></SelectTrigger><SelectContent>
-        {upload.detectedInfo.candidates.map(candidate => <SelectItem key={candidate.instanceId} value={candidate.instanceId!}>{candidate.instanceId} · MC {candidate.minecraftVersion ?? t("待确认")} · Java {candidate.javaVersion ?? t("待确认")}{candidate.loader ? ` · ${candidate.loader}` : ""}</SelectItem>)}
+      }, t("clientUpload.instanceSelectedWaitingForWorkerToContinue"), false)}><SelectTrigger className="w-full" aria-label={t("clientUpload.selectClientInstance")}><SelectValue placeholder={t("clientUpload.selectInstanceToPublish")} /></SelectTrigger><SelectContent>
+        {upload.detectedInfo.candidates.map(candidate => <SelectItem key={candidate.instanceId} value={candidate.instanceId!}>{candidate.instanceId} · MC {candidate.minecraftVersion ?? t("clientUpload.needsConfirmation")} · Java {candidate.javaVersion ?? t("clientUpload.needsConfirmation")}{candidate.loader ? ` · ${candidate.loader}` : ""}</SelectItem>)}
       </SelectContent></Select>
     </AlertDescription></Alert>}
-    {upload?.detectedInfo && !upload.detectedInfo.requiresSelection && <Alert><AlertDescription className="space-y-1"><p>{upload.detectedInfo.minecraftVersion && upload.detectedInfo.javaVersion ? t("客户端信息已识别并填充，请核对 MC 与 Java 环境。") : t("客户端信息识别完成，缺失或冲突的 MC／Java 信息请手动确认。")}</p>
-      {upload.detectedInfo.pack && <p>{t("包内名称：")}{upload.detectedInfo.pack.name} {" " + t("· 版本") + " "}{upload.detectedInfo.pack.version}{upload.detectedInfo.pack.wrapper ? t(" · PCL 封装") : " · Modrinth"}</p>}
-      {upload.detectedInfo.instanceId && <p>{t("目标实例：")}{upload.detectedInfo.instanceId}</p>}
-      {upload.detectedInfo.loader && <p>{t("模组加载器：")}{upload.detectedInfo.loader} {upload.detectedInfo.loaderVersion}</p>}
-      {upload.detectedInfo.minecraftSource && <p className="break-all text-xs text-muted-foreground">{t("MC 来源：")}{upload.detectedInfo.minecraftSource}</p>}
-      {upload.detectedInfo.javaSource && <p className="break-all text-xs text-muted-foreground">{t("Java 来源：")}{upload.detectedInfo.javaSource}</p>}
+    {upload?.detectedInfo && !upload.detectedInfo.requiresSelection && <Alert><AlertDescription className="space-y-1"><p>{upload.detectedInfo.minecraftVersion && upload.detectedInfo.javaVersion ? t("clientUpload.clientDetailsDetectedAndFilledInVerifyMinecraftAnd") : t("clientUpload.clientDetectionCompletedConfirmMissingOrConflictingMinecraftJava")}</p>
+      {upload.detectedInfo.pack && <p>{t("clientUpload.packName")}{upload.detectedInfo.pack.name} {" " + t("clientUpload.version") + " "}{upload.detectedInfo.pack.version}{upload.detectedInfo.pack.wrapper ? t("clientUpload.pclArchive") : " · Modrinth"}</p>}
+      {upload.detectedInfo.instanceId && <p>{t("clientUpload.targetInstance")}{upload.detectedInfo.instanceId}</p>}
+      {upload.detectedInfo.loader && <p>{t("clientUpload.modLoader")}{upload.detectedInfo.loader} {upload.detectedInfo.loaderVersion}</p>}
+      {upload.detectedInfo.minecraftSource && <p className="break-all text-xs text-muted-foreground">{t("clientUpload.minecraftSource")}{formatMessage(t, upload.detectedInfo.minecraftSource)}</p>}
+      {upload.detectedInfo.javaSource && <p className="break-all text-xs text-muted-foreground">{t("clientUpload.javaSource")}{formatMessage(t, upload.detectedInfo.javaSource)}</p>}
     </AlertDescription></Alert>}
-    {file && !uploading && !processing && !upload && <Button type="button" onClick={() => void startUpload(file)}>{t("开始上传")}</Button>}
-    {upload?.status === "FAILED" && <Alert variant="destructive"><AlertDescription>{t(upload.error ?? "")}<Button className="ml-3" type="button" size="sm" variant="outline" onClick={() => void run(async () => setUpload(await api<UploadView>(`/api/v1/clients/uploads/${upload.id}/retry`, "POST", {})), t("已重新排队"), false)}>{t("重新分析")}</Button></AlertDescription></Alert>}
-    {error && <Alert variant="destructive" role="alert"><AlertDescription>{t(error)}</AlertDescription></Alert>}
-    {current && <Alert><AlertDescription>{t("原版本为") + " "}{current.versionLabel}{t("。必须上传完整客户端并设置新的版本号；发布内容不能原地修改。")}</AlertDescription></Alert>}
+    {file && !uploading && !processing && !upload && <Button type="button" onClick={() => void startUpload(file)}>{t("clientUpload.startUpload")}</Button>}
+    {upload?.status === "FAILED" && <Alert variant="destructive"><AlertDescription>{formatMessage(t, upload.error ?? "")}<Button className="ml-3" type="button" size="sm" variant="outline" onClick={() => void run(async () => setUpload(await api<UploadView>(`/api/v1/clients/uploads/${upload.id}/retry`, "POST", {})), t("clientUpload.requeued"), false)}>{t("clientUpload.analyzeAgain")}</Button></AlertDescription></Alert>}
+    {error && <Alert variant="destructive" role="alert"><AlertDescription>{formatMessage(t, error)}</AlertDescription></Alert>}
+    {current && <Alert><AlertDescription>{t("clientUpload.originalVersion") + " "}{current.versionLabel}{t("clientUpload.aCompleteClientAndANewVersionNumberAre")}</AlertDescription></Alert>}
     <fieldset disabled={submitting || uploading} className="grid gap-5 sm:grid-cols-2">
-      {([ ["name", t("客户端名称"), "NPUcraft"], ["versionLabel", t("客户端版本"), "1.4.3"], ["minecraftVersion", t("MC 版本"), "1.21.1 / 26.1"] ] as const).map(([name, label, placeholder]) => <FormField key={name} control={form.control} name={name} render={({ field }) => <FormItem><FormLabel>{label}</FormLabel><FormControl><Input {...field} placeholder={placeholder} readOnly={name === "name" && !!fixedClient} /></FormControl><FormMessage /></FormItem>} />)}
-      <FormField control={form.control} name="javaVersion" render={({ field }) => <FormItem><FormLabel>{t("Java 版本")}</FormLabel><Select value={field.value ? String(field.value) : ""} disabled={uploading || submitting} onValueChange={value => field.onChange(Number(value))}><FormControl><SelectTrigger className="w-full"><SelectValue placeholder={t("等待识别或手动选择")} /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 19 }, (_, i) => i + 7).map(version => <SelectItem key={version} value={String(version)}>Java {version}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
-      <div className="space-y-3 sm:col-span-2"><h3 className="text-sm font-medium">{t("模组列表 ·") + " "}{mods.length}</h3>
-        <p className="text-xs text-muted-foreground">{!upload && current && !file ? t("以下为原版本的模组列表；上传新包后自动替换。") : packageFormatVersion === 2 ? t("v2 保留本地模组和远程下载声明；远程模组由 Launcher 下载。optional 标记保留，列表由识别结果生成。") : t("自动识别本地和远程模组。optional 模组全部打包，玩家在 Launcher 选择启用；列表只读。")}</p>
-        <ModTable key={upload?.id ?? (file ? "selected-file" : "previous-version")} mods={mods} details={upload?.detectedInfo?.importFiles ?? current?.modDetails} empty={upload?.status === "READY" ? t("未识别到模组 JAR 文件") : processing || uploading ? t("正在解析，完成后自动显示模组列表") : t("上传完整 ZIP／mrpack，解析后自动生成模组列表")} />
+      {([ ["name", t("clientUpload.clientName"), "NPUcraft"], ["versionLabel", t("clientUpload.clientVersion"), "1.4.3"], ["minecraftVersion", t("clientUpload.minecraftVersion"), "1.21.1 / 26.1"] ] as const).map(([name, label, placeholder]) => <FormField key={name} control={form.control} name={name} render={({ field }) => <FormItem><FormLabel>{label}</FormLabel><FormControl><Input {...field} placeholder={placeholder} readOnly={name === "name" && !!fixedClient} /></FormControl><FormMessage /></FormItem>} />)}
+      <FormField control={form.control} name="javaVersion" render={({ field }) => <FormItem><FormLabel>{t("clientUpload.javaVersion")}</FormLabel><Select value={field.value ? String(field.value) : ""} disabled={uploading || submitting} onValueChange={value => field.onChange(Number(value))}><FormControl><SelectTrigger className="w-full"><SelectValue placeholder={t("clientUpload.waitingForDetectionOrManualSelection")} /></SelectTrigger></FormControl><SelectContent>{Array.from({ length: 19 }, (_, i) => i + 7).map(version => <SelectItem key={version} value={String(version)}>Java {version}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>} />
+      <div className="space-y-3 sm:col-span-2"><h3 className="text-sm font-medium">{t("clientUpload.modList") + " "}{mods.length}</h3>
+        <p className="text-xs text-muted-foreground">{!upload && current && !file ? t("clientUpload.thisIsTheOriginalVersionSModListA") : packageFormatVersion === 2 ? t("clientUpload.v2KeepsLocalModsAndRemoteDownloadDeclarationsLauncher") : t("clientUpload.localAndRemoteModsAreDetectedAutomaticallyAllOptional")}</p>
+        <ModTable key={upload?.id ?? (file ? "selected-file" : "previous-version")} mods={mods} details={upload?.detectedInfo?.importFiles ?? current?.modDetails} empty={upload?.status === "READY" ? t("clientShared.noModJarFilesDetected") : processing || uploading ? t("clientUpload.processingTheModListWillAppearWhenComplete") : t("clientUpload.uploadACompleteZipMrpackToGenerateTheMod")} />
       </div>
-      <FormField control={form.control} name="summary" render={({ field }) => <FormItem className="sm:col-span-2"><FormLabel>{t("提交标题 Summary")}</FormLabel><FormControl><Input {...field} placeholder={t("更新客户端配置与模组")} /></FormControl><FormMessage /></FormItem>} />
-      <FormField control={form.control} name="description" render={({ field }) => <FormItem className="sm:col-span-2"><FormLabel>{t("说明 Description · Markdown")}</FormLabel><Tabs defaultValue="edit"><TabsList><TabsTrigger value="edit">{t("编辑")}</TabsTrigger><TabsTrigger value="preview">{t("预览")}</TabsTrigger></TabsList><TabsContent value="edit"><FormControl><Textarea {...field} rows={7} placeholder={t("说明本次客户端的内容、更新原因和注意事项…")} /></FormControl></TabsContent><TabsContent value="preview" className="min-h-40 rounded-md border p-4"><MarkdownText value={description} /></TabsContent></Tabs><FormMessage /></FormItem>} />
+      <FormField control={form.control} name="summary" render={({ field }) => <FormItem className="sm:col-span-2"><FormLabel>{t("clientUpload.summary")}</FormLabel><FormControl><Input {...field} placeholder={t("clientUpload.updateClientConfigurationAndMods")} /></FormControl><FormMessage /></FormItem>} />
+      <FormField control={form.control} name="description" render={({ field }) => <FormItem className="sm:col-span-2"><FormLabel>{t("clientUpload.descriptionMarkdown")}</FormLabel><Tabs defaultValue="edit"><TabsList><TabsTrigger value="edit">{t("clientUpload.edit")}</TabsTrigger><TabsTrigger value="preview">{t("clientUpload.preview")}</TabsTrigger></TabsList><TabsContent value="edit"><FormControl><Textarea {...field} rows={7} placeholder={t("clientUpload.describeTheClientReasonsForTheUpdateAndAny")} /></FormControl></TabsContent><TabsContent value="preview" className="min-h-40 rounded-md border p-4"><MarkdownText value={description} /></TabsContent></Tabs><FormMessage /></FormItem>} />
     </fieldset>
     {upload?.statistics && <UpdateStats statistics={upload.statistics} comparison={upload.comparisonStatistics} version={version} updating={!!fixedClient} />}
     {upload?.recipeStatistics && <RecipeImportStats statistics={upload.recipeStatistics} />}
     {upload?.recipeStatistics && <RecipeDistributionStats path={`/api/v1/clients/uploads/${upload.id}/distribution-statistics`} />}
-    {!!warnings.length && <Alert><AlertDescription>{warnings.map(warning => <p key={warning}>{t(warning)}</p>)}</AlertDescription></Alert>}
+    {!!warnings.length && <Alert><AlertDescription>{warnings.map((warning, index) => <p key={index}>{formatMessage(t, warning)}</p>)}</AlertDescription></Alert>}
     <PackageBuildOptions packageFormatVersion={packageFormatVersion} value={platforms} onChange={setPlatforms} disabled={uploading || submitting} />
-    <div className="flex items-center justify-between gap-4 border-t pt-5"><p className="text-xs text-muted-foreground">{packageFormatVersion === 2 ? t("v2 完整包仅包含本地载荷和远程配方，环境由 Launcher 准备。") : t("MC 与 Java 自动识别后可核对调整；客户端发布版本仍需填写。完整校验完成后可提交审核。")}</p><Button type="submit" disabled={packageFormatVersion === 1 && !platforms.length || upload?.status !== "READY" || uploading || submitting}>{submitting && <LoaderCircle className="size-4 animate-spin" />}{t("提交审核")}</Button></div>
+    <div className="flex items-center justify-between gap-4 border-t pt-5"><p className="text-xs text-muted-foreground">{packageFormatVersion === 2 ? t("clientUpload.v2FullPackagesContainLocalPayloadsAndRemoteRecipes") : t("clientUpload.checkDetectedMinecraftAndJavaVersionsEnterTheRelease")}</p><Button type="submit" disabled={packageFormatVersion === 1 && !platforms.length || upload?.status !== "READY" || uploading || submitting}>{submitting && <LoaderCircle className="size-4 animate-spin" />}{t("clientUpload.submitForReview")}</Button></div>
   </form></Form>;
 }

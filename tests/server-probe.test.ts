@@ -1,3 +1,4 @@
+import { plainDiagnosticText } from "../src/lib/diagnostics";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer, type Socket } from "node:net";
@@ -82,14 +83,14 @@ test("address parsing supports ports and IPv6, resolves SRV and pins only public
   assert.equal(parseMinecraftAddress("mc.example.test:25566").port, 25566);
   assert.equal(parseMinecraftAddress("[2606:4700::1111]:25566").hostname, "2606:4700::1111");
   for (const value of ["https://example.test", "user@example.test", "game.test:0", "game.test:65536", "game.test/path", "bad host", "[bad]:25565"]) assert.throws(() => parseMinecraftAddress(value));
-  await assert.rejects(resolveMinecraftTarget("127.0.0.1:25565"), /公网地址/);
-  await assert.rejects(resolveMinecraftTarget("[::1]"), /公网地址/);
+  await assert.rejects(resolveMinecraftTarget("127.0.0.1:25565"), /public/i);
+  await assert.rejects(resolveMinecraftTarget("[::1]"), /public/i);
   let srvCalls = 0; const names: string[] = [];
   const dns = { srv: async () => { srvCalls++; return [{ priority: 0, weight: 1, name: "edge.example.test.", port: 25566 }]; }, addresses: async (name: string) => { names.push(name); return [{ address: "8.8.8.8", family: 4 }]; } };
   const target = await resolveMinecraftTarget("game.example.test", dns);
   assert.equal(target.port, 25566); assert.equal(target.hostname, "game.example.test"); assert.deepEqual(names, ["edge.example.test"]);
   await resolveMinecraftTarget("game.example.test:25565", dns); assert.equal(srvCalls, 1);
-  await assert.rejects(resolveMinecraftTarget("game.example.test:25565", { addresses: async () => [{ address: "127.0.0.1", family: 4 }] }), /内网或保留/);
+  await assert.rejects(resolveMinecraftTarget("game.example.test:25565", { addresses: async () => [{ address: "127.0.0.1", family: 4 }] }), /private or reserved/i);
 });
 
 test("probes use the pinned destination, apply the exact yellow threshold, and stop after a DNS deadline", async () => {
@@ -101,7 +102,7 @@ test("probes use the pinned destination, apply the exact yellow threshold, and s
   assert.equal(result.state, "ONLINE");
   let connected = false;
   const timeout = await probeMinecraftAddress("game.example.test", { timeoutMs: 10, resolve: async () => { await new Promise(resolve => setTimeout(resolve, 30)); return target; }, status: async () => { connected = true; return status; } });
-  assert.equal(timeout.state, "OFFLINE"); assert(timeout.message.includes("超时"));
+  assert.equal(timeout.state, "OFFLINE"); assert(plainDiagnosticText(timeout.message).includes("timed out"));
   await new Promise(resolve => setTimeout(resolve, 40)); assert.equal(connected, false);
 });
 

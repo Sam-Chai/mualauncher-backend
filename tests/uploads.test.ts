@@ -1,3 +1,4 @@
+import { plainDiagnosticText } from "../src/lib/diagnostics";
 import { fixtureClientId } from "./fixtures/identity";
 import { configureLocalTestStorage } from "./fixtures/local-storage";
 import "dotenv/config";
@@ -111,7 +112,7 @@ async function finishPackages(draftId: string) {
   for (let i = 0; i < 150; i++) {
     const remaining = await client.packageBuild.count({ where: { draftId, required: true, status: { not: "READY" } } }); if (!remaining) return;
     assert.equal(await runPackageWorker(workerClient, fixtureEnvironment), true, "Worker must have eligible package work");
-    const failed = await client.packageBuild.findFirst({ where: { draftId, required: true, status: "FAILED" } }); assert.equal(failed, null, failed?.error ?? "build failed");
+    const failed = await client.packageBuild.findFirst({ where: { draftId, required: true, status: "FAILED" } }); assert.equal(failed, null, plainDiagnosticText(failed?.error) ?? "build failed");
   }
   assert.fail("Package pipeline did not finish");
 }
@@ -213,7 +214,7 @@ test("lowering upload size keeps existing multipart completion and Worker proces
     const completion = await work(db => c.prepareCompletion(db, root, upload.id, { parts }));
     await c.transferCompletion(completion); await work(db => c.queueCompletedUpload(db, root, upload.id));
     assert.equal(await runUploadWorker(workerClient), true);
-    const ready = await c.findUpload(client, root, upload.id); assert.equal(ready.status, "READY", ready.error ?? "existing upload should finish");
+    const ready = await c.findUpload(client, root, upload.id); assert.equal(ready.status, "READY", plainDiagnosticText(ready.error) ?? "existing upload should finish");
     await work(db => c.cancelUpload(db, root, upload.id));
   } finally { await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1024 })); }
 });
@@ -238,7 +239,7 @@ test("upload authorization and API Tokens keep real RBAC, account revocation and
 test("a full ZIP becomes private CAS files and a reviewed, signed immutable current release", async () => {
   const upload = await prepare(v1); assert.equal(upload.status, "READY"); assert.equal(upload.statistics?.fileCount, 4); assert.equal(upload.statistics?.fullSize, 113);
   assert.equal(upload.packageFormatVersion, 1, "old callers default to muapack v1, independently of Manifest schemaVersion");
-  assert.deepEqual(upload.detectedMods, ["shared.jar"]); assert(upload.warnings.some(warning => warning.includes("忽略")));
+  assert.deepEqual(upload.detectedMods, ["shared.jar"]); assert(upload.warnings.some(warning => plainDiagnosticText(warning).includes("Ignored")));
   const anonymous = await fetch(process.env.S3_ENDPOINT + "/" + casBucket() + "/" + casKey(digest(shared))); assert.equal(anonymous.status, 403);
   const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, fields)); assert.equal((await client.serverPublication.findUniqueOrThrow({ where: { serverId: "NPA" } })).releaseId, null);
   assert.equal((await work(db => c.submitUpload(db, admin, upload.id, fields))).draftId, draftId, "Submission retry is idempotent");
@@ -672,7 +673,7 @@ test("the standard HTTP API and Actions upload script share the reviewed release
     const binding = await client.serverPublication.findUniqueOrThrow({ where: { serverId: "OTH" } });
     const create = (body: unknown) => fetch(origin + "/api/v1/clients", { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const target = { organizationId: org, serverId: "OTH", publicationRevision: binding.revision, expectedClientId: fixtureClientId("OTH"), replaceConfirmed: true };
-    const duplicate = await create({ ...target, name: "npucraft" }); assert.equal(duplicate.status, 409); assert((await duplicate.json()).error.includes("更新"));
+    const duplicate = await create({ ...target, name: "npucraft" }); assert.equal(duplicate.status, 409); assert.equal((await duplicate.json()).code, "diagnostics.clientService.clientNameAlreadyExistsUseUpdateToSubmitANew");
     assert.equal((await create({ organizationId: org, name: "Unbound token" })).status, 403);
     assert.equal((await create({ ...target, name: "HTTP alternate", replaceConfirmed: false })).status, 409);
     const alternate = await create({ ...target, name: "HTTP alternate" }); assert.equal(alternate.status, 201);
@@ -1044,7 +1045,7 @@ test("corrupted recycled CAS is rejected; settings require MUA superadmin and dr
   const trash = "recycle/cas/" + casKey(sha);
   await storageClient().putObject({ Bucket: casBucket(), Key: trash, Body: Buffer.alloc(bytes.length), Metadata: { sha256: sha } });
   const b = await newRecycleClient("Corrupt restoration"); const failed = await prepare(zip, admin, b.clientId);
-  assert.equal(failed.status, "FAILED"); assert(failed.error?.includes("SHA-256")); assert.equal(await objectExists(casBucket(), casKey(sha)), false);
+  assert.equal(failed.status, "FAILED"); assert(plainDiagnosticText(failed.error)?.includes("SHA-256")); assert.equal(await objectExists(casBucket(), casKey(sha)), false);
   await work(db => updateRecycleSettings(db, root, { recycleRetentionDays: 1 }));
   await indexedMaintenance(new Date(now.getTime() + 2 * 86400000)); assert.equal(await objectExists(casBucket(), trash), false);
   await work(db => updateRecycleSettings(db, root, { recycleRetentionDays: 7 }));
@@ -1250,7 +1251,7 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   await work(db => m.updateServer(db, root, "VTF", { isListed: true }));
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "v2 full pipeline", serverId: "VTF", publicationRevision: 0, expectedClientId: fixtureClientId(null) }));
   const upload = await prepare(await readFile("docs/examples/muapack-v2/inputs/target.mrpack"), admin, identity.clientId, true, "recipe.mrpack", null, 2);
-  assert.equal(upload.status, "READY", upload.error ?? "import failed");
+  assert.equal(upload.status, "READY", plainDiagnosticText(upload.error) ?? "import failed");
   const environmentsBefore = await storageClient().listObjects({ Bucket: environmentsBucket() });
   const importDistribution = await recipeDistributionStats(client, admin, "uploads", upload.id);
   assert.equal(importDistribution.fullPackageBytes, null); assert.equal(importDistribution.remoteFiles, 4);
@@ -1260,14 +1261,14 @@ test("v2 full packages use local CAS only, immutable review revisions and explic
   await assert.rejects(work(db => c.reviewClient(db, reader, identity.clientId, draftId, { packageRevision: 1, decision: "approve", note: "test", contentRevision: 1 })), denied(403));
   assert.equal(await runPackageWorker(workerClient, neverResolve), true);
   let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } });
-  assert.equal(build.platform, "universal"); assert.equal(build.revision, 1); assert.equal(build.status, "PREPARED", build.error ?? "preparation failed");
+  assert.equal(build.platform, "universal"); assert.equal(build.revision, 1); assert.equal(build.status, "PREPARED", plainDiagnosticText(build.error) ?? "preparation failed");
   const candidate = await c.draftManifest(client, reviewer, identity.clientId, draftId); assert(candidate.format === "mua-recipe-manifest");
   assert("protocolRevision" in candidate); assert.equal(candidate.protocolRevision, 2); assert(!("supportedPlatforms" in candidate));
   assert.equal(candidate.files.filter(file => file.source.type === "remote").length, 4);
   await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "Checked v2", contentRevision: 1, packageRevision: 1 }));
   await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: true })), denied(409));
   await runPackageWorker(workerClient, neverResolve);
-  build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "build failed");
+  build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", plainDiagnosticText(build.error) ?? "build failed");
   const oldArtifacts = build.artifacts, oldTarget = build.targetSha256;
   const fullDistribution = await recipeDistributionStats(client, admin, "drafts", draftId, identity.clientId);
   assert.equal(fullDistribution.base, null); assert.equal(fullDistribution.fullPackageBytes, packageArtifactsSchema.parse(build.artifacts).full.size);
@@ -1325,7 +1326,7 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   const neverResolve: typeof fixtureEnvironment = async () => { assert.fail("v2 delta must not resolve environment binaries"); };
   const source = await readFile("docs/examples/muapack-v2/inputs/target.mrpack");
   async function submit(bytes: Buffer, version: string, platforms: string[]) {
-    const upload = await prepare(bytes, admin, identity.clientId, true, "delta.mrpack", null, 2); assert.equal(upload.status, "READY", upload.error ?? "import failed");
+    const upload = await prepare(bytes, admin, identity.clientId, true, "delta.mrpack", null, 2); assert.equal(upload.status, "READY", plainDiagnosticText(upload.error) ?? "import failed");
     const { draftId } = await work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name, versionLabel: version, ...(upload.packageFormatVersion === 1 ? { platforms: platforms } : {}) }));
     await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { packageRevision: 1, decision: "approve", note: "Delta verified", contentRevision: 1 }));
     return draftId;
@@ -1338,10 +1339,10 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   // A corrupted published baseline must fail, rather than silently signing an unrelated full/update pair.
   await storageClient().putObject({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: Buffer.from("{}") });
   await runPackageWorker(workerClient, neverResolve);
-  let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "FAILED"); assert.match(build.error!, /基准.*摘要/);
+  let build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "FAILED"); assert.match(plainDiagnosticText(build.error)!, /baseline.*digest/);
   await storageClient().putObject({ Bucket: packagesBucket(), Key: base.manifestObjectKey, Body: baseBytes, Metadata: { sha256: base.manifestSha256 } });
   await work(db => retryPackages(db, admin, identity.clientId, draftId)); await runPackageWorker(workerClient, neverResolve);
-  build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", build.error ?? "delta build failed");
+  build = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(build.status, "READY", plainDiagnosticText(build.error) ?? "delta build failed");
   const artifacts = packageArtifactsSchema.parse(build.artifacts); assert(artifacts.update); assert.equal(artifacts.update.baseReleaseId, base.id); assert.equal(artifacts.update.baseManifestSha256, base.manifestSha256);
   const publicKey = createPublicKey((await signingIdentity()).privateKey);
   const fullPath = join(temp, "delta-full-v2.muapack"), updatePath = join(temp, "delta-update-v2.muapack");
@@ -1374,7 +1375,7 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   await assert.rejects(publicPackage(client, "VTD", "windows-amd64", first, "2", "bad"), denied(400));
   const management = await managementFullPackage(client, reader, identity.clientId, "releases", draftId, "universal"); assert.equal(management.sha256, artifacts.full.sha256);
   const identical = await submit(source, "1.2.0", ["windows-amd64", "linux-amd64"]); await runPackageWorker(workerClient, neverResolve);
-  const emptyBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: identical, required: true } }); assert.equal(emptyBuild.status, "READY", emptyBuild.error ?? "empty delta failed");
+  const emptyBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: identical, required: true } }); assert.equal(emptyBuild.status, "READY", plainDiagnosticText(emptyBuild.error) ?? "empty delta failed");
   const emptyArtifacts = packageArtifactsSchema.parse(emptyBuild.artifacts); assert(emptyArtifacts.update);
   const emptyPath = join(temp, "empty-delta-v2.muapack"); await writeFile(emptyPath, await readObject(emptyArtifacts.update.key));
   const empty = await validateRecipePackArchive(emptyPath, publicKey); assert.equal(empty.objectCount, 0); assert.equal(empty.payloadSize, 0);
@@ -1387,7 +1388,7 @@ test("v2 automatic deltas bind a published baseline, validate both packages and 
   assert.equal(digest(await readObject(base.manifestObjectKey)), base.manifestSha256);
   await indexClientStorage(client); assert(await objectExists(packagesBucket(), artifacts.update.key));
   const differentPlatform = await submit(source, "1.3.0", ["macos-amd64"]); await runPackageWorker(workerClient, neverResolve);
-  const platformBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: differentPlatform, required: true } }); assert.equal(platformBuild.status, "READY", platformBuild.error ?? "new platform failed");
+  const platformBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: differentPlatform, required: true } }); assert.equal(platformBuild.status, "READY", plainDiagnosticText(platformBuild.error) ?? "new platform failed");
   assert(packageArtifactsSchema.parse(platformBuild.artifacts).update, "legacy platform input cannot restrict new v2 packages or deltas");
   await work(db => c.archiveClientDraft(db, admin, identity.clientId, differentPlatform, { contentRevision: 1, packageRevision: 1 }));
 });
@@ -1401,7 +1402,7 @@ test("v2 unpublished draft comparison does not become a player delta baseline", 
   const second = await work(db => c.submitUpload(db, admin, newUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(newUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { packageRevision: 1, decision: "approve", note: "replacement", contentRevision: 1 }));
   for (let i = 0; i < 2; i++) await runPackageWorker(workerClient, async () => { assert.fail("v2 does not resolve environment binaries"); });
-  const build = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(build.status, "READY", build.error ?? "replacement failed");
+  const build = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(build.status, "READY", plainDiagnosticText(build.error) ?? "replacement failed");
   assert.equal(packageArtifactsSchema.parse(build.artifacts).update, null);
   await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { contentRevision: 1, packageRevision: 1, activate: false }));
   assert((await client.clientDraft.findUniqueOrThrow({ where: { id: first.draftId } })).archivedAt);
@@ -1419,7 +1420,7 @@ test("format choice is sealed per upload; v2 imports only local files and does n
   assert.equal(saved.sourceSha256, null); assert.equal(saved.filesObjectKey, null);
   assert.equal(await runUploadWorker(workerClient), true);
   const ready = c.uploadView(await c.findUpload(client, admin, upload.id));
-  assert.equal(ready.status, "READY", ready.error ?? "v2 import failed"); assert.equal(ready.statistics, null);
+  assert.equal(ready.status, "READY", plainDiagnosticText(ready.error) ?? "v2 import failed"); assert.equal(ready.statistics, null);
   assert.equal(ready.recipeStatistics?.localFiles, 5); assert.equal(ready.recipeStatistics?.remoteFiles, 4);
   assert.equal(ready.detectedInfo?.minecraftVersion, "1.21.1"); assert.equal(ready.detectedInfo?.javaVersion, 21);
   assert(ready.detectedInfo?.importFiles?.filter(file => file.source === "remote").every(file => file.status === "DECLARED" && file.downloadedBytes === 0));
@@ -1520,13 +1521,13 @@ test("one client can publish v1, remote-only v2 and v1 again without mixing sign
   const second = await work(db => c.submitUpload(db, admin, remote.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(remote.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, second.draftId, { packageRevision: 1, decision: "approve", note: "remote only", contentRevision: 1 }));
   await runPackageWorker(workerClient, noRuntime);
-  const b2 = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(b2.status, "READY", b2.error ?? "remote-only package failed");
+  const b2 = await client.packageBuild.findFirstOrThrow({ where: { draftId: second.draftId, required: true } }); assert.equal(b2.status, "READY", plainDiagnosticText(b2.error) ?? "remote-only package failed");
   const full = packageArtifactsSchema.parse(b2.artifacts); assert.equal(full.update, null);
   const path = join(temp, "remote-only-v2.muapack"); await writeFile(path, await readObject(full.full.key));
   const verified = await validateRecipePackArchive(path, createPublicKey((await signingIdentity()).privateKey)); assert.equal(verified.objectCount, 0); assert.equal(verified.payloadSize, 0);
   await work(db => c.publishClient(db, root, identity.clientId, second.draftId, { contentRevision: 1, packageRevision: 1, activate: true }));
   assert.equal((await c.clientDetails(client, admin, identity.clientId)).initialPackageFormatVersion, 1, "the initial format stays v1 after publishing v2");
-  const back = await prepare(v2, admin, identity.clientId); assert.equal(back.status, "READY", back.error ?? "v1 import cannot read v2 base");
+  const back = await prepare(v2, admin, identity.clientId); assert.equal(back.status, "READY", plainDiagnosticText(back.error) ?? "v1 import cannot read v2 base");
   const third = await work(db => c.submitUpload(db, admin, back.id, { ...fields, name: identity.name, versionLabel: "1.2.0", ...(back.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, third.draftId, { packageRevision: 1, decision: "approve", note: "v1 again", contentRevision: 1 }));
   await finishPackages(third.draftId);
@@ -1570,7 +1571,7 @@ test("v2 leases, failed retries, revoked owners and local CAS recycling preserve
   const lease = await claimUpload(client); assert.equal(lease?.id, upload.id);
   await client.clientUpload.update({ where: { id: upload.id }, data: { leaseUntil: new Date(0) } });
   await runUploadWorker(workerClient); const ready = c.uploadView(await c.findUpload(client, admin, upload.id));
-  assert.equal(ready.status, "READY", ready.error ?? "lease recovery failed");
+  assert.equal(ready.status, "READY", plainDiagnosticText(ready.error) ?? "lease recovery failed");
   assert.equal((await c.findUpload(client, admin, upload.id)).attempts, 2);
   assert.equal(await client.casReference.count({ where: { clientId: fixtureClientId(identity.clientId) } }), 1);
   assert.equal(await client.casObject.count({ where: { sha256: "4".repeat(64) } }), 0);
@@ -1583,7 +1584,7 @@ test("v2 leases, failed retries, revoked owners and local CAS recycling preserve
   assert.equal(await objectExists(casBucket(), "recycle/cas/" + casKey(sha)), false);
   await work(db => c.cancelUpload(db, admin, reused.id));
   const invalid = await prepare(v1, admin, next.clientId, true, "minecraft.zip", null, 2);
-  assert.equal(invalid.status, "FAILED"); assert.match(invalid.error!, /v2/);
+  assert.equal(invalid.status, "FAILED"); assert.match(plainDiagnosticText(invalid.error)!, /v2/);
   assert.equal((await work(db => c.retryUpload(db, admin, invalid.id))).status, "QUEUED");
   await client.account.update({ where: { id: admin.id }, data: { status: "DISABLED" } });
   try { await runUploadWorker(workerClient); assert.equal((await c.findUpload(client, root, invalid.id)).status, "FAILED"); }
@@ -1596,7 +1597,7 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Real PCL v2" }));
   const upload = await prepare(source, admin, identity.clientId, true, "test_pclFormat 1.0.0.zip", null, 2);
-  assert.equal(upload.status, "READY", upload.error ?? "PCL import failed");
+  assert.equal(upload.status, "READY", plainDiagnosticText(upload.error) ?? "PCL import failed");
   assert.equal(upload.detectedInfo?.minecraftVersion, "1.21.1"); assert.equal(upload.detectedInfo?.javaVersion, 21);
   assert.equal(upload.detectedInfo?.loaderVersion, "21.1.256");
   const declared = upload.detectedInfo?.importFiles?.filter(file => file.source === "remote") ?? [];
@@ -1606,7 +1607,7 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   await runPackageWorker(workerClient, neverResolve);
   await work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { packageRevision: 1, decision: "approve", note: "Real PCL import", contentRevision: 1 }));
   await runPackageWorker(workerClient, neverResolve);
-  const build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "READY", build.error ?? "PCL v2 build failed");
+  const build = await client.packageBuild.findFirstOrThrow({ where: { draftId, required: true } }); assert.equal(build.status, "READY", plainDiagnosticText(build.error) ?? "PCL v2 build failed");
   const full = await managementFullPackage(client, admin, identity.clientId, "drafts", draftId, "universal");
   const bytes = Buffer.from(await (await fetch(full.url)).arrayBuffer()); assert.equal(digest(bytes), full.sha256);
   const pack = join(temp, "real-pcl-v2.muapack"); await writeFile(pack, bytes);
@@ -1625,7 +1626,7 @@ test("real PCL v2 imports exported launcher settings safely and produces a revie
   const next = await work(db => c.submitUpload(db, admin, nextUpload.id, { ...fields, name: identity.name, versionLabel: "1.1.0", ...(nextUpload.packageFormatVersion === 1 ? { platforms: ["windows-amd64"] } : {}) }));
   await work(db => c.reviewClient(db, reviewer, identity.clientId, next.draftId, { packageRevision: 1, decision: "approve", note: "Real PCL delta", contentRevision: 1 }));
   await runPackageWorker(workerClient, neverResolve);
-  const nextBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: next.draftId, required: true } }); assert.equal(nextBuild.status, "READY", nextBuild.error ?? "real PCL delta failed");
+  const nextBuild = await client.packageBuild.findFirstOrThrow({ where: { draftId: next.draftId, required: true } }); assert.equal(nextBuild.status, "READY", plainDiagnosticText(nextBuild.error) ?? "real PCL delta failed");
   const nextArtifacts = packageArtifactsSchema.parse(nextBuild.artifacts); assert(nextArtifacts.update); assert.equal(nextArtifacts.update.baseReleaseId, published.releaseId);
   const updateBytes = await readObject(nextArtifacts.update.key); assert.equal(digest(updateBytes), nextArtifacts.update.sha256);
   const updatePath = join(temp, "real-pcl-delta-v2.muapack"); await writeFile(updatePath, updateBytes);
@@ -1640,7 +1641,7 @@ test("real HMCL mrpack downloads and verifies declared mods in an isolated Worke
   const source = await readFile(process.env.MUA_REAL_MRPACK!); const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
   const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Real HMCL import" }));
   const upload = await prepare(source, admin, identity.clientId, true, "test_modrinthFormat.mrpack");
-  assert.equal(upload.status, "READY", upload.error ?? "upload failed"); assert.equal(upload.detectedInfo?.minecraftVersion, "26.1");
+  assert.equal(upload.status, "READY", plainDiagnosticText(upload.error) ?? "upload failed"); assert.equal(upload.detectedInfo?.minecraftVersion, "26.1");
   assert.equal(upload.detectedInfo?.javaVersion, 25); assert.equal(upload.detectedInfo?.loaderVersion, "0.19.5");
   const remote = upload.detectedInfo?.importFiles?.filter(file => file.source === "remote"); assert.equal(remote?.length, 1);
   assert.equal(remote![0].status, "VERIFIED"); assert.equal(remote![0].downloadedBytes, 2521340);

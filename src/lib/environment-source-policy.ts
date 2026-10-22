@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { invariant } from "./errors";
 import { remoteSourceUrl } from "./remote-download";
@@ -9,7 +10,7 @@ const hosts = new Set(["piston-meta.mojang.com", "piston-data.mojang.com", "laun
   "release-assets.githubusercontent.com", "objects.githubusercontent.com"]);
 export function trustedEnvironmentUrl(value: string) {
   const url = new URL(value);
-  invariant(url.protocol === "https:" && (!url.port || url.port === "443") && !url.username && !url.password && !url.hash && hosts.has(url.hostname), 422, "环境下载地址不在官方来源白名单中");
+  invariant(url.protocol === "https:" && (!url.port || url.port === "443") && !url.username && !url.password && !url.hash && hosts.has(url.hostname), 422, diagnosticText("diagnostics.environmentSourcePolicy.theEnvironmentDownloadUrlIsNotAnApprovedOfficialSource"));
   return url;
 }
 export type EnvironmentCandidate = { url: string; source: string; mirror: boolean; proxy: boolean; category: string };
@@ -46,6 +47,6 @@ export function environmentCandidateUrl(value: string, candidate: EnvironmentCan
   if (candidate.source === "bmclapi") return url;
   if (hosts.has(url.hostname)) return trustedEnvironmentUrl(value);
   const mirror = [...MINECRAFT_SOURCES, ...JAVA_SOURCES].find(item => new URL(item.url).hostname === url.hostname);
-  invariant(candidate.mirror && mirror && url.pathname.startsWith(new URL(mirror.url).pathname + "/"), 422, "环境重定向不在受信来源中");
+  invariant(candidate.mirror && mirror && url.pathname.startsWith(new URL(mirror.url).pathname + "/"), 422, diagnosticText("diagnostics.environmentSourcePolicy.theEnvironmentRedirectIsNotATrustedSource"));
   return url;
 }

@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { z } from "zod";
 import type { Actor, Db } from "./auth";
@@ -20,7 +21,7 @@ export async function uploadSizeSettings(db: Db, actor: Actor) {
 export async function updateUploadSizeSettings(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
   const result = z.object({ maxUploadSizeMb: maxUploadSizeMbSchema }).strict().safeParse(raw);
-  invariant(result.success, 400, `最大上传大小必须为 1–${MAX_UPLOAD_SIZE_MB} MB 的整数`);
+  invariant(result.success, 400, diagnosticText("diagnostics.uploadSizeSettings.theMaximumUploadSizeMustBeAnIntegerFrom1", { arg0: MAX_UPLOAD_SIZE_MB }));
   const previous = await maxUploadSizeMb(db);
   const value = result.data.maxUploadSizeMb;
   await db.platformSettings.upsert({ where: { id: "platform" }, create: { id: "platform", maxUploadSizeMb: value }, update: { maxUploadSizeMb: value } });

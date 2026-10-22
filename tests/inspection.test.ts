@@ -37,13 +37,13 @@ test("JAR metadata supplies missing game identity and Java; conflicting game ver
   assert.equal(info.minecraftVersion, "26.1"); assert.equal(info.javaVersion, 25);
   const conflict = await inspect({ "versions/renamed/renamed.json": { clientVersion: "1.21.1", javaVersion: { majorVersion: 21 } } },
     { "versions/renamed/renamed.jar": { id: "26.1", java_version: 25 } });
-  assert.equal(conflict.minecraftVersion, null); assert.equal(conflict.javaVersion, null); assert(conflict.warnings.some(w => w.includes("冲突")));
+  assert.equal(conflict.minecraftVersion, null); assert.equal(conflict.javaVersion, null); assert(conflict.warnings.some(w => /conflicting/i.test(w)));
 });
 test("missing parent metadata and cyclic inheritance produce warnings without executing or downloading uploaded references", async () => {
   const missing = await inspect({ "versions/custom/custom.json": { inheritsFrom: "1.20.4", downloads: { client: { url: "http://127.0.0.1/private" } } } });
-  assert.equal(missing.minecraftVersion, "1.20.4"); assert.equal(missing.javaVersion, 17); assert(missing.warnings.some(w => w.includes("缺少父版本")));
+  assert.equal(missing.minecraftVersion, "1.20.4"); assert.equal(missing.javaVersion, 17); assert(missing.warnings.some(w => /parent version.*missing/i.test(w)));
   const cycle = await inspect({ "versions/a/a.json": { inheritsFrom: "b" }, "versions/b/b.json": { inheritsFrom: "a" } }, {}, "a");
-  assert(cycle.warnings.some(w => w.includes("循环"))); assert.equal(cycle.minecraftVersion, null);
+  assert(cycle.warnings.some(w => /cycl/i.test(w))); assert.equal(cycle.minecraftVersion, null);
 });
 test("known official runtime boundaries are exact; unknown future releases and unlisted snapshots are not guessed", () => {
   for (const [version, java] of [["1.16.5", 8], ["1.17.1", 16], ["1.18", 17], ["1.20.4", 17], ["1.20.5", 21], ["1.21.11", 21], ["26.1", 25]] as const)

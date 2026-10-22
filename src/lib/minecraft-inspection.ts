@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import type { ClientInspection, DetectedRuntime } from "./client-contract";
 import { minecraftJava } from "./minecraft-java";
@@ -46,27 +47,27 @@ function gameHints(json: Json, path: string): { value: string; source: string }[
 export async function inspectMinecraftRuntime(paths: readonly string[], reader: MetadataReader, selectedInstanceId?: string | null): Promise<ClientInspection> {
   const versions = new Map<string, { path: string; json: Json }>(); const warnings: string[] = [];
   const metadataPaths = paths.filter(path => { const match = /^versions\/([^/]+)\/([^/]+)\.json$/i.exec(path); return match && match[1] === match[2]; });
-  invariant(metadataPaths.length <= 64, 422, "客户端包含超过 64 个版本，请精简后上传");
+  invariant(metadataPaths.length <= 64, 422, diagnosticText("diagnostics.minecraftInspection.theClientContainsMoreThan64VersionsRemoveUnusedVersions"));
   for (const path of metadataPaths) {
     const id = path.split("/")[1];
     try { versions.set(id, { path, json: object(await reader.json(path)) }); }
-    catch (error) { if (!(error instanceof SyntaxError)) throw error; versions.set(id, { path, json: {} }); warnings.push(`${path} 无法解析，请手动确认运行环境。`); }
+    catch (error) { if (!(error instanceof SyntaxError)) throw error; versions.set(id, { path, json: {} }); warnings.push(diagnosticText("diagnostics.minecraftInspection.unableToParse0ConfirmTheRuntimeManually", { arg0: path })); }
   }
   const parents = new Set([...versions.values()].map(version => string(version.json.inheritsFrom)).filter(Boolean));
   let ids = [...versions.keys()].filter(id => !parents.has(id));
-  if (!ids.length && versions.size) { ids = [...versions.keys()]; warnings.push("版本继承关系存在循环，请检查客户端。"); }
-  invariant(!selectedInstanceId || ids.includes(selectedInstanceId), 422, "所选实例不属于此整合包的可用实例");
+  if (!ids.length && versions.size) { ids = [...versions.keys()]; warnings.push(diagnosticText("diagnostics.minecraftInspection.versionInheritanceContainsACycleCheckTheClient")); }
+  invariant(!selectedInstanceId || ids.includes(selectedInstanceId), 422, diagnosticText("diagnostics.minecraftInspection.theSelectedInstanceIsNotAnAvailableInstanceInThis"));
   const candidates: DetectedRuntime[] = [];
   for (const id of ids) {
     const result = empty(id); const seen = new Set<string>(); const chain: { path: string; json: Json; id: string }[] = [];
     let next: string | null = id;
     while (next) {
-      if (seen.has(next) || seen.size >= 16) { result.warnings.push("版本继承存在循环或层级过深，请手动确认。"); break; }
+      if (seen.has(next) || seen.size >= 16) { result.warnings.push(diagnosticText("diagnostics.minecraftInspection.versionInheritanceIsCyclicOrTooDeepConfirmTheRuntime")); break; }
       seen.add(next); const version = versions.get(next);
       if (!version) {
         const known = minecraftJava(next);
-        if (known) { chain.push({ id: next, path: `父版本 ${next}`, json: { id: next } }); }
-        result.warnings.push(`包内缺少父版本 ${next}，请检查游戏文件是否完整。`); break;
+        if (known) { chain.push({ id: next, path: diagnosticText("diagnostics.minecraftInspection.parentVersion0", { arg0: next }), json: { id: next } }); }
+        result.warnings.push(diagnosticText("diagnostics.minecraftInspection.parentVersion0IsMissingFromThePackCheckThat", { arg0: next })); break;
       }
       chain.push({ ...version, id: next }); next = string(version.json.inheritsFrom);
     }
@@ -81,7 +82,7 @@ export async function inspectMinecraftRuntime(paths: readonly string[], reader: 
         result.javaVersion = major(runtime.majorVersion); result.javaComponent = string(runtime.component);
         result.javaSource = `${version.path} · javaVersion`; break;
       }
-      if (java.majorVersion !== undefined) result.warnings.push("JSON 中的 Java 版本不在当前支持的 Java 7–25 范围内。");
+      if (java.majorVersion !== undefined) result.warnings.push(diagnosticText("diagnostics.minecraftInspection.theJavaVersionInJsonIsOutsideTheSupportedJava"));
     }
     // Cross-check game identity using an embedded, bounded version.json. Never execute uploaded code.
     for (const version of chain) {
@@ -91,31 +92,31 @@ export async function inspectMinecraftRuntime(paths: readonly string[], reader: 
       if (!paths.includes(jarPath)) continue;
       let embedded: Json = {};
       try { embedded = object(await reader.jar(jarPath)); }
-      catch (error) { if (!(error instanceof SyntaxError)) throw error; result.warnings.push(`${jarPath} 内的版本元数据无法解析。`); }
+      catch (error) { if (!(error instanceof SyntaxError)) throw error; result.warnings.push(diagnosticText("diagnostics.minecraftInspection.unableToParseVersionMetadataIn0", { arg0: jarPath })); }
       if (string(embedded.id)) hints.push({ value: string(embedded.id)!, source: `${jarPath}!version.json · id` });
       const jarJava = major(embedded.java_version);
       if (jarJava && result.javaVersion && jarJava > result.javaVersion) {
-        result.warnings.push(`JSON 声明 Java ${result.javaVersion}，游戏 JAR 至少需要 Java ${jarJava}，已采用 Java ${jarJava}。`);
+        result.warnings.push(diagnosticText("diagnostics.minecraftInspection.jsonDeclaresJava0ButTheGameJarRequiresAt", { arg0: result.javaVersion, arg1: jarJava, arg2: jarJava }));
         result.javaVersion = jarJava; result.javaSource = `${jarPath}!version.json · java_version`;
       } else if (jarJava && !result.javaVersion) { result.javaVersion = jarJava; result.javaSource = `${jarPath}!version.json · java_version`; }
       if (!result.javaComponent) result.javaComponent = string(embedded.java_component);
       if (embedded.id) break;
     }
     if (new Set(hints.map(hint => hint.value)).size > 1) {
-      result.warnings.push(`Minecraft 版本信息冲突：${[...new Set(hints.map(hint => hint.value))].join(" / ")}，请手动确认。`);
+      result.warnings.push(diagnosticText("diagnostics.minecraftInspection.conflictingMinecraftVersions0ConfirmTheVersionManually", { arg0: [...new Set(hints.map(hint => hint.value))].join(" / ") }));
       result.javaVersion = null; result.javaComponent = null; result.javaSource = null;
     } else if (hints[0]) { result.minecraftVersion = hints[0].value; result.minecraftSource = hints[0].source; }
     const known = result.minecraftVersion ? minecraftJava(result.minecraftVersion) : null;
     if (known && (!result.javaVersion || result.javaVersion < known.javaVersion)) {
-      if (result.javaVersion) result.warnings.push(`Java 声明低于该 Minecraft 版本的默认要求，已采用 Java ${known.javaVersion}。`);
+      if (result.javaVersion) result.warnings.push(diagnosticText("diagnostics.minecraftInspection.theDeclaredJavaVersionIsBelowTheDefaultMinecraftRequirement", { arg0: known.javaVersion }));
       if (known.javaVersion <= 25) { result.javaVersion = known.javaVersion; result.javaComponent = known.javaComponent; result.javaSource = known.source; }
     }
-    if (!result.minecraftVersion) result.warnings.push("未能确定 Minecraft 版本，请手动填写。");
-    if (!result.javaVersion) result.warnings.push("未能确定 Java 环境，请手动选择。");
+    if (!result.minecraftVersion) result.warnings.push(diagnosticText("diagnostics.minecraftInspection.theMinecraftVersionCouldNotBeDeterminedEnterItManually"));
+    if (!result.javaVersion) result.warnings.push(diagnosticText("diagnostics.minecraftInspection.theJavaRuntimeCouldNotBeDeterminedSelectItManually"));
     candidates.push(result);
   }
   const selected = candidates.find(candidate => candidate.instanceId === selectedInstanceId) ?? (candidates.length === 1 ? candidates[0] : empty(null));
-  if (!candidates.length) warnings.push("包内未找到版本 JSON，MC 与 Java 需要手动填写。");
+  if (!candidates.length) warnings.push(diagnosticText("diagnostics.minecraftInspection.noVersionJsonWasFoundInThePackEnterMinecraft"));
   const requiresSelection = candidates.length > 1 && !selectedInstanceId;
   return { ...selected, warnings: [...warnings, ...selected.warnings], schemaVersion: 1, requiresSelection, candidates };
 }

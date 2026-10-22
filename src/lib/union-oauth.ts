@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import * as oauth from "oauth4webapi";
 import { randomBytes } from "node:crypto";
@@ -14,10 +15,10 @@ export const unionServer: oauth.AuthorizationServer = { issuer: "https://skin.mu
   authorization_endpoint: "https://skin.mualliance.ltd/api/union/oauth2/authorize", token_endpoint: "https://skin.mualliance.ltd/api/union/oauth2/token" };
 export const unionConfigured = () => !!process.env.UNION_OAUTH_CLIENT_ID && !!process.env.UNION_OAUTH_CLIENT_SECRET;
 export function unionConfiguration() {
-  invariant(unionConfigured(), 503, "Union OAuth 尚未配置，请使用账号密码登录");
+  invariant(unionConfigured(), 503, diagnosticText("diagnostics.unionOauth.unionOauthIsNotConfiguredSignInWithYourUsername"));
   invariant(!process.env.UNION_OAUTH_CLIENT_AUTH || ["post", "basic"].includes(process.env.UNION_OAUTH_CLIENT_AUTH), 500, "UNION_OAUTH_CLIENT_AUTH must be post or basic");
   const origin = appOrigin();
-  invariant(origin.startsWith("https://") || process.env.NODE_ENV !== "production" && new URL(origin).hostname === "localhost", 500, "Union OAuth 需要 HTTPS 站点地址");
+  invariant(origin.startsWith("https://") || process.env.NODE_ENV !== "production" && new URL(origin).hostname === "localhost", 500, diagnosticText("diagnostics.unionOauth.unionOauthRequiresAnHttpsApplicationOrigin"));
   return { client: { client_id: process.env.UNION_OAUTH_CLIENT_ID! } satisfies oauth.Client,
     secret: process.env.UNION_OAUTH_CLIENT_SECRET!, redirectUri: `${origin}/api/auth/union/callback` };
 }
@@ -30,18 +31,18 @@ export async function exchangeUnionCode(url: URL, state: string, verifier: strin
   const response = await oauth.authorizationCodeGrantRequest(unionServer, config.client, auth, params, config.redirectUri, verifier, { [oauth.customFetch]: transport });
   const result = await oauth.processAuthorizationCodeResponse(unionServer, config.client, response);
   const userResponse = await oauth.protectedResourceRequest(result.access_token, "GET", new URL("https://skin.mualliance.ltd/api/union/oauth2/user"), undefined, undefined, { [oauth.customFetch]: (url, options) => transport(url, options as RequestInit) });
-  invariant(userResponse.ok && userResponse.headers.get("content-type")?.includes("application/json"), 502, "Union 用户信息响应无效");
+  invariant(userResponse.ok && userResponse.headers.get("content-type")?.includes("application/json"), 502, diagnosticText("diagnostics.unionOauth.invalidUnionUserInformationResponse"));
   const reader = userResponse.body?.getReader();
-  invariant(reader, 502, "Union 用户信息响应无效");
+  invariant(reader, 502, diagnosticText("diagnostics.unionOauth.invalidUnionUserInformationResponse"));
   let bytes = 0; const chunks: Uint8Array[] = [];
-  for (;;) { const item = await reader.read(); if (item.done) break; bytes += item.value.byteLength; if (bytes > 16384) { await reader.cancel(); invariant(false, 502, "Union 用户信息响应无效"); } chunks.push(item.value); }
+  for (;;) { const item = await reader.read(); if (item.done) break; bytes += item.value.byteLength; if (bytes > 16384) { await reader.cancel(); invariant(false, 502, diagnosticText("diagnostics.unionOauth.invalidUnionUserInformationResponse")); } chunks.push(item.value); }
   const parsed = unionUserInput.safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-  invariant(parsed.success, 502, "Union 用户信息响应无效");
+  invariant(parsed.success, 502, diagnosticText("diagnostics.unionOauth.invalidUnionUserInformationResponse"));
   return parsed.data;
 }
 export function unionReturnTo(value: string | null) {
   if (value === null || value === "/member") return "/member";
-  invariant(/^\/launcher\/connect\?id=[0-9a-f-]{36}$/.test(value), 400, "登录返回地址无效");
+  invariant(/^\/launcher\/connect\?id=[0-9a-f-]{36}$/.test(value), 400, diagnosticText("diagnostics.unionOauth.invalidSignInReturnAddress"));
   return value;
 }
 export async function beginUnionLogin(returnTo: string) {
@@ -52,7 +53,7 @@ export async function beginUnionLogin(returnTo: string) {
   await locked(async db => {
     const key = tokenDigest("union-login-start"), now = new Date();
     const prior = await db.loginThrottle.findUnique({ where: { key } });
-    invariant(!prior || prior.resetAt <= now || prior.attempts < 120, 429, "登录尝试过多，请稍后重试");
+    invariant(!prior || prior.resetAt <= now || prior.attempts < 120, 429, diagnosticText("diagnostics.auth.tooManySignInAttemptsTryAgainLater"));
     await db.loginThrottle.upsert({ where: { key }, create: { key, attempts: 1, resetAt: new Date(Date.now() + 300_000) },
       update: prior && prior.resetAt > now ? { attempts: { increment: 1 } } : { attempts: 1, resetAt: new Date(Date.now() + 300_000) } });
     await db.unionOAuthAttempt.deleteMany({ where: { expiresAt: { lt: now } } });
@@ -66,12 +67,12 @@ export async function beginUnionLogin(returnTo: string) {
 }
 export async function completeUnionLogin(url: URL, browser: string | undefined, transport?: typeof fetch) {
   const state = url.searchParams.get("state");
-  invariant(state && state.length <= 256 && browser && /^[a-f0-9]{64}$/.test(browser), 400, "Union 登录请求已失效，请重新登录");
+  invariant(state && state.length <= 256 && browser && /^[a-f0-9]{64}$/.test(browser), 400, diagnosticText("diagnostics.unionOauth.theUnionSignInAttemptHasExpiredOrWasAlready"));
   await validateDatabase("auth");
   // DELETE ... RETURNING atomically consumes state before any network request, including failed callbacks.
   const attempt = await locked(async db => {
     const rows = await db.$queryRaw<{ verifier: string; returnTo: string }[]>`DELETE FROM ${securityAttemptTable()} WHERE "stateHash"=${tokenDigest(state)} AND "browserHash"=${tokenDigest(browser)} AND "expiresAt">now() RETURNING verifier,"returnTo"`;
-    invariant(rows[0], 400, "Union 登录请求已失效，请重新登录"); return rows[0];
+    invariant(rows[0], 400, diagnosticText("diagnostics.unionOauth.theUnionSignInAttemptHasExpiredOrWasAlready")); return rows[0];
   }, authPrisma);
   const user = await exchangeUnionCode(url, state, attempt.verifier, transport);
   const token = randomBytes(32).toString("hex"), expiresAt = new Date(Date.now() + SESSION_SECONDS * 1000);

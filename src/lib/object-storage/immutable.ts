@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { invariant } from "../errors";
@@ -16,16 +17,16 @@ export function guardImmutableStorage(adapter: ObjectStorage): ObjectStorage {
         if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 412) blocked = true;
         else throw error;
       }
-      invariant(blocked, 503, "对象存储不支持原子禁止覆盖，已阻止不可变文件写入；请检查区域能力及桶版本控制");
+      invariant(blocked, 503, diagnosticText("diagnostics.immutable.objectStorageCannotAtomicallyPreventOverwritesImmutableWritesAreBlocked"));
     };
     try {
       await adapter.putObject({ Bucket, Key, Body: Buffer.from("original") });
       await expectConflict(() => adapter.putObject({ Bucket, Key, Body: Buffer.from("replacement"), IfNoneMatch: "*" }));
       uploadId = (await adapter.createMultipartUpload({ Bucket, Key })).UploadId;
-      invariant(uploadId, 503, "对象存储能力检查无法初始化分片上传");
+      invariant(uploadId, 503, diagnosticText("diagnostics.immutable.objectStorageCapabilityVerificationCouldNotInitializeAMultipartUpload"));
       const identity = { Bucket, Key, UploadId: uploadId };
       const part = await adapter.uploadPart({ ...identity, PartNumber: 1, Body: Buffer.from("replacement") });
-      invariant(part.ETag, 503, "对象存储能力检查未返回分片 ETag");
+      invariant(part.ETag, 503, diagnosticText("diagnostics.immutable.objectStorageCapabilityVerificationReturnedNoPartEtag"));
       await expectConflict(() => adapter.completeMultipartUpload({ ...identity, MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag! }] }, IfNoneMatch: "*" }));
     } finally {
       if (uploadId) await adapter.abortMultipartUpload({ Bucket, Key, UploadId: uploadId }).catch(() => {});

@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { z } from "zod";
 import type { Db, Actor } from "./auth";
@@ -18,7 +19,7 @@ export async function packageFormatSettings(db: Db, actor: Actor) {
 export async function updatePackageFormatSettings(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
   const result = z.object({ enabledPackageFormats: enabledPackageFormatsSchema }).strict().safeParse(raw);
-  invariant(result.success, 400, result.success ? "" : result.error.issues[0]?.message ?? "muapack 格式设置无效");
+  invariant(result.success, 400, result.success ? "" : result.error.issues[0]?.message ?? diagnosticText("diagnostics.packageFormatSettings.invalidMuapackFormatSettings"));
   const formats = [...result.data.enabledPackageFormats].sort();
   await db.platformSettings.upsert({ where: { id: "platform" }, create: { id: "platform", enabledPackageFormats: formats }, update: { enabledPackageFormats: formats } });
   await audit(db, actor, "PACKAGE_FORMAT_SETTINGS_UPDATE", "PlatformSettings", "platform", undefined, undefined, { enabledPackageFormats: formats });

@@ -26,4 +26,4 @@ export const launcherProviderRecord = z.object({ id, siteCode: z.string(), displ
 export const gameLoginStartResult = z.object({ attemptId: id, nonce: z.string(), expiresIn: z.literal(120), providerId: id, providerRevision: z.number().int() }).strict();
 export const gameLoginExchangeResult = z.object({ tokenType: z.literal("Bearer"), token: z.string().regex(/^mul_[a-f0-9]{64}$/), expiresAt: z.string().datetime(), expiresIn: z.number().int().positive().max(900),
   account: z.object({ id, unionSubject: z.string() }).strict(), gameProfile: z.object({ id: z.string().regex(/^[a-f0-9]{32}$/), name: profileName }).strict(), providerId: id }).strict();
-export const gameLoginErrorSchema = z.object({ error: z.string(), code: z.string(), requestId: z.string().uuid() }).strict();
+export const gameLoginErrorSchema = z.object({ error: z.string(), code: z.string(), params: z.record(z.union([z.string(), z.number()])), requestId: z.string().uuid() }).strict();

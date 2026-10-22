@@ -5,12 +5,14 @@ import { clientMetadataSchema } from "../client-contract";
 import { packageArtifactsSchema } from "../package-contract";
 import { mottoMetadataSchema } from "../server-motto-contract";
 import { statistics } from "./schemas";
+import { diagnosticSchema } from "../diagnostics";
 
 export const uuid = z.string().uuid();
 export const serverId = z.string().regex(/^[A-Za-z]{3,5}$/);
 export const clientId = uuid;
 export const date = z.string().datetime({ offset: true });
 const nullableText = z.string().nullable(), nullableDate = date.nullable(), integer = z.number().int().nonnegative();
+const diagnosticText = diagnosticSchema, nullableDiagnostic = diagnosticText.nullable();
 export const permission = z.enum([...new Set(Object.values(rolePermissions).flat())] as [string, ...string[]]);
 export const role = z.nativeEnum(Role);
 export const ok = z.object({ ok: z.literal(true) }).strict();
@@ -21,22 +23,22 @@ export const recipeStatistics = z.object({ localFiles: integer, remoteFiles: int
   remoteDeclaredSize: integer, newLocalDataSize: integer, localCasReusePercent: z.number(), sourceSize: integer }).strict();
 const importStatistics = z.union([statistics, recipeStatistics]).nullable();
 const detectedRuntime = z.object({ instanceId: nullableText, minecraftVersion: nullableText, javaVersion: z.number().int().nullable(),
-  javaComponent: nullableText, loader: nullableText, loaderVersion: nullableText, minecraftSource: nullableText, javaSource: nullableText,
-  warnings: z.array(z.string()) }).strict();
+  javaComponent: nullableText, loader: nullableText, loaderVersion: nullableText, minecraftSource: nullableDiagnostic, javaSource: nullableDiagnostic,
+  warnings: z.array(diagnosticText) }).strict();
 export const inspection = detectedRuntime.extend({ schemaVersion: z.literal(1), requiresSelection: z.boolean(), candidates: z.array(detectedRuntime),
   pack: z.object({ format: z.literal("modrinth"), wrapper: z.union([z.literal("pcl"), z.null()]), name: z.string(), version: z.string(), summary: nullableText }).strict().optional(),
   importFiles: z.array(z.object({ path: z.string(), source: z.enum(["local", "remote"]), optional: z.boolean(), size: integer, downloads: z.array(z.string()),
     hashes: z.object({ sha1: z.string().optional(), sha512: z.string().optional(), sha256: z.string().optional() }).strict().optional(),
-    status: z.enum(["PENDING", "DECLARED", "DOWNLOADING", "VERIFIED", "FAILED"]), downloadedBytes: integer, error: nullableText }).strict()).optional(),
+    status: z.enum(["PENDING", "DECLARED", "DOWNLOADING", "VERIFIED", "FAILED"]), downloadedBytes: integer, error: nullableDiagnostic }).strict()).optional(),
 }).strict();
 export const upload = z.object({ id: uuid, clientId: uuid, fileName: z.string(), size: integer, partSize: integer,
   packageFormatVersion: z.union([z.literal(1), z.literal(2)]), status: z.nativeEnum(UploadStatus), progress: integer,
-  error: nullableText, draftId: uuid.nullable(), statistics: statistics.nullable(), recipeStatistics: recipeStatistics.nullable(),
-  detectedMods: z.array(z.string()), warnings: z.array(z.string()), comparisonDraftId: uuid.nullable(), comparisonStatistics: statistics.nullable(),
+  error: nullableDiagnostic, draftId: uuid.nullable(), statistics: statistics.nullable(), recipeStatistics: recipeStatistics.nullable(),
+  detectedMods: z.array(z.string()), warnings: z.array(diagnosticText), comparisonDraftId: uuid.nullable(), comparisonStatistics: statistics.nullable(),
   processingPhase: z.union([z.enum(["FETCHING", "INSPECTING", "SELECT_INSTANCE", "DOWNLOADING", "CAS"]), z.null()]), detectedInfo: inspection.nullable(),
   selectedInstanceId: nullableText, baseReleaseId: uuid.nullable(), basePublicationRevision: integer, createdAt: date }).strict();
 export const buildProgress = z.object({ platform: z.string(), status: z.enum(["QUEUED", "PROCESSING", "PREPARED", "READY", "FAILED"]),
-  phase: z.string(), progress: integer, error: nullableText, artifacts: packageArtifactsSchema.nullable() }).strict();
+  phase: diagnosticText, progress: integer, error: nullableDiagnostic, artifacts: packageArtifactsSchema.nullable() }).strict();
 const sourceBuild = z.object({ draftId: uuid, platform: z.string(), revision: integer, status: z.string(), required: z.boolean(),
   artifacts: z.unknown() }).strict(); // Historical JSON is returned unchanged here.
 export const releaseSource = z.object({ packageRevision: integer,
@@ -85,7 +87,7 @@ export const infrastructure = z.object({ storageReady: z.boolean(), packagesBuck
   queue: z.array(z.object({ status: z.nativeEnum(UploadStatus), count: integer }).strict()), packageQueue: z.array(z.object({ status: z.string(), count: integer }).strict()),
   workers: z.array(z.object({ id: z.string(), lastSeen: date }).strict()) }).strict();
 export const probe = z.object({ serverId, state: z.enum(["ONLINE", "HIGH_LATENCY", "OFFLINE", "UNKNOWN"]), address: nullableText, checkedAt: nullableDate,
-  latencyMs: z.number().nullable(), latencyKind: z.union([z.enum(["PONG", "STATUS"]), z.null()]), highLatencyMs: z.number(), message: z.string(), version: nullableText, playersOnline: z.number().int().nullable() }).strict();
+  latencyMs: z.number().nullable(), latencyKind: z.union([z.enum(["PONG", "STATUS"]), z.null()]), highLatencyMs: z.number(), message: diagnosticText, version: nullableText, playersOnline: z.number().int().nullable() }).strict();
 export const motto = mottoMetadataSchema;
 export const mottoSaved = ok.extend({ iconObjectKey: nullableText }).strict();
 const text = (max = 200, minimum = 1) => z.string().trim().min(minimum).max(max);

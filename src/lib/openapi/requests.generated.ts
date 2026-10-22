@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { packageFormatVersionSchema } from "../client-contract";
 
+import { diagnosticText } from "../diagnostics";
+
 import { MAX_UPLOAD_SIZE_MB, UPLOAD_MB, maxUploadSizeMbSchema } from "../upload-size-policy";
 
 import { enabledPackageFormatsSchema } from "../package-format-policy";
@@ -63,7 +65,7 @@ export const UploadSizeSettings = z.object({ maxUploadSizeMb: maxUploadSizeMbSch
 export const PackageFormatSettings = z.object({ enabledPackageFormats: enabledPackageFormatsSchema }).strict();
 
 // src/lib/download-settings.ts:host
-export const host = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, "请填写完整域名，不包含协议、路径或通配符");
+export const host = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, diagnosticText("diagnostics.downloadSettings.enterACompleteDomainWithoutAProtocolPathOrWildcard"));
 
 // src/lib/download-settings.ts:downloadSettingsSchema
 export const DownloadSettings = z.object({ remoteSourceWhitelistEnabled: z.boolean(), remoteSourceHosts: z.array(host).max(100),
@@ -71,10 +73,10 @@ export const DownloadSettings = z.object({ remoteSourceWhitelistEnabled: z.boole
     if (!value) return true;
     try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash; }
     catch { return false; }
-  }, "代理地址应为 http(s)://主机:端口，不含账号、密码或路径"),
-  minecraftDownloadSources: z.array(z.enum(["bmclapi", "ustc", "nju"])).max(3).refine(value => new Set(value).size === value.length, "镜像源不能重复").default([...DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS.minecraftDownloadSources]),
+  }, diagnosticText("diagnostics.downloadSettings.theProxyMustBeHttpSHostPortWithoutCredentials")),
+  minecraftDownloadSources: z.array(z.enum(["bmclapi", "ustc", "nju"])).max(3).refine(value => new Set(value).size === value.length, diagnosticText("diagnostics.downloadSettings.mirrorSourcesMustNotBeRepeated")).default([...DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS.minecraftDownloadSources]),
   javaDownloadSources: z.array(z.enum(["tuna"])).max(1).default(["tuna"]),
   mirrorProxyEnabled: z.boolean().default(false), javaImageType: z.enum(["jre", "jdk"]).default("jre"),
   }).strict()
-  .refine(value => !value.downloadProxyEnabled || !!value.downloadProxyUrl, "启用代理时请填写地址");
+  .refine(value => !value.downloadProxyEnabled || !!value.downloadProxyUrl, diagnosticText("diagnostics.downloadSettings.enterAnAddressWhenEnablingTheProxy"));
 

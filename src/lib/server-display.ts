@@ -1,6 +1,7 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { z } from "zod";
 
-const timestamp = z.string().datetime({ offset: true }).refine(value => Number.isFinite(Date.parse(value)), "展示配置无效");
+const timestamp = z.string().datetime({ offset: true }).refine(value => Number.isFinite(Date.parse(value)), diagnosticText("diagnostics.management.invalidDisplaySettings"));
 export const displayScheduleSchema = z.object({
   displayMode: z.enum(["PERMANENT", "RANGE"]),
   displayStartsAt: timestamp.nullable(),
@@ -8,9 +9,9 @@ export const displayScheduleSchema = z.object({
 }).superRefine((value, ctx) => {
   if (value.displayMode === "PERMANENT") {
     if (value.displayStartsAt !== null || value.displayEndsAt !== null)
-      ctx.addIssue({ code: "custom", message: "永久展示不能设置展示区间" });
+      ctx.addIssue({ code: "custom", message: diagnosticText("diagnostics.serverDisplay.permanentDisplayCannotHaveATimeWindow") });
   } else if (!value.displayStartsAt || !value.displayEndsAt || Date.parse(value.displayStartsAt) >= Date.parse(value.displayEndsAt)) {
-    ctx.addIssue({ code: "custom", message: "请选择有效展示区间，结束时间须晚于开始时间" });
+    ctx.addIssue({ code: "custom", message: diagnosticText("diagnostics.serverDisplay.chooseAValidDisplayWindowWithAnEndLaterThan") });
   }
 });
 

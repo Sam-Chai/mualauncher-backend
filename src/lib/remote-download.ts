@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -25,11 +26,11 @@ export function publicDownloadAddress(address: string) {
   return isIP(ip) === 6 && /^[23]/.test(ip) && !/^2001:(?:db8|0|10|20)(?::|$)/.test(ip) && !/^2002:/.test(ip) && !/^3fff:/.test(ip);
 }
 export function remoteSourceUrl(value: string, settings: DownloadSettings) {
-  let url: URL; try { url = new URL(value); } catch { throw new AppError(422, "远程下载地址无效"); }
-  invariant(url.protocol === "https:" && (!url.port || url.port === "443") && !url.username && !url.password && !url.hash && !/[\x00-\x20\x7f]/.test(value), 422, "远程文件仅支持无凭据的 HTTPS 地址（443）");
-  invariant(!settings.remoteSourceWhitelistEnabled || settings.remoteSourceHosts.includes(url.hostname), 422, `远程来源未获允许：${url.hostname}`);
+  let url: URL; try { url = new URL(value); } catch { throw new AppError(422, diagnosticText("diagnostics.remoteDownload.invalidRemoteDownloadUrl")); }
+  invariant(url.protocol === "https:" && (!url.port || url.port === "443") && !url.username && !url.password && !url.hash && !/[\x00-\x20\x7f]/.test(value), 422, diagnosticText("diagnostics.remoteDownload.remoteFilesRequireCredentialFreeHttpsUrlsOnPort443"));
+  invariant(!settings.remoteSourceWhitelistEnabled || settings.remoteSourceHosts.includes(url.hostname), 422, diagnosticText("diagnostics.remoteDownload.theRemoteSourceIsNotAllowed0", { arg0: url.hostname }));
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
-  invariant(!isIP(hostname) || publicDownloadAddress(hostname), 422, "禁止下载本机、私有网络或保留地址");
+  invariant(!isIP(hostname) || publicDownloadAddress(hostname), 422, diagnosticText("diagnostics.remoteDownload.downloadsFromLoopbackPrivateOrReservedAddressesAreForbidden"));
   return url;
 }
 const encryptedDnsCache = new Map<string, { expires: number; answers: { address: string; family: number }[] }>();
@@ -40,22 +41,22 @@ async function encryptedDns(hostname: string, settings: NetworkSettings, signal:
     const response = await requestHop(new URL(`https://1.1.1.1/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`),
       { ...settings, downloadProxyEnabled: settings.dnsProxyEnabled ?? settings.downloadProxyEnabled }, signal, 20000, { Accept: "application/dns-json" });
     const chunks: Buffer[] = []; let size = 0;
-    for await (const chunk of response) { size += chunk.length; if (size > 32768) { response.destroy(); throw new AppError(422, "加密 DNS 响应过大"); } chunks.push(Buffer.from(chunk)); }
-    invariant(response.statusCode === 200, 422, "加密 DNS 请求失败");
+    for await (const chunk of response) { size += chunk.length; if (size > 32768) { response.destroy(); throw new AppError(422, diagnosticText("diagnostics.remoteDownload.encryptedDnsResponseIsTooLarge")); } chunks.push(Buffer.from(chunk)); }
+    invariant(response.statusCode === 200, 422, diagnosticText("diagnostics.remoteDownload.encryptedDnsRequestFailed"));
     const value = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { Status?: number; Answer?: { type: number; data: string; TTL: number }[] };
-    invariant(value.Status === 0 && (!value.Answer || Array.isArray(value.Answer)), 422, "加密 DNS 解析失败");
+    invariant(value.Status === 0 && (!value.Answer || Array.isArray(value.Answer)), 422, diagnosticText("diagnostics.remoteDownload.encryptedDnsResolutionFailed"));
     for (const answer of value.Answer ?? []) if (answer.type === 1 || answer.type === 28) {
-      invariant(isIP(answer.data) === (answer.type === 1 ? 4 : 6) && publicDownloadAddress(answer.data), 422, "加密 DNS 解析到私有或保留地址");
+      invariant(isIP(answer.data) === (answer.type === 1 ? 4 : 6) && publicDownloadAddress(answer.data), 422, diagnosticText("diagnostics.remoteDownload.encryptedDnsResolvedToAPrivateOrReservedAddress"));
       answers.push({ address: answer.data, family: answer.type === 1 ? 4 : 6 }); ttl = Math.min(ttl, Number.isFinite(answer.TTL) ? Math.max(0, answer.TTL) : 0);
     }
   }
-  invariant(answers.length > 0, 422, "加密 DNS 未返回公开地址");
+  invariant(answers.length > 0, 422, diagnosticText("diagnostics.remoteDownload.encryptedDnsReturnedNoPublicAddress"));
   if (encryptedDnsCache.size > 1000) encryptedDnsCache.clear(); encryptedDnsCache.set(hostname, { answers, expires: Date.now() + ttl * 1000 }); return answers;
 }
 async function pinnedAddress(url: URL, settings: NetworkSettings, signal: AbortSignal) {
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
   const answers = isIP(hostname) ? [{ address: hostname, family: isIP(hostname) }] : process.env.DOWNLOAD_DNS_OVER_HTTPS === "true" ? await encryptedDns(hostname, settings, signal) : await lookup(hostname, { all: true });
-  invariant(answers.length > 0 && answers.every(answer => publicDownloadAddress(answer.address)), 422, "远程域名解析到本机、私有网络或保留地址");
+  invariant(answers.length > 0 && answers.every(answer => publicDownloadAddress(answer.address)), 422, diagnosticText("diagnostics.remoteDownload.theRemoteDomainResolvesToALoopbackPrivateOrReserved"));
   // Many CONNECT proxies have IPv4-only outbound nodes. Check all answers for
   // safety first, then prefer a pinned IPv4 target through a proxy when present.
   return settings.downloadProxyEnabled ? answers.find(answer => answer.family === 4) ?? answers[0] : answers[0];
@@ -67,12 +68,12 @@ function proxyTunnel(url: URL, address: string, settings: DownloadSettings, sign
       headers: { Host: authority }, agent: false });
     connect.on("error", reject);
     connect.once("connect", (response, socket, head) => {
-      if (response.statusCode !== 200) { socket.destroy(); reject(new AppError(422, `代理连接失败 HTTP ${response.statusCode}`)); return; }
+      if (response.statusCode !== 200) { socket.destroy(); reject(new AppError(422, diagnosticText("diagnostics.remoteDownload.proxyConnectionFailedWithHttp0", { arg0: response.statusCode }))); return; }
       if (head.length) socket.unshift(head);
       const hostname = url.hostname.replace(/^\[|\]$/g, "");
       const secure = tls.connect({ socket, servername: isIP(hostname) ? undefined : hostname, rejectUnauthorized: true,
         checkServerIdentity: (_host, certificate) => tls.checkServerIdentity(hostname, certificate) });
-      const abort = () => secure.destroy(new Error("下载已中断")); signal.addEventListener("abort", abort, { once: true });
+      const abort = () => secure.destroy(new Error(diagnosticText("diagnostics.remoteDownload.downloadWasInterrupted"))); signal.addEventListener("abort", abort, { once: true });
       secure.once("close", () => signal.removeEventListener("abort", abort));
       secure.once("error", reject); secure.once("secureConnect", () => resolve(secure));
       if (signal.aborted) abort();
@@ -99,7 +100,7 @@ async function requestHop(url: URL, settings: NetworkSettings, signal: AbortSign
         clearTimeout(timer); response.once("close", () => agent?.destroy()); resolve(response);
       });
     request.once("error", error => { clearTimeout(timer); agent?.destroy(); reject(error); });
-    if (headersTimeout) timer = setTimeout(() => request.destroy(new Error("下载源响应超时")), headersTimeout);
+    if (headersTimeout) timer = setTimeout(() => request.destroy(new Error(diagnosticText("diagnostics.remoteDownload.theDownloadSourceResponseTimedOut"))), headersTimeout);
     request.end();
   });
 }
@@ -109,38 +110,38 @@ export async function remoteResponse(value: string, settings: NetworkSettings, s
   for (let redirects = 0; redirects <= 5; redirects++) {
     const result = await requestHop(url, settings, signal, headersTimeout);
     if ([301, 302, 303, 307, 308].includes(result.statusCode!)) {
-      const location = result.headers.location; result.destroy(); invariant(location && redirects < 5, 422, "远程文件重定向无效或过多");
+      const location = result.headers.location; result.destroy(); invariant(location && redirects < 5, 422, diagnosticText("diagnostics.remoteDownload.invalidOrExcessiveRemoteRedirects"));
       url = validate(new URL(location, url).href); continue;
     }
     if (result.statusCode !== 200) result.destroy();
-    invariant(result.statusCode === 200, 422, `下载失败：${url.hostname} HTTP ${result.statusCode}`); return result;
+    invariant(result.statusCode === 200, 422, diagnosticText("diagnostics.remoteDownload.downloadFailed0Http1", { arg0: url.hostname, arg1: result.statusCode })); return result;
   }
-  throw new AppError(422, "远程重定向过多");
+  throw new AppError(422, diagnosticText("diagnostics.remoteDownload.tooManyRemoteRedirects"));
 }
 export type RemoteDeclaration = { path: string; downloads: string[]; fileSize: number; hashes: { sha1: string; sha512: string; sha256?: string } };
 export async function downloadRemoteFile(file: RemoteDeclaration, path: string, settings: DownloadSettings, signal: AbortSignal,
   progress: (bytes: number) => void, request = remoteResponse) {
-  let lastError = "下载失败";
+  let lastError = diagnosticText("diagnostics.packParser.downloadFailed");
   for (const url of file.downloads) for (let attempt = 0; attempt < 2; attempt++) {
     signal.throwIfAborted(); await rm(path, { force: true }); let response: IncomingMessage | undefined;
     const timeout = AbortSignal.any([signal, AbortSignal.timeout(10 * 60 * 1000)]);
     try {
       remoteSourceUrl(url, settings); response = await request(url, settings, timeout);
       const length = response.headers["content-length"];
-      invariant(length === undefined || Number(length) === file.fileSize, 422, "远程文件声明大小不匹配");
-      invariant(!response.headers["content-encoding"] || response.headers["content-encoding"] === "identity", 422, "远程文件不允许传输压缩");
+      invariant(length === undefined || Number(length) === file.fileSize, 422, diagnosticText("diagnostics.remoteDownload.theRemoteFileDeclaredSizeDoesNotMatch"));
+      invariant(!response.headers["content-encoding"] || response.headers["content-encoding"] === "identity", 422, diagnosticText("diagnostics.remoteDownload.transferCompressionIsNotAllowedForRemoteFiles"));
       const sha1 = createHash("sha1"), sha512 = createHash("sha512"), sha256 = createHash("sha256"); let size = 0; progress(0);
       await pipeline(response, new Transform({ transform(chunk: Buffer, _, callback) {
         size += chunk.length;
-        if (size > file.fileSize || size > 2 * 1024 ** 3) { callback(new AppError(422, "远程文件超过声明大小")); return; }
+        if (size > file.fileSize || size > 2 * 1024 ** 3) { callback(new AppError(422, diagnosticText("diagnostics.remoteDownload.theRemoteFileExceedsItsDeclaredSize"))); return; }
         sha1.update(chunk); sha512.update(chunk); sha256.update(chunk); progress(size); callback(null, chunk);
       } }), createWriteStream(path, { flags: "wx" }), { signal: timeout });
-      invariant(size === file.fileSize && sha1.digest("hex") === file.hashes.sha1 && sha512.digest("hex") === file.hashes.sha512, 422, `远程文件哈希或大小不匹配：${file.path}`);
-      const hash = sha256.digest("hex"); invariant(!file.hashes.sha256 || file.hashes.sha256 === hash, 422, `远程文件 SHA-256 不匹配：${file.path}`);
+      invariant(size === file.fileSize && sha1.digest("hex") === file.hashes.sha1 && sha512.digest("hex") === file.hashes.sha512, 422, diagnosticText("diagnostics.remoteDownload.remoteFileHashOrSizeDoesNotMatch0", { arg0: file.path }));
+      const hash = sha256.digest("hex"); invariant(!file.hashes.sha256 || file.hashes.sha256 === hash, 422, diagnosticText("diagnostics.remoteDownload.remoteFileSha256DoesNotMatch0", { arg0: file.path }));
       return { sha256: hash, size };
     } catch (error) {
       response?.destroy(); signal.throwIfAborted();
-      lastError = error instanceof AppError ? error.message : "网络连接失败或下载超时";
+      lastError = error instanceof AppError ? error.message : diagnosticText("diagnostics.remoteDownload.networkConnectionFailedOrDownloadTimedOut");
     }
   }
   await rm(path, { force: true }); throw new AppError(422, `${file.path}：${lastError}`);

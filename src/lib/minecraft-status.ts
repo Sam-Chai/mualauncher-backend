@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { createConnection } from "node:net";
 import { randomBytes } from "node:crypto";
@@ -17,11 +18,11 @@ export function decodeVarInt(buffer: Buffer, offset = 0): { value: number; bytes
   for (let index = 0; index < 5; index++) {
     if (offset + index >= buffer.length) return null;
     const byte = buffer[offset + index];
-    if (index === 4 && (byte & 0xf0)) throw new MinecraftProbeError("NOT_MINECRAFT", "服务器返回了无效的 Minecraft 数据");
+    if (index === 4 && (byte & 0xf0)) throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.serverReturnedInvalidMinecraftData"));
     value |= (byte & 0x7f) << (index * 7);
     if (!(byte & 0x80)) return { value: value >>> 0, bytes: index + 1 };
   }
-  throw new MinecraftProbeError("NOT_MINECRAFT", "服务器返回了无效的 Minecraft 数据");
+  throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.serverReturnedInvalidMinecraftData"));
 }
 export const statusPacket = (payload: Buffer) => Buffer.concat([encodeVarInt(payload.length), payload]);
 const responseSchema = z.object({
@@ -43,7 +44,7 @@ export function minecraftStatus(target: { address: string; family: number; port:
       if (error) reject(error); else resolve(result!);
     };
     const fallback = () => finish(undefined, info!);
-    const timeout = setTimeout(() => info ? fallback() : finish(new MinecraftProbeError("TIMEOUT", "连接或 Minecraft 状态查询超时")), timeoutMs);
+    const timeout = setTimeout(() => info ? fallback() : finish(new MinecraftProbeError("TIMEOUT", diagnosticText("diagnostics.minecraftStatus.connectionOrMinecraftStatusRequestTimedOut"))), timeoutMs);
     socket.once("connect", () => {
       const hostname = Buffer.from(target.hostname, "utf8"), port = Buffer.alloc(2); port.writeUInt16BE(target.port);
       const handshake = statusPacket(Buffer.concat([encodeVarInt(0), encodeVarInt(-1), encodeVarInt(hostname.length), hostname, port, encodeVarInt(1)]));
@@ -52,23 +53,23 @@ export function minecraftStatus(target: { address: string; family: number; port:
     socket.on("data", chunk => {
       if (finished) return;
       try {
-        if (buffer.length + chunk.length > 1024 * 1024) throw new MinecraftProbeError("NOT_MINECRAFT", "服务器状态响应过大");
+        if (buffer.length + chunk.length > 1024 * 1024) throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.serverStatusResponseTooLarge"));
         buffer = Buffer.concat([buffer, chunk]);
         while (buffer.length) {
           const length = decodeVarInt(buffer); if (!length) break;
-          if (length.value < 1 || length.value > 1024 * 1024) throw new MinecraftProbeError("NOT_MINECRAFT", "未返回有效的 Minecraft 状态数据");
+          if (length.value < 1 || length.value > 1024 * 1024) throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.noValidMinecraftStatusDataReturned"));
           if (buffer.length < length.bytes + length.value) break;
           const packet = buffer.subarray(length.bytes, length.bytes + length.value); buffer = buffer.subarray(length.bytes + length.value);
           const id = decodeVarInt(packet);
-          if (!id) throw new MinecraftProbeError("NOT_MINECRAFT", "未返回有效的 Minecraft 状态数据");
+          if (!id) throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.noValidMinecraftStatusDataReturned"));
           if (!info) {
             const size = decodeVarInt(packet, id.bytes);
-            if (id.value !== 0 || !size || id.bytes + size.bytes + size.value !== packet.length) throw new MinecraftProbeError("NOT_MINECRAFT", "连接成功，但未返回有效的 Minecraft 状态");
+            if (id.value !== 0 || !size || id.bytes + size.bytes + size.value !== packet.length) throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.connectedButNoValidMinecraftStatusReturned"));
             let value: unknown;
             try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(packet.subarray(id.bytes + size.bytes))); }
-            catch { throw new MinecraftProbeError("NOT_MINECRAFT", "连接成功，但未返回有效的 Minecraft 状态"); }
+            catch { throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.connectedButNoValidMinecraftStatusReturned")); }
             const parsed = responseSchema.safeParse(value);
-            if (!parsed.success) throw new MinecraftProbeError("NOT_MINECRAFT", "连接成功，但响应不是有效的 Minecraft 状态");
+            if (!parsed.success) throw new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.connectedButResponseIsNotAValidMinecraftStatus"));
             info = { version: parsed.data.version.name.replace(/§[0-9a-fk-or]/gi, "").replace(/[\x00-\x1f\x7f]/g, "").slice(0, 100),
               playersOnline: parsed.data.players?.online ?? null, latencyMs: Math.max(0, Math.round(performance.now() - statusStarted)), latencyKind: "STATUS" };
             pingStarted = performance.now(); socket.write(statusPacket(Buffer.concat([Buffer.from([1]), token])));
@@ -79,10 +80,10 @@ export function minecraftStatus(target: { address: string; family: number; port:
             else fallback();
           }
         }
-      } catch (error) { if (info) fallback(); else finish(error instanceof Error ? error : new MinecraftProbeError("NOT_MINECRAFT", "Minecraft 状态响应无效")); }
+      } catch (error) { if (info) fallback(); else finish(error instanceof Error ? error : new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.invalidMinecraftStatusResponse"))); }
     });
-    socket.once("error", () => info ? fallback() : finish(new MinecraftProbeError("UNREACHABLE", "连接失败，服务器未启动、拒绝连接或网络不可达")));
-    socket.once("end", () => info ? fallback() : finish(new MinecraftProbeError("NOT_MINECRAFT", "连接已关闭，未获得有效 Minecraft 状态；服务器可能关闭了状态查询")));
-    socket.once("close", () => { if (finished) return; if (info) fallback(); else finish(new MinecraftProbeError("UNREACHABLE", "连接已断开，未获得 Minecraft 状态")); });
+    socket.once("error", () => info ? fallback() : finish(new MinecraftProbeError("UNREACHABLE", diagnosticText("diagnostics.minecraftStatus.connectionFailedServerStoppedConnectionRefusedOrNetworkUnreachable"))));
+    socket.once("end", () => info ? fallback() : finish(new MinecraftProbeError("NOT_MINECRAFT", diagnosticText("diagnostics.minecraftStatus.connectionClosedWithoutValidMinecraftStatusStatusQueriesMayBe"))));
+    socket.once("close", () => { if (finished) return; if (info) fallback(); else finish(new MinecraftProbeError("UNREACHABLE", diagnosticText("diagnostics.minecraftStatus.disconnectedWithoutMinecraftStatus"))); });
   });
 }

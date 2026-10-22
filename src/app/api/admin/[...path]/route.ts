@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { authorized, COOKIE_NAME } from "@/lib/auth";
@@ -57,7 +58,7 @@ async function handle(request: Request, context: Context) {
         if (path.length === 4) return management.setMember(db, actor, uuid(id), uuid(accountId), raw);
         if (path.length === 6 && grant === "servers") return management.setGrant(db, actor, uuid(id), uuid(accountId), serverId(sid), raw);
       }
-      throw new AppError(404, "接口不存在");
+      throw new AppError(404, diagnosticText("diagnostics.route.endpointNotFound"));
     });
     return json(result, request.method === "POST" && path.length === 1 ? 201 : 200);
   } catch (error) { return failure(error); }

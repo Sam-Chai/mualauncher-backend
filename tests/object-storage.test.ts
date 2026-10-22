@@ -194,14 +194,14 @@ for (const provider of ["ali", "tencent", "huawei"] as const) {
     await assert.rejects(client.createMultipartUpload({ Bucket, Key: "cancelled" }, { abortSignal: aborted.signal }));
     await assert.rejects(client.putObject({ Bucket, Key: "bad-hash", Body: bytes, ChecksumSHA256: Buffer.alloc(32).toString("base64"), IfNoneMatch: "*" }));
     assert(!f.objects.has("bad-hash")); assert(!f.objects.has("cancelled"));
-    f.setVersioning("Enabled"); await assert.rejects(client.putObject({ Bucket, Key: "versioned", Body: bytes, IfNoneMatch: "*" }), /版本控制/); assert(!f.objects.has("versioned"));
+    f.setVersioning("Enabled"); await assert.rejects(client.putObject({ Bucket, Key: "versioned", Body: bytes, IfNoneMatch: "*" }), /versioning/); assert(!f.objects.has("versioned"));
     f.setVersioning(""); f.embeddedError(); const broken = await client.createMultipartUpload({ Bucket, Key: "broken" });
     await assert.rejects(client.completeMultipartUpload({ Bucket, Key: "broken", UploadId: broken.UploadId!, MultipartUpload: { Parts: [] } }));
     assert.equal(f.objects.has("broken"), false);
   });
   test(`${provider} refuses formal immutable writes if the service ignores forbid-overwrite`, async t => {
     const f = await fixture(t, provider); f.ignoreForbid();
-    await assert.rejects(f.adapter.putObject({ Bucket: provider === "tencent" ? "test-bucket-1234567890" : "test-bucket", Key: "formal-manifest", Body: Buffer.from("signed"), IfNoneMatch: "*" }), /原子禁止覆盖/);
+    await assert.rejects(f.adapter.putObject({ Bucket: provider === "tencent" ? "test-bucket-1234567890" : "test-bucket", Key: "formal-manifest", Body: Buffer.from("signed"), IfNoneMatch: "*" }), /atomically prevent overwrites/);
     assert(!f.objects.has("formal-manifest")); assert.equal(f.objects.size, 0);
   });
 }

@@ -70,7 +70,7 @@ test("upload size setting is shown only to the MUA superadmin with MB units and 
     const html = renderToStaticMarkup(<AdminProvider initial={state}><SettingsPage /></AdminProvider>);
     assert.equal(html.includes('name="maxUploadSizeMb"'), superAdmin);
     assert.equal(html.includes("保存上传大小"), superAdmin);
-    if (superAdmin) { assert(html.includes('value="1024"')); assert(html.includes("文件大小（MB）")); }
+    if (superAdmin) { assert(html.includes('value="1024"')); assert(html.includes("最大上传大小（MB）")); }
   }
 });
 
@@ -89,8 +89,8 @@ test("superadmin edits server details and listing in one form with archive contr
   assert.equal((html.match(/<form /g) ?? []).length, 1);
   for (const name of ["displayName", "description", "gameAddress", "sortOrder", "themeColor"]) assert(html.includes(`name="${name}"`), name);
   assert(html.includes("服务器箴言")); assert(html.includes("上传图片")); assert(!html.includes("图标对象键"));
-  assert(html.includes(">标记上架<")); assert(html.includes('aria-label="归档管理"'));
-  assert(html.includes("公开分发")); assert(html.includes("Beta client"));
+  assert(html.includes(">在目录中展示<")); assert(html.includes('aria-label="归档管理"'));
+  assert(html.includes("已开放下载")); assert(html.includes("Beta client"));
 });
 
 test("organization and server editors see detail controls without global listing or archive controls", () => {
@@ -98,22 +98,22 @@ test("organization and server editors see detail controls without global listing
     const { state, server } = fixture([...rolePermissions[role]]);
     const html = editor(state, server);
     assert(html.includes('name="displayName"'), role); assert(html.includes('name="gameAddress"'), role);
-    assert(html.includes("展示颜色")); assert(html.includes("#123456")); assert(html.includes("展示模式")); assert(html.includes("永久展示"));
+    assert(html.includes("展示颜色")); assert(html.includes("#123456")); assert(html.includes("展示时间")); assert(html.includes("始终展示"));
     assert(html.includes('name="themeColor"'));
-    for (const forbidden of ['name="sortOrder"', ">标记上架<", 'aria-label="归档管理"']) assert(!html.includes(forbidden), `${role}: ${forbidden}`);
+    for (const forbidden of ['name="sortOrder"', ">在目录中展示<", 'aria-label="归档管理"']) assert(!html.includes(forbidden), `${role}: ${forbidden}`);
   }
 });
 
 test("superadmin registration chooses a display mode and scoped editors can change color and display windows", () => {
   const { state, server } = fixture([], true);
   const registration = renderToStaticMarkup(<AdminProvider initial={state}><ServerEditorContent onSaved={() => {}} /></AdminProvider>);
-  assert(registration.includes("展示模式")); assert(registration.includes("区间仅控制目录展示"));
+  assert(registration.includes("展示时间")); assert(registration.includes("仅影响服务器在目录中的展示"));
   assert(!registration.includes('name="displayStartsAt"')); assert(!registration.includes('name="themeColor"'));
   server.displayMode = "RANGE"; server.displayStartsAt = new Date("2026-10-13T00:00:00Z"); server.displayEndsAt = new Date("2026-10-14T00:00:00Z");
   for (const role of ["ORG_ADMIN", "SERVER_ADMIN", "SERVER_EDITOR"] as const) {
     state.actor.isSuperAdmin = false; server.permissions = [...rolePermissions[role]];
     const html = editor(state, server);
-    assert(html.includes("区间展示")); assert(html.includes("#123456")); assert(html.includes("2026"));
+    assert(html.includes("指定时间展示")); assert(html.includes("#123456")); assert(html.includes("2026"));
     assert(html.includes('name="displayStartsAt"')); assert(html.includes('name="themeColor"'));
   }
 });
@@ -122,7 +122,7 @@ test("readers and reviewers see server details and status without any write cont
   for (const role of ["READ_ONLY", "REVIEWER", "CLIENT_EDITOR"] as const) {
     const { state, server } = fixture([...rolePermissions[role]]);
     const html = editor(state, server);
-    assert(html.includes("NPU BETA")); assert(html.includes("beta.example.edu:25565")); assert(html.includes("公开分发"));
+    assert(html.includes("NPU BETA")); assert(html.includes("beta.example.edu:25565")); assert(html.includes("已开放下载"));
     assert(!html.includes("<form")); assert(!html.includes("<input")); assert(!html.includes('aria-label="归档管理"'));
     assert(!html.includes("上传图片")); assert(!html.includes("重新裁剪")); assert(!html.includes("移除图片"));
   }
@@ -140,16 +140,16 @@ test("archived resources expose status and restoration without a mutable detail 
 
 test("unified server navigation and table retain truthful distribution and binding states", () => {
   const { state, server } = fixture([...rolePermissions.READ_ONLY]);
-  const links = visibleNavigation(navigation, state).find(group => group.title === "服务器")?.items;
-  assert.deepEqual(links?.map(({ title, href }) => ({ title, href })), [{ title: "服务器管理", href: "/admin/servers" }]);
-  assert.equal(currentNavigation("/admin/servers/status").title, "服务器管理");
+  const links = visibleNavigation(navigation, state).find(group => group.title === "clients.server")?.items;
+  assert.deepEqual(links?.map(({ title, href }) => ({ title, href })), [{ title: "navigation.servers", href: "/admin/servers" }]);
+  assert.equal(currentNavigation("/admin/servers/status").title, "navigation.servers");
   server.currentReleaseActive = false;
   let html = editor(state, server);
-  assert(html.includes("等待有效发布")); assert(html.includes("当前发布已归档")); assert(!html.includes("公开分发"));
+  assert(html.includes("等待可用版本")); assert(html.includes("当前版本已归档")); assert(!html.includes("已开放下载"));
   server.currentReleaseId = null; server.boundClientId = null; server.boundClientName = null;
   html = renderToStaticMarkup(<AdminProvider initial={state}><ServersPage /></AdminProvider>);
   assert(html.includes("服务器管理")); assert(html.includes("目录状态")); assert(html.includes("未绑定客户端"));
-  assert(html.includes("悬停查看延迟与原因")); assert(html.includes("查看")); assert(!html.includes("登记服务器"));
+  assert(html.includes("将鼠标移到状态灯上查看延迟或原因")); assert(html.includes("查看")); assert(!html.includes("登记服务器"));
   assert([...html.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/g)][0][1].includes("服务器箴言"));
 });
 
@@ -177,13 +177,13 @@ test("table motto fills its cell and reveals the theme background; editor preser
 test("probe lamps expose green, yellow, red and unconfirmed states with latency and failure tooltips", () => {
   const base: ServerProbeResult = { state: "ONLINE", address: "game.test", checkedAt: "2026-10-12T12:00:00.000Z", latencyMs: 80, latencyKind: "PONG", highLatencyMs: 300, message: "Minecraft 服务器在线", version: "1.21.1", playersOnline: 2 };
   const green = renderToStaticMarkup(<ProbeLamp result={base} />);
-  assert(green.includes("bg-emerald-500")); assert(green.includes("延迟 80 ms")); assert(green.includes("后端探测")); assert(green.includes("检查时间"));
+  assert(green.includes("bg-emerald-500")); assert(green.includes("响应时间 80 ms")); assert(green.includes("由平台测得")); assert(green.includes("检查时间"));
   const yellow = renderToStaticMarkup(<ProbeLamp result={{ ...base, state: "HIGH_LATENCY", latencyMs: 350, message: "Minecraft 服务器在线，延迟较高" }} />);
-  assert(yellow.includes("bg-amber-400")); assert(yellow.includes("延迟 350 ms")); assert(yellow.includes("高延迟阈值"));
+  assert(yellow.includes("bg-amber-400")); assert(yellow.includes("响应时间 350 ms")); assert(yellow.includes("超过 300 ms 时提示高延迟"));
   const red = renderToStaticMarkup(<ProbeLamp result={{ ...base, state: "OFFLINE", latencyMs: null, latencyKind: null, version: null, playersOnline: null, message: "连接失败，服务器未启动或网络不可达" }} />);
-  assert(red.includes("bg-red-500")); assert(red.includes("网络不可达")); assert(!red.includes("延迟 80"));
+  assert(red.includes("bg-red-500")); assert(red.includes("网络不可达")); assert(!red.includes("响应时间 80"));
   const unset = renderToStaticMarkup(<ServerStatusLight serverId="NPA" address={null} />);
   assert(unset.includes("bg-neutral-400")); assert(unset.includes("尚未设置服务器连接地址")); assert(!unset.includes("bg-red-500"));
   const archived = renderToStaticMarkup(<ServerStatusLight serverId="NPA" address="game.test" archived />);
-  assert(archived.includes("已归档，未执行探测")); assert(!archived.includes("bg-red-500"));
+  assert(archived.includes("已归档，不检查连接")); assert(!archived.includes("bg-red-500"));
 });

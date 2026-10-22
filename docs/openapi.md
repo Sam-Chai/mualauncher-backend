@@ -25,6 +25,8 @@
 
 Cookie 写请求要求同源 Origin，浏览器自动发送实际 Origin；Scalar customFetch 保留 Request 原有 JSON／Bearer 请求头，仅删除手填 Origin 并发送同源 Cookie。Bearer 写请求不要求 Origin；存在 Authorization 则只采用 Bearer，错误 Token 不回退 Cookie。HttpOnly Cookie 不读取到配置，调试凭据不持久化。Scalar JS/CSS 随应用打包，关闭 telemetry／AI，不使用 CDN 渲染器或第三方请求代理。
 
+`/admin/api` 使用限定在可视区域内的 flex 布局，标题和后台导航保持固定；文档滚动由 Scalar 嵌入容器负责，到达边界后不继续滚动外层页面。容器使用 size containment，Scalar 的高度变量和左侧目录高度基于容器计算，内部顶部偏移为 0，避免重复扣除后台标题栏。此布局仅用于 API 页面，其他后台页面继续正常滚动。
+
 ## 契约来源与检查
 
 - `document.ts`／`schemas.ts` 显式建模公开接口，`private-document.ts`／`private-schemas.ts` 建模完整 DTO，均位于 `src/lib/openapi`。

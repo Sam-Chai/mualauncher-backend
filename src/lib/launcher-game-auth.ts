@@ -50,7 +50,8 @@ export function gameClientKey(request: Request) {
 export function gameFailure(error: unknown) {
   const status = error instanceof AppError ? error.status : 500;
   const code = error instanceof GameLoginError ? error.code : ({ 400: "INVALID_REQUEST", 413: "REQUEST_TOO_LARGE", 415: "JSON_REQUIRED" } as Record<number, string>)[status] ?? (status === 500 ? "SERVICE_UNAVAILABLE" : "INVALID_REQUEST");
-  const response = json({ error: code, code, requestId: randomUUID() }, status);
+  const detail = new GameLoginError(status, code).diagnostic;
+  const response = json({ error: detail.message, code: detail.code, params: detail.params, requestId: randomUUID() }, status);
   if (status === 429) response.headers.set("Retry-After", "300");
   return response;
 }

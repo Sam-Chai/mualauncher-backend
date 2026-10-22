@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { createPublicKey, sign, verify, type KeyObject } from "node:crypto";
 import { invariant } from "./errors";
@@ -11,7 +12,7 @@ const equal = (a: unknown, b: unknown) => encodeMuaJson(a).equals(encodeMuaJson(
 function validateRemoteSources(target: { files: RecipeManifest["files"] }) {
   for (const file of target.files) if (file.source.type === "remote") for (const raw of file.source.downloads) {
     const url = remoteSourceUrl(raw, { remoteSourceWhitelistEnabled: false, remoteSourceHosts: [], downloadProxyEnabled: false, downloadProxyUrl: "", ...DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS });
-    invariant(url.hostname.includes(".") && !/(?:^|\.)(?:localhost|local|internal|home|lan)$/.test(url.hostname.replace(/\.$/, "")), 422, "v2 远程来源不能指向本地域名");
+    invariant(url.hostname.includes(".") && !/(?:^|\.)(?:localhost|local|internal|home|lan)$/.test(url.hostname.replace(/\.$/, "")), 422, diagnosticText("diagnostics.muapackV2Protocol.v2RemoteSourcesMustNotTargetLocalDomains"));
   }
 }
 export function readRecipeContent(bytes: Buffer) { const target = recipeContentSchema.parse(decodeMuaJson(bytes)); validateRemoteSources(target); return target; }
@@ -31,12 +32,12 @@ function reference(target: RecipeManifest, bytes: Buffer) { const { organization
 export function createRecipePackMetadata(targetBytes: Buffer, baseBytes: Buffer | null = null, removalPolicy: RecipePackMetadata["removalPolicy"] = "retain"): RecipePackMetadata {
   const target = readRecipeManifest(targetBytes), base = baseBytes ? readRecipeManifest(baseBytes) : null;
   invariant(!base || base.release.organizationId === target.release.organizationId && base.release.clientId === target.release.clientId &&
-    base.release.releaseId !== target.release.releaseId && base.release.version !== target.release.version, 422, "v2 更新必须属于同一客户端的不同发布");
+    base.release.releaseId !== target.release.releaseId && base.release.version !== target.release.version, 422, diagnosticText("diagnostics.muapackV2Protocol.aV2UpdateMustReferenceDifferentReleasesOfTheSame"));
   const changes: RecipePackMetadata["changes"] = { added: [], modified: [], removed: [], policyChanged: [], sourceChanged: [], runtimeChanged: null, launchChanged: null };
   const sizes = new Map<string, number>();
   for (const file of [...(base?.files ?? []), ...target.files]) {
     const id = "sha512" in file.hashes ? `remote:${file.hashes.sha512}` : `local:${file.hashes.sha256}`;
-    invariant(!sizes.has(id) || sizes.get(id) === file.size, 422, "v2 基准与目标存在同摘要不同大小"); sizes.set(id, file.size);
+    invariant(!sizes.has(id) || sizes.get(id) === file.size, 422, diagnosticText("diagnostics.muapackV2Protocol.theV2BaselineAndTargetContainTheSameDigestWith")); sizes.set(id, file.size);
   }
   if (base) {
     const before = new Map(base.files.map(file => [file.path, file])), after = new Set(target.files.map(file => file.path));
@@ -61,18 +62,18 @@ export function createRecipePackMetadata(targetBytes: Buffer, baseBytes: Buffer 
 }
 export function validateRecipePackDocuments(metadataBytes: Buffer, targetBytes: Buffer, baseBytes: Buffer | null, indexBytes: Buffer) {
   const metadata = recipePackMetadataSchema.parse(decodeMuaJson(metadataBytes));
-  invariant(equal(createRecipePackMetadata(targetBytes, baseBytes, metadata.removalPolicy), metadata), 422, "v2 元数据、差异或载荷与完整清单不一致");
+  invariant(equal(createRecipePackMetadata(targetBytes, baseBytes, metadata.removalPolicy), metadata), 422, diagnosticText("diagnostics.muapackV2Protocol.v2MetadataChangesOrPayloadDoNotMatchTheComplete"));
   const target = readRecipeManifest(targetBytes);
-  invariant(encodeMuaJson(recipeModrinthIndex(target)).equals(indexBytes) && muaDigest(indexBytes) === metadata.indexSha256, 422, "v2 mrpack 索引与目标不一致");
+  invariant(encodeMuaJson(recipeModrinthIndex(target)).equals(indexBytes) && muaDigest(indexBytes) === metadata.indexSha256, 422, diagnosticText("diagnostics.muapackV2Protocol.theV2MrpackIndexDoesNotMatchTheTarget"));
   return { metadata, target, base: baseBytes ? readRecipeManifest(baseBytes) : null };
 }
 export function signRecipePackMetadata(bytes: Buffer, privateKey: KeyObject) {
-  recipePackMetadataSchema.parse(decodeMuaJson(bytes)); invariant(privateKey.type === "private" && privateKey.asymmetricKeyType === "ed25519", 422, "v2 签名需要 Ed25519 私钥");
+  recipePackMetadataSchema.parse(decodeMuaJson(bytes)); invariant(privateKey.type === "private" && privateKey.asymmetricKeyType === "ed25519", 422, diagnosticText("diagnostics.muapackV2Protocol.v2SigningRequiresAnEd25519PrivateKey"));
   return encodeMuaJson(recipeSignatureSchema.parse({ format: "mua-pack-signature", formatVersion: 2, algorithm: "Ed25519", keyId: muaSigningKeyId(createPublicKey(privateKey)),
     metadataSha256: muaDigest(bytes), signature: sign(null, Buffer.concat([DOMAIN, bytes]), privateKey).toString("base64") }));
 }
 export function verifyRecipePackSignature(bytes: Buffer, signatureBytes: Buffer, key: KeyObject) {
   const signature = recipeSignatureSchema.parse(decodeMuaJson(signatureBytes)); const decoded = Buffer.from(signature.signature, "base64");
   invariant(signature.keyId === muaSigningKeyId(key) && signature.metadataSha256 === muaDigest(bytes) && decoded.toString("base64") === signature.signature &&
-    verify(null, Buffer.concat([DOMAIN, bytes]), key, decoded), 422, "v2 包签名验证失败"); return signature;
+    verify(null, Buffer.concat([DOMAIN, bytes]), key, decoded), 422, diagnosticText("diagnostics.muapackV2Protocol.v2PackageSignatureVerificationFailed")); return signature;
 }

@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { cookies } from "next/headers";
 import { connection } from "next/server";
 import { authorized, COOKIE_NAME } from "@/lib/auth";
@@ -12,10 +13,10 @@ export async function GET(_request: Request, context: { params: Promise<{ server
     const serverId = checkedServerId((await context.params).serverId), token = (await cookies()).get(COOKIE_NAME)?.value;
     const read = () => authorized(token, false, async (db, actor) => (await requireServer(db, actor, serverId, "SERVER_READ", false)).server);
     const server = await read();
-    const result = server.archivedAt || server.organization.archivedAt ? unknownProbe(server.gameAddress, "服务器或所属组织已归档，未执行探测")
-      : !server.gameAddress?.trim() ? unknownProbe(server.gameAddress, "尚未设置服务器连接地址") : await cachedMinecraftProbe(server.gameAddress);
+    const result = server.archivedAt || server.organization.archivedAt ? unknownProbe(server.gameAddress, diagnosticText("diagnostics.route.serverOrOrganizationArchivedProbeSkipped"))
+      : !server.gameAddress?.trim() ? unknownProbe(server.gameAddress, diagnosticText("diagnostics.route.noServerConnectionAddressConfigured")) : await cachedMinecraftProbe(server.gameAddress);
     const current = await read();
     return json({ serverId, ...(current.gameAddress !== server.gameAddress || !!current.archivedAt !== !!server.archivedAt || !!current.organization.archivedAt !== !!server.organization.archivedAt
-      ? unknownProbe(current.gameAddress, "服务器地址或归档状态已改变，请刷新后重试") : result) });
+      ? unknownProbe(current.gameAddress, diagnosticText("diagnostics.route.theServerAddressOrArchiveStateHasChangedRefreshAnd")) : result) });
   } catch (error) { return failure(error); }
 }

@@ -1,4 +1,9 @@
 "use client";
+import { serializeError } from "@/lib/diagnostics";
+import { formatMessage } from "@/lib/diagnostics";
+import { RequestError } from "@/lib/request-error";
+export { RequestError } from "@/lib/request-error";
+
 import { useI18n } from "@/components/preferences";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -8,13 +13,12 @@ export type State = Awaited<ReturnType<typeof getState>>;
 export type Organization = State["organizations"][number];
 export type Server = Organization["servers"][number];
 export type Account = State["accounts"][number];
-export class RequestError extends Error { constructor(message: string, public status: number) { super(message); } }
 export async function api<T = { ok: boolean; id?: string }>(path: string, method = "GET", body?: unknown): Promise<T> {
   const response = await fetch(path, { method, cache: "no-store",
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body) });
   const result = await response.json();
-  if (!response.ok) throw new RequestError(result.error ?? "请求失败", response.status);
+  if (!response.ok) throw new RequestError(result.error ?? "Request failed", response.status, result);
   return result;
 }
 type Context = {
@@ -40,7 +44,7 @@ export function AdminProvider({ initial, children }: { initial: State; children:
   }, []);
   const organizations = state.organizations.filter(org => organizationId === "all" || org.id === organizationId);
   async function refresh() { setState(await api<State>("/api/admin/state")); setEpoch(value => value + 1); }
-  async function run(work: () => Promise<unknown>, message = t("已保存"), refresh = true) {
+  async function run(work: () => Promise<unknown>, message = t("provider.saved"), refresh = true) {
     setBusy(true);
     try {
       await work();
@@ -49,7 +53,7 @@ export function AdminProvider({ initial, children }: { initial: State; children:
       return true;
     } catch (error) {
       if (error instanceof RequestError && error.status === 401) navigateAfterAuthChange("/login");
-      toast.error(error instanceof Error ? t(error.message) : t("操作失败"));
+      toast.error(error instanceof Error ? formatMessage(t, serializeError(error)) : t("provider.operationFailed"));
       return false;
     } finally { setBusy(false); }
   }

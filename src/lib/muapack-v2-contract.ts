@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { z } from "zod";
 import { recipeFileSchema, parseRecipeInventory, recipePath } from "./recipe-inventory";
 import { sha256Schema, muaPathSchema } from "./muapack-contract";
@@ -23,24 +24,24 @@ const contentShape = { release: z.object({ organizationId: z.string().uuid(), cl
 function validateContent(value: { runtime: z.infer<typeof contentShape.runtime>; files: z.infer<typeof contentShape.files>; launch: z.infer<typeof launch> }, ctx: z.RefinementCtx) {
   try {
     parseRecipeInventory({ schemaVersion: 2, format: "mua-import-recipe", runtime: { minecraft: value.runtime.minecraft, loader: value.runtime.loader, javaMajor: value.runtime.java.major }, files: value.files });
-    if (value.files.some((file, i) => i > 0 && value.files[i - 1].path >= file.path)) throw Error("v2 文件必须按路径排序");
+    if (value.files.some((file, i) => i > 0 && value.files[i - 1].path >= file.path)) throw Error(diagnosticText("diagnostics.muapackV2Contract.v2FilesMustBeSortedByPath"));
     for (const file of value.files) if (file.source.type === "remote") for (const raw of file.source.downloads) {
       const url = new URL(raw);
       if (url.protocol !== "https:" || url.username || url.password || url.hash || url.port && url.port !== "443" || /[\x00-\x20\x7f]/.test(raw) ||
-        [...url.searchParams.keys()].some(key => /signature|token|credential|expires|x-amz-|x-goog-/i.test(key))) throw Error("v2 远程下载地址必须持久、无凭据且使用 HTTPS");
+        [...url.searchParams.keys()].some(key => /signature|token|credential|expires|x-amz-|x-goog-/i.test(key))) throw Error(diagnosticText("diagnostics.muapackV2Contract.v2RemoteDownloadUrlsMustBePersistentCredentialFreeHttps"));
     }
     for (const task of value.launch.preLaunch) {
       if (task.type !== "mkdir") {
         const source = task.type === "copy" ? task.from : task.executable; const file = value.files.find(file => file.path === source.path);
-        if (!file || file.source.type !== "local" || file.policy !== "managed" || file.optional || task.type === "exec" && !file.executable) throw Error("启动前操作只能引用必需的本地 managed 文件");
+        if (!file || file.source.type !== "local" || file.policy !== "managed" || file.optional || task.type === "exec" && !file.executable) throw Error(diagnosticText("diagnostics.muapackV2Contract.preLaunchOperationsMayReferenceOnlyRequiredLocalManagedFiles"));
       }
       if (task.type !== "exec") {
         const path = task.type === "mkdir" ? task.path : task.to; recipePath(path);
         const file = value.files.find(file => file.path === path);
-        if (file && (task.type === "mkdir" || file.policy === "managed")) throw Error("启动前操作不能覆盖 managed 文件");
+        if (file && (task.type === "mkdir" || file.policy === "managed")) throw Error(diagnosticText("diagnostics.muapackV2Contract.preLaunchOperationsMustNotOverwriteManagedFiles"));
       } else if (task.workingDirectory) recipePath(task.workingDirectory);
     }
-  } catch (error) { ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : "v2 配方无效" }); }
+  } catch (error) { ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : diagnosticText("diagnostics.muapackV2Contract.invalidV2Recipe") }); }
 }
 export const recipeContentSchema = z.object({ format: z.literal("mua-recipe-content"), formatVersion: z.literal(2), ...contentShape }).strict().superRefine(validateContent);
 export const RECIPE_PROTOCOL_REVISION = 2;

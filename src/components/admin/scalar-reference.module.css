@@ -24,5 +24,15 @@
   --scalar-sidebar-search-color: var(--muted-foreground);
   --scalar-sidebar-search-border-color: var(--border);
   --scalar-sidebar-width: 220px;
-  --scalar-custom-header-height: 56px;
+  --scalar-custom-header-height: 0px;
+}
+
+.reference {
+  /* Scalar's viewport is this embedded panel, below the page and app headers. */
+  container-type: size;
+}
+
+.reference :global(.references-layout) {
+  min-height: 100cqh;
+  --full-height: 100cqh;
 }

@@ -1,3 +1,5 @@
+import { serializeError } from "@/lib/diagnostics";
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { putTrackedCas } from "./recycle-storage";
 import { randomUUID, createHash } from "node:crypto";
@@ -23,7 +25,7 @@ import { workerDownloadSettings } from "./download-settings";
 
 async function authorizedOwner(db: Db, upload: { createdById: string; clientId: string; baseReleaseId: string | null; comparisonDraftId: string | null }) {
   const account = await db.account.findUnique({ where: { id: upload.createdById } });
-  invariant(account?.status === "ACTIVE", 403, "上传账号已停用");
+  invariant(account?.status === "ACTIVE", 403, diagnosticText("diagnostics.clientWorker.theUploadAccountIsDisabled"));
   const actor = { id: account.id, displayName: account.displayName, isSuperAdmin: account.isSuperAdmin };
   const scope = await requireClient(db, actor, upload.clientId, "DRAFT_CREATE", true);
   if (upload.baseReleaseId) await requireClient(db, actor, upload.clientId, "DRAFT_EDIT", true);
@@ -32,7 +34,7 @@ async function authorizedOwner(db: Db, upload: { createdById: string; clientId: 
 }
 export async function claimUpload(client: PrismaClient = prisma) {
   return locked(async db => {
-    await db.clientUpload.updateMany({ where: { status: "PROCESSING", leaseUntil: { lt: new Date() }, attempts: { gte: 3 } }, data: { status: "FAILED", error: "Worker 多次中断，请重试任务", leaseToken: null, leaseUntil: null } });
+    await db.clientUpload.updateMany({ where: { status: "PROCESSING", leaseUntil: { lt: new Date() }, attempts: { gte: 3 } }, data: { status: "FAILED", error: diagnosticText("diagnostics.clientWorker.theWorkerWasInterruptedRepeatedlyRetryTheTask"), leaseToken: null, leaseUntil: null } });
     const ids = await db.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "ClientUpload"
       WHERE "packageFormatVersion" IN (1,2) AND (("status" = 'QUEUED' AND "processingPhase" IS DISTINCT FROM 'SELECT_INSTANCE') OR ("status" = 'PROCESSING' AND "leaseUntil" < now())) AND "attempts" < 3
@@ -52,36 +54,36 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
   const renew = setInterval(() => {
     if (renewing) return; renewing = true;
     void client.clientUpload.updateMany({ where: owner, data: { leaseUntil: new Date(Date.now() + 120000), progress } })
-      .then(result => { if (!result.count) abort.abort(new Error("Worker 租约失效")); })
-      .catch(() => abort.abort(new Error("Worker 无法续租"))).finally(() => { renewing = false; });
+      .then(result => { if (!result.count) abort.abort(new Error(diagnosticText("diagnostics.clientWorker.theWorkerLeaseIsNoLongerValid"))); })
+      .catch(() => abort.abort(new Error(diagnosticText("diagnostics.clientWorker.theWorkerCannotRenewItsLease")))).finally(() => { renewing = false; });
   }, 10000);
-  const deadline = setTimeout(() => abort.abort(new Error("处理时间超过两小时")), 2 * 60 * 60 * 1000);
+  const deadline = setTimeout(() => abort.abort(new Error(diagnosticText("diagnostics.clientWorker.processingExceededTwoHours"))), 2 * 60 * 60 * 1000);
   try {
     await client.$transaction(db => authorizedOwner(db, upload));
     let previous: PackFile[] = []; let previousVersion: string | null = null;
     if (upload.baseReleaseId && upload.packageFormatVersion === 1) {
-      const release = await client.clientRelease.findUnique({ where: { id: upload.baseReleaseId } }); invariant(release, 409, "基准发布不存在");
+      const release = await client.clientRelease.findUnique({ where: { id: upload.baseReleaseId } }); invariant(release, 409, diagnosticText("diagnostics.clientWorker.theBaselineReleaseDoesNotExist"));
       if (release.packageFormatVersion === 1) {
-      const bytes = await readObject(release.manifestObjectKey); invariant(digest(bytes) === release.manifestSha256, 422, "基准 Manifest 摘要不匹配");
-      const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest; invariant(manifest.format === "mua-client-manifest" && manifest.schemaVersion === 2 && manifest.clientId === upload.clientId && Array.isArray(manifest.files), 422, "基准 Manifest 格式不兼容");
+      const bytes = await readObject(release.manifestObjectKey); invariant(digest(bytes) === release.manifestSha256, 422, diagnosticText("diagnostics.clientWorker.theBaselineManifestDigestDoesNotMatch"));
+      const manifest = JSON.parse(bytes.toString("utf8")) as ReleaseManifest; invariant(manifest.format === "mua-client-manifest" && manifest.schemaVersion === 2 && manifest.clientId === upload.clientId && Array.isArray(manifest.files), 422, diagnosticText("diagnostics.clientWorker.theBaselineManifestFormatIsIncompatible"));
       previous = manifest.files; previousVersion = release.versionLabel;
       }
     }
     const source = await storageClient().getObject({ Bucket: packagesBucket(), Key: upload.sourceObjectKey });
-    invariant(source.Body && source.ContentLength === Number(upload.size), 422, "源 ZIP 不存在或大小不匹配");
+    invariant(source.Body && source.ContentLength === Number(upload.size), 422, diagnosticText("diagnostics.clientWorker.theSourceZipIsMissingOrItsSizeDoesNot"));
     const hash = createHash("sha256"); let sourceBytes = 0;
     const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) {
-      sourceBytes += chunk.length; if (sourceBytes > Number(upload.size)) { callback(new Error("源 ZIP 超过声明大小")); return; }
+      sourceBytes += chunk.length; if (sourceBytes > Number(upload.size)) { callback(new Error(diagnosticText("diagnostics.clientWorker.theSourceZipExceedsItsDeclaredSize"))); return; }
       hash.update(chunk); callback(null, chunk);
     } });
     const local = join(temp, "source.zip");
     await pipeline(source.Body as NodeJS.ReadableStream, meter, createWriteStream(local), { signal: abort.signal });
-    invariant(sourceBytes === Number(upload.size), 422, "源 ZIP 下载不完整"); const sourceSha256 = hash.digest("hex");
+    invariant(sourceBytes === Number(upload.size), 422, diagnosticText("diagnostics.clientWorker.theSourceZipDownloadIsIncomplete")); const sourceSha256 = hash.digest("hex");
     const checkpoint = (data: Prisma.ClientUploadUpdateInput) => locked(async db => {
       const fresh = await db.clientUpload.findUnique({ where: { id: upload.id } });
-      invariant(fresh?.status === "PROCESSING" && fresh.leaseToken === upload.leaseToken && fresh.leaseUntil && fresh.leaseUntil > new Date(), 409, "Worker 租约失效");
+      invariant(fresh?.status === "PROCESSING" && fresh.leaseToken === upload.leaseToken && fresh.leaseUntil && fresh.leaseUntil > new Date(), 409, diagnosticText("diagnostics.clientWorker.theWorkerLeaseIsNoLongerValid"));
       const { scope } = await authorizedOwner(db, fresh);
-      invariant(scope.client.currentReleaseId === fresh.baseReleaseId && scope.client.revision === fresh.basePublicationRevision, 409, "当前版本已改变，请重新上传最新完整客户端");
+      invariant(scope.client.currentReleaseId === fresh.baseReleaseId && scope.client.revision === fresh.basePublicationRevision, 409, diagnosticText("diagnostics.clientWorker.theCurrentVersionHasChangedUploadTheLatestCompleteClient"));
       await db.clientUpload.update({ where: { id: upload.id }, data });
     }, client);
     const parsed = await parseClientPack(local, temp, previous, previousVersion, Number(upload.size), value => { progress = value; }, abort.signal, {
@@ -110,13 +112,13 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
     const key = `inventories/${upload.id}/${upload.leaseToken}.json`;
     const recipe = "recipeInventory" in parsed ? parsed.recipeInventory : null;
     const statistics = "recipeStatistics" in parsed ? parsed.recipeStatistics : parsed.statistics;
-    invariant((upload.packageFormatVersion === 2) === !!recipe, 422, "处理结果与上传格式不匹配");
+    invariant((upload.packageFormatVersion === 2) === !!recipe, 422, diagnosticText("diagnostics.clientWorker.theProcessingResultDoesNotMatchTheUploadFormat"));
     const stored = await putJson(key, recipe ?? { schemaVersion: 1, files: parsed.files });
     await locked(async db => {
       const fresh = await db.clientUpload.findUnique({ where: { id: upload.id } });
-      invariant(fresh?.status === "PROCESSING" && fresh.leaseToken === upload.leaseToken && fresh.leaseUntil && fresh.leaseUntil > new Date(), 409, "Worker 租约失效");
+      invariant(fresh?.status === "PROCESSING" && fresh.leaseToken === upload.leaseToken && fresh.leaseUntil && fresh.leaseUntil > new Date(), 409, diagnosticText("diagnostics.clientWorker.theWorkerLeaseIsNoLongerValid"));
       const { actor, scope } = await authorizedOwner(db, fresh);
-      invariant(scope.client.currentReleaseId === fresh.baseReleaseId && scope.client.revision === fresh.basePublicationRevision, 409, "当前版本已改变，请重新上传最新完整客户端");
+      invariant(scope.client.currentReleaseId === fresh.baseReleaseId && scope.client.revision === fresh.basePublicationRevision, 409, diagnosticText("diagnostics.clientWorker.theCurrentVersionHasChangedUploadTheLatestCompleteClient"));
       await db.clientUpload.update({ where: { id: upload.id }, data: { status: "READY", progress: 100, leaseUntil: null, leaseToken: null,
         sourceSha256, filesObjectKey: key, filesSha256: stored.sha256, statistics: statistics as unknown as Prisma.InputJsonObject,
         comparisonStatistics: comparisonStatistics ? comparisonStatistics as unknown as Prisma.InputJsonObject : Prisma.JsonNull,
@@ -124,13 +126,13 @@ export async function runUploadWorker(client: PrismaClient = prisma) {
       await audit(db, actor, "CLIENT_UPLOAD_READY", "ClientUpload", upload.id, scope.client.organizationId, undefined, { packageFormatVersion: upload.packageFormatVersion, fileCount: recipe?.files.length ?? parsed.files.length, sourceSha256 });
     }, client);
   } catch (error) {
-    const message = error instanceof AppError ? error.message : "ZIP 解析、存储或 Worker 处理失败，请检查整合包后重试";
+    const message = error instanceof AppError ? serializeError(error) : diagnosticText("diagnostics.clientWorker.zipParsingStorageOrWorkerProcessingFailedCheckThePack");
     await client.clientUpload.updateMany({ where: owner, data: { status: "FAILED", error: message, leaseUntil: null, leaseToken: null } });
     console.error("MUA client processing failed", { uploadId: upload.id, name: error instanceof Error ? error.name : "Error", message: error instanceof Error ? error.message : "unknown" });
   } finally {
     clearInterval(renew); clearTimeout(deadline);
     // mkdtemp returned this exact job directory; never clean a derived pack path.
-    invariant(resolve(temp).startsWith(resolve(tmpdir()) + requireSeparator()), 500, "Worker 临时目录不在预期范围");
+    invariant(resolve(temp).startsWith(resolve(tmpdir()) + requireSeparator()), 500, diagnosticText("diagnostics.clientWorker.theWorkerTemporaryDirectoryIsOutsideItsExpectedLocation"));
     await rm(temp, { recursive: true, force: true });
   }
   return true;

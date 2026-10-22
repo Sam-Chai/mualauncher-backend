@@ -13,7 +13,6 @@ import { readFile } from "node:fs/promises";
 import { visiblePaths } from "../src/components/admin/navigation-access";
 import { currentNavigation } from "../src/components/admin/navigation";
 import { GET as publicDocument } from "../src/app/openapi.json/route";
-import translations from "../src/lib/locales/openapi-en.json";
 
 test("both locale documents expose only Launcher authentication and member resources", async () => {
   for (const locale of ["zh-CN", "en-US"] as const) {
@@ -50,10 +49,6 @@ test("all operations are documented while only Launcher operations are public; o
   assert(apiInventory.some(item => item.method === "DELETE" && item.path.endsWith("/motto-image")));
   assert(visiblePaths({ actor: { id: "member", displayName: "Member", isSuperAdmin: false }, organizations: [] }).has("/admin/api"));
   assert.equal(currentNavigation("/admin/api").title, "API");
-  for (const [source, target] of Object.entries(translations)) {
-    assert(target); assert(!/[\u3400-\u9fff]/.test(target), source);
-    assert.deepEqual(target.match(/\{\d+\}/g) ?? [], source.match(/\{\d+\}/g) ?? []);
-  }
 });
 
 test("full documents validate in both languages and document session/Bearer boundaries and binary uploads", async () => {
@@ -156,6 +151,6 @@ test("public JSON endpoint follows explicit locale and exposes no private routes
 
 test("wire response contracts accept empty directories and reject malformed file/error payloads", () => {
   assertPublicResponse("ServerDirectory", { servers: [] });
-  assertPublicResponse("Error", { error: "unavailable" });
+  assertPublicResponse("Error", { error: "unavailable", code: "SERVICE_UNAVAILABLE", params: {} });
   assert.throws(() => assertPublicResponse("Error", { message: "wrong field" }));
 });

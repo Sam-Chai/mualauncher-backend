@@ -73,13 +73,13 @@ test("runtime and prelaunch declarations must point to verified files and preser
 test("environment references lock platform, Java build and exact files", () => {
   const fixture = muaFixture(); assert.equal(validateMuaEnvironments(fixture.manifest, fixture.environmentDocuments).length, 3);
   const changed = structuredClone(fixture.manifest); changed.runtime.java.build = "new-build";
-  assert.throws(() => validateMuaEnvironments(changed, fixture.environmentDocuments), /Java 构建/);
+  assert.throws(() => validateMuaEnvironments(changed, fixture.environmentDocuments), /Java build/);
   const imageType = structuredClone(fixture.manifest); imageType.runtime.java.imageType = "jdk";
-  assert.throws(() => validateMuaEnvironments(imageType, fixture.environmentDocuments), /Java 构建/);
+  assert.throws(() => validateMuaEnvironments(imageType, fixture.environmentDocuments), /Java build/);
   const wrongPlatform = structuredClone(fixture.manifest); wrongPlatform.platform = "linux-amd64";
-  assert.throws(() => validateMuaEnvironments(wrongPlatform, fixture.environmentDocuments), /平台/);
+  assert.throws(() => validateMuaEnvironments(wrongPlatform, fixture.environmentDocuments), /platform/);
   const corrupted = new Map(fixture.environmentDocuments); const hash = fixture.manifest.environments[0].sha256;
-  corrupted.set(hash, Buffer.from("{}")); assert.throws(() => validateMuaEnvironments(fixture.manifest, corrupted), /摘要/);
+  corrupted.set(hash, Buffer.from("{}")); assert.throws(() => validateMuaEnvironments(fixture.manifest, corrupted), /digest/);
   const environment = decodeMuaJson(fixture.environmentDocuments.get(hash)!) as { files: unknown[] };
   assert.equal(muaEnvironmentManifestSchema.safeParse({ ...environment, files: [] }).success, false);
 });
@@ -92,7 +92,7 @@ test("full and update declarations contain the exact payload and complete differ
   assert.deepEqual(update.metadata.changes.removed.map(file => file.path), ["mods/removed.jar"]);
   assert.equal(update.metadata.payload.length, 2);
   validateMuaPackDocuments(update.metadataBytes, update.targetBytes, update.baseBytes);
-  assert.throws(() => validateMuaPackDocuments(encodeMuaJson({ ...update.metadata, payload: [] }), update.targetBytes, update.baseBytes), /不一致/);
+  assert.throws(() => validateMuaPackDocuments(encodeMuaJson({ ...update.metadata, payload: [] }), update.targetBytes, update.baseBytes), /match/);
   assert.throws(() => validateMuaPackDocuments(update.metadataBytes, update.targetBytes, null));
   assert.equal(muaPackMetadataSchema.safeParse({ ...full.metadata, base: update.metadata.base }).success, false);
 });
@@ -125,7 +125,7 @@ test("updates cannot change client, organization, platform or reuse the same rel
   for (const override of [{ clientId: fixtureClientId("OTHER") }, { organizationId: "44444444-4444-4444-8444-444444444444" }, { releaseId: muaFixture().manifest.release.releaseId }]) {
     assert.throws(() => createMuaPackMetadata(encodeMuaJson({ ...fixture.manifest, release: { ...fixture.manifest.release, ...override } }), base, "retain"));
   }
-  assert.throws(() => createMuaPackMetadata(muaFixture("1.0.1", "linux-amd64").targetBytes, base, "retain"), /相同平台/);
+  assert.throws(() => createMuaPackMetadata(muaFixture("1.0.1", "linux-amd64").targetBytes, base, "retain"), /same platform/);
 });
 test("deterministic UTF-8 encoding rejects duplicate keys, whitespace, unsafe numbers and malformed Unicode", () => {
   assert.equal(encodeMuaJson({ z: "中文😀", a: 1 }).toString(), '{"a":1,"z":"中文😀"}');
@@ -136,7 +136,7 @@ test("deterministic UTF-8 encoding rejects duplicate keys, whitespace, unsafe nu
   assert.throws(() => encodeMuaJson({ a: 1.5 })); assert.throws(() => encodeMuaJson({ a: "\ud800" }));
   assert.throws(() => encodeMuaJson({ a: "\ud800😀\udc00" }));
   let nested: unknown = {}; for (let i = 0; i < 40; i++) nested = { nested };
-  assert.throws(() => encodeMuaJson(nested), /嵌套/);
+  assert.throws(() => encodeMuaJson(nested), /nesting/);
   assert.throws(() => encodeMuaJson({ a: undefined }));
 });
 test("domain-separated Ed25519 signature requires a trusted key and binds exact bytes", () => {
@@ -147,7 +147,7 @@ test("domain-separated Ed25519 signature requires a trusted key and binds exact 
   assert.throws(() => verifyMuaPackSignature(changed, signed, keys.publicKey));
   const ordinary = decodeMuaJson(signed) as { signature: string };
   ordinary.signature = sign(null, fixture.metadataBytes, keys.privateKey).toString("base64");
-  assert.throws(() => verifyMuaPackSignature(fixture.metadataBytes, encodeMuaJson(ordinary), keys.publicKey), /验证失败/);
+  assert.throws(() => verifyMuaPackSignature(fixture.metadataBytes, encodeMuaJson(ordinary), keys.publicKey), /verification failed/);
 });
 test("real full and update ZIP archives verify every object without extracting", async () => {
   await withDirectory(async directory => {

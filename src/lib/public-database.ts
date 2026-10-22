@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import type { Db } from "./auth";
 import { AppError } from "./errors";
@@ -9,7 +10,7 @@ export function distributionDatabase(facts: Snapshot | null | undefined): Db {
   type Where = { where: { id?: string; draftId?: string; draftId_platform_revision?: { draftId: string; platform: string; revision: number } } };
   function delegate<T extends { id?: string; draftId?: string | null }>(values: T[]) {
     const findUnique = async ({ where }: Where) => values.find(value => where.id !== undefined ? value.id === where.id : value.draftId === where.draftId) ?? null;
-    return { findUnique, findUniqueOrThrow: async (input: Where) => { const value = await findUnique(input); if (!value) throw new AppError(404, "发布关联记录不可用"); return value; } };
+    return { findUnique, findUniqueOrThrow: async (input: Where) => { const value = await findUnique(input); if (!value) throw new AppError(404, diagnosticText("diagnostics.publicDatabase.theReleaseAssociationIsUnavailable")); return value; } };
   }
   return {
     server: { findFirst: async () => facts?.server ?? null },

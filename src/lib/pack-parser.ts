@@ -1,3 +1,5 @@
+import { serializeError } from "@/lib/diagnostics";
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
 import crc32 from "crc-32";
@@ -37,12 +39,12 @@ async function entries(zip: ZipFile) {
     zip.once("error", fail);
     zip.on("entry", entry => {
       try {
-        invariant(++count <= MAX_FILES, 422, "ZIP 条目数量超过 100000");
-        invariant(!entry.isEncrypted(), 422, "不支持加密 ZIP");
-        invariant(((entry.externalFileAttributes >>> 16) & 0xf000) !== 0xa000, 422, "ZIP 不允许符号链接");
-        invariant(entry.uncompressedSize <= MAX_FILE, 422, "ZIP 单文件超过 2 GiB");
-        total += entry.uncompressedSize; invariant(total <= MAX_EXPANDED, 422, "ZIP 解包后超过 40 GiB");
-        invariant(entry.uncompressedSize < 1024 * 1024 || entry.uncompressedSize <= Math.max(1, entry.compressedSize) * 1000, 422, "ZIP 压缩比例异常");
+        invariant(++count <= MAX_FILES, 422, diagnosticText("diagnostics.packParser.theZipContainsMoreThan100000Entries"));
+        invariant(!entry.isEncrypted(), 422, diagnosticText("diagnostics.packParser.encryptedZipsAreNotSupported"));
+        invariant(((entry.externalFileAttributes >>> 16) & 0xf000) !== 0xa000, 422, diagnosticText("diagnostics.packParser.symbolicLinksAreNotAllowedInZips"));
+        invariant(entry.uncompressedSize <= MAX_FILE, 422, diagnosticText("diagnostics.packParser.aZipFileExceeds2Gib"));
+        total += entry.uncompressedSize; invariant(total <= MAX_EXPANDED, 422, diagnosticText("diagnostics.packParser.theExtractedZipExceeds40Gib"));
+        invariant(entry.uncompressedSize < 1024 * 1024 || entry.uncompressedSize <= Math.max(1, entry.compressedSize) * 1000, 422, diagnosticText("diagnostics.packParser.suspiciousZipCompressionRatio"));
         if (!entry.fileName.endsWith("/")) { safePackPath(entry.fileName); found.push(entry); }
         zip.readEntry();
       } catch (error) { fail(error as Error); }
@@ -54,30 +56,30 @@ function openEntry(zip: ZipFile, entry: Entry) {
   return new Promise<NodeJS.ReadableStream>((resolve, reject) => zip.openReadStream(entry, (error, stream) => error ? reject(error) : resolve(stream!)));
 }
 async function readSmallJson(zip: ZipFile, entry: Entry, signal?: AbortSignal, maximum = 1024 ** 2) {
-  invariant(entry.uncompressedSize <= maximum, 422, "整合包 JSON 超过大小限制");
+  invariant(entry.uncompressedSize <= maximum, 422, diagnosticText("diagnostics.packParser.packJsonExceedsTheSizeLimit"));
   const chunks: Buffer[] = []; let size = 0; let crc = 0;
   const stream = await openEntry(zip, entry);
-  const abort = () => (stream as import("node:stream").Readable).destroy(new Error("识别已中断"));
+  const abort = () => (stream as import("node:stream").Readable).destroy(new Error(diagnosticText("diagnostics.packParser.detectionWasInterrupted")));
   signal?.addEventListener("abort", abort, { once: true });
   try {
     signal?.throwIfAborted();
     for await (const chunk of stream) {
       signal?.throwIfAborted(); const bytes = Buffer.from(chunk); size += bytes.length;
-      invariant(size <= entry.uncompressedSize && size <= maximum, 422, "版本 JSON 展开大小异常"); crc = crc32.buf(bytes, crc); chunks.push(bytes);
+      invariant(size <= entry.uncompressedSize && size <= maximum, 422, diagnosticText("diagnostics.packParser.invalidExpandedSizeForVersionJson")); crc = crc32.buf(bytes, crc); chunks.push(bytes);
     }
-    invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, "版本 JSON 校验失败");
+    invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, diagnosticText("diagnostics.packParser.versionJsonValidationFailed"));
     return JSON.parse(Buffer.concat(chunks).toString("utf8").replace(/^\uFEFF/, "")) as unknown;
   } finally { signal?.removeEventListener("abort", abort); }
 }
 async function readJarVersion(zip: ZipFile, entry: Entry, tempDirectory: string, signal?: AbortSignal) {
-  invariant(entry.uncompressedSize <= 256 * 1024 ** 2, 422, "游戏 JAR 超过 256 MiB，无法安全识别版本");
+  invariant(entry.uncompressedSize <= 256 * 1024 ** 2, 422, diagnosticText("diagnostics.packParser.theGameJarExceeds256MibAndCannotBeSafely"));
   const path = join(tempDirectory, "metadata-game.jar"); let size = 0; let crc = 0;
   const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) {
-    size += chunk.length; if (size > entry.uncompressedSize || size > 256 * 1024 ** 2) { callback(new Error("游戏 JAR 展开大小异常")); return; }
+    size += chunk.length; if (size > entry.uncompressedSize || size > 256 * 1024 ** 2) { callback(new Error(diagnosticText("diagnostics.packParser.invalidExpandedSizeForGameJar"))); return; }
     crc = crc32.buf(chunk, crc); callback(null, chunk);
   } });
   await pipeline(await openEntry(zip, entry), meter, createWriteStream(path), { signal });
-  invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, "游戏 JAR 校验失败");
+  invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, diagnosticText("diagnostics.packParser.gameJarValidationFailed"));
   const jar = await openZip(path);
   try { const version = (await entries(jar)).find(entry => entry.fileName === "version.json"); return version ? await readSmallJson(jar, version, signal) : null; }
   finally { jar.close(); }
@@ -114,10 +116,10 @@ export async function parseClientPack(path: string, tempDirectory: string, previ
   const zip = await openZip(path);
   try {
     const list = await entries(zip); const inspection = inspectPackLayout(list.map(entry => entry.fileName)); const prefix = inspection.rootPrefix;
-    invariant(options.packageFormatVersion !== 2 || inspection.format === "modrinth" || inspection.format === "pcl", 422, "muapack v2 仅支持 mrpack／PCL 封装，请为 .minecraft ZIP 选择 v1");
+    invariant(options.packageFormatVersion !== 2 || inspection.format === "modrinth" || inspection.format === "pcl", 422, diagnosticText("diagnostics.packParser.muapackV2SupportsOnlyMrpackOrWrappedPclPacksChoose"));
     if (inspection.format === "pcl") {
       const nested = list.filter(entry => /\.mrpack$/i.test(entry.fileName));
-      invariant(nested.length === 1, 422, "PCL 封装必须包含唯一 mrpack");
+      invariant(nested.length === 1, 422, diagnosticText("diagnostics.packParser.aWrappedPclPackMustContainExactlyOneMrpack"));
       const nestedPath = join(tempDirectory, "pcl-inner.mrpack"); await extractEntry(zip, nested[0], nestedPath, signal);
       const inner = await openZip(nestedPath);
       try { return await parseModrinthZip(inner, await entries(inner), tempDirectory, previous, previousVersion, sourceSize, progress, signal, options, "pcl"); }
@@ -130,7 +132,7 @@ export async function parseClientPack(path: string, tempDirectory: string, previ
     for (const entry of list) {
       if (!entry.fileName.startsWith(prefix)) continue;
       const target = safePackPath(entry.fileName.slice(prefix.length)); const folded = target.toLocaleLowerCase("en-US");
-      invariant(!seenPaths.has(folded), 422, "ZIP 存在重复或大小写冲突的文件路径"); seenPaths.add(folded);
+      invariant(!seenPaths.has(folded), 422, diagnosticText("diagnostics.packParser.theZipContainsDuplicateOrCaseConflictingFilePaths")); seenPaths.add(folded);
       normalized.set(target, entry);
     }
     await options.onInspecting?.();
@@ -161,19 +163,19 @@ export async function parseClientPack(path: string, tempDirectory: string, previ
       if (!retained(target)) { skipped++; continue; }
       const hash = createHash("sha256"); let crc = 0; let size = 0;
       const meter = new Transform({ transform(chunk: Buffer, _encoding, callback) {
-        size += chunk.length; if (size > entry.uncompressedSize || size > MAX_FILE) { callback(new Error("ZIP 文件展开大小异常")); return; }
+        size += chunk.length; if (size > entry.uncompressedSize || size > MAX_FILE) { callback(new Error(diagnosticText("diagnostics.packParser.invalidExpandedSizeForAZipFile"))); return; }
         hash.update(chunk); crc = crc32.buf(chunk, crc); callback(null, chunk);
       } });
       const local = join(tempDirectory, "current-file");
       await pipeline(await openEntry(zip, entry), meter, createWriteStream(local), { signal });
-      invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, `ZIP 文件校验失败：${target}`);
+      invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, diagnosticText("diagnostics.packParser.zipFileValidationFailed0", { arg0: target }));
       const sha256 = hash.digest("hex");
       if (!seenHashes.has(sha256)) { if (await (options.storeCas ?? putCas)(sha256, local, size)) newDataSize += size; seenHashes.add(sha256); }
       files.push({ path: target, sha256, size, policy: filePolicy(target) }); progress(Math.floor((i + 1) / list.length * 95));
     }
-    invariant(files.length > 0, 422, "ZIP 没有可发布的客户端文件");
-    if (skipped) warnings.push(`已忽略 ${skipped} 个包外文件、其他实例、账号凭据、日志或截图。`);
-    if (files.some(file => file.policy === "preserve")) warnings.push("个人设置、服务器列表和 saves 使用 preserve，玩家已有文件不会被覆盖或删除。");
+    invariant(files.length > 0, 422, diagnosticText("diagnostics.packParser.theZipContainsNoPublishableClientFiles"));
+    if (skipped) warnings.push(diagnosticText("diagnostics.packParser.ignored0FilesOutsideThePackOtherInstancesAccountCredentials", { arg0: skipped }));
+    if (files.some(file => file.policy === "preserve")) warnings.push(diagnosticText("diagnostics.packParser.personalSettingsServerListsAndSavesUsePreserveExistingPlayer"));
     files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
     return { format: inspection.format, files, statistics: compareFiles(files, previous, newDataSize, previousVersion, sourceSize),
       detectedInfo: info, detectedMods, warnings };
@@ -184,10 +186,10 @@ async function extractEntry(zip: ZipFile, entry: Entry, local: string, signal?: 
   const hash = createHash("sha256"); let size = 0, crc = 0;
   await pipeline(await openEntry(zip, entry), new Transform({ transform(chunk: Buffer, _, callback) {
     size += chunk.length;
-    if (size > entry.uncompressedSize || size > MAX_FILE) { callback(new AppError(422, "ZIP 文件展开大小异常")); return; }
+    if (size > entry.uncompressedSize || size > MAX_FILE) { callback(new AppError(422, diagnosticText("diagnostics.packParser.invalidExpandedSizeForAZipFile"))); return; }
     hash.update(chunk); crc = crc32.buf(chunk, crc); callback(null, chunk);
   } }), createWriteStream(local, { flags: "wx" }), { signal });
-  invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, `ZIP 文件校验失败：${entry.fileName}`);
+  invariant(size === entry.uncompressedSize && (crc >>> 0) === entry.crc32, 422, diagnosticText("diagnostics.packParser.zipFileValidationFailed0", { arg0: entry.fileName }));
   return { size, sha256: hash.digest("hex") };
 }
 
@@ -195,14 +197,14 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
   sourceSize: number, progress: (value: number) => void, signal: AbortSignal | undefined, options: InspectionOptions, wrapper: "pcl" | null) {
   const rawPaths = new Set<string>();
   for (const entry of list) {
-    const folded = safePackPath(entry.fileName).toLowerCase(); invariant(!rawPaths.has(folded), 422, "ZIP 存在重复或大小写冲突路径"); rawPaths.add(folded);
+    const folded = safePackPath(entry.fileName).toLowerCase(); invariant(!rawPaths.has(folded), 422, diagnosticText("diagnostics.packParser.theZipContainsDuplicateOrCaseConflictingPaths")); rawPaths.add(folded);
   }
-  const indexEntry = list.find(entry => entry.fileName === "modrinth.index.json"); invariant(indexEntry, 422, "未找到根目录 modrinth.index.json");
+  const indexEntry = list.find(entry => entry.fileName === "modrinth.index.json"); invariant(indexEntry, 422, diagnosticText("diagnostics.packParser.rootModrinthIndexJsonWasNotFound"));
   await options.onInspecting?.();
   const rawIndex = await readSmallJson(zip, indexEntry, signal, 16 * 1024 ** 2);
   if (options.packageFormatVersion === 2) {
     const pending = [{ value: rawIndex, depth: 0 }];
-    while (pending.length) { const { value, depth } = pending.pop()!; invariant(depth <= 32, 422, "v2 JSON 嵌套超过 32 层");
+    while (pending.length) { const { value, depth } = pending.pop()!; invariant(depth <= 32, 422, diagnosticText("diagnostics.packParser.v2JsonNestingExceeds32Levels"));
       if (value && typeof value === "object") for (const child of Object.values(value)) pending.push({ value: child, depth: depth + 1 }); }
   }
   const { index, files: declared, info } = inspectModrinthIndex(rawIndex, wrapper);
@@ -214,8 +216,8 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
     const path = safePackPath(target.path); const folded = path.toLowerCase();
     if (excluded(path) || unsupported.has(folded)) return;
     if (options.packageFormatVersion === 2) recipePath(path);
-    invariant(!/^(versions|libraries|assets|natives|runtime)\//i.test(path), 422, "mrpack 文件不能覆盖由 MUA 管理的游戏环境");
-    invariant(!foldedPaths.has(folded) || foldedPaths.get(folded) === path, 422, "mrpack 层之间存在大小写冲突路径");
+    invariant(!/^(versions|libraries|assets|natives|runtime)\//i.test(path), 422, diagnosticText("diagnostics.packParser.mrpackFilesMustNotOverwriteGameEnvironmentsManagedByMua"));
+    invariant(!foldedPaths.has(folded) || foldedPaths.get(folded) === path, 422, diagnosticText("diagnostics.packParser.mrpackLayersContainCaseConflictingPaths"));
     foldedPaths.set(folded, path); const old = targets.get(path);
     targets.set(path, { ...target, path, optional: old?.optional ?? target.optional });
   }
@@ -224,22 +226,22 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
   for (const prefix of ["overrides/", "client-overrides/"]) for (const entry of list) {
     if (entry.fileName.startsWith(prefix)) add({ path: entry.fileName.slice(prefix.length), optional: false, entry });
   }
-  invariant(targets.size > 0 && targets.size <= MAX_FILES, 422, "mrpack 没有可发布文件或文件过多");
+  invariant(targets.size > 0 && targets.size <= MAX_FILES, 422, diagnosticText("diagnostics.packParser.theMrpackContainsNoPublishableFilesOrTooManyFiles"));
   let total = 0;
   for (const target of targets.values()) {
     const parts = target.path.toLowerCase().split("/");
-    for (let i = 1; i < parts.length; i++) invariant(!foldedPaths.has(parts.slice(0, i).join("/")), 422, "mrpack 存在文件与目录冲突");
+    for (let i = 1; i < parts.length; i++) invariant(!foldedPaths.has(parts.slice(0, i).join("/")), 422, diagnosticText("diagnostics.packParser.theMrpackContainsAFileDirectoryConflict"));
     total += target.entry?.uncompressedSize ?? target.remote!.fileSize;
     if (target.remote) target.remote.downloads.forEach(url => {
       const parsed = remoteSourceUrl(url, settings);
       if (options.packageFormatVersion === 2) invariant(parsed.hostname.includes(".") && !/(?:^|\.)(?:localhost|local|internal|home|lan)$/.test(parsed.hostname.replace(/\.$/, "")) &&
-        ![...parsed.searchParams.keys()].some(key => /^(?:x-amz-|x-goog-|signature$|sig$|token$|expires$|se$|sp$|sv$)/i.test(key)), 422, "v2 需要持久公开下载地址，不允许本地域名或临时签名令牌");
+        ![...parsed.searchParams.keys()].some(key => /^(?:x-amz-|x-goog-|signature$|sig$|token$|expires$|se$|sp$|sv$)/i.test(key)), 422, diagnosticText("diagnostics.packParser.v2RequiresPersistentPublicDownloadUrlsWithoutLocalDomainsOr"));
     });
   }
-  invariant(total <= MAX_EXPANDED, 422, "mrpack 展开文件超过 40 GiB");
+  invariant(total <= MAX_EXPANDED, 422, diagnosticText("diagnostics.packParser.expandedMrpackFilesExceed40Gib"));
   const ordered = [...targets.values()].sort((a, b) => a.path < b.path ? -1 : 1);
   const mods = ordered.filter(file => /^mods\/.+\.jar$/i.test(file.path)).map(file => file.path.slice(5));
-  invariant(mods.length <= MAX_MODS, 422, `模组数量超过 ${MAX_MODS}`);
+  invariant(mods.length <= MAX_MODS, 422, diagnosticText("diagnostics.packParser.theModCountExceeds0", { arg0: MAX_MODS }));
   info.importFiles = ordered.map(target => target.view = { path: target.path, source: target.remote ? "remote" : "local", optional: target.optional,
     size: target.remote?.fileSize ?? target.entry!.uncompressedSize, downloads: target.remote?.downloads ?? [],
     ...(target.remote ? { hashes: target.remote.hashes } : {}),
@@ -250,7 +252,7 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
     const identities = new Map<string, number>();
     for (const target of ordered) if (target.remote) {
       const sha = target.remote.hashes.sha512;
-      invariant(!identities.has(sha) || identities.get(sha) === target.remote.fileSize, 422, "v2 远程文件相同摘要的大小声明冲突"); identities.set(sha, target.remote.fileSize);
+      invariant(!identities.has(sha) || identities.get(sha) === target.remote.fileSize, 422, diagnosticText("diagnostics.packParser.v2RemoteFilesWithTheSameDigestDeclareDifferentSizes")); identities.set(sha, target.remote.fileSize);
     }
     await options.onCas?.(info);
     const recipeFiles: RecipeFile[] = []; const hashes = new Map<string, number>(); let newLocalDataSize = 0;
@@ -299,7 +301,7 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
         Object.assign(target, result); view.status = "VERIFIED"; view.downloadedBytes = result.size;
         progress(Math.floor(++downloaded / remote.length * 50)); await notify(true);
       } catch (error) {
-        view.status = "FAILED"; view.error = error instanceof Error ? error.message : "下载失败";
+        view.status = "FAILED"; view.error = error instanceof Error ? serializeError(error) : diagnosticText("diagnostics.packParser.downloadFailed");
         controller.abort(error); await notify(true); throw error;
       }
     }
@@ -313,7 +315,7 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
     signal?.throwIfAborted(); const target = ordered[i];
     if (target.entry) { target.local = join(temp, `override-${i}`); Object.assign(target, await extractEntry(zip, target.entry, target.local, signal));
       target.view!.status = "VERIFIED"; target.view!.downloadedBytes = target.size!; }
-    const { sha256, size, local } = target; invariant(sha256 && size !== undefined && local, 422, "导入文件未校验");
+    const { sha256, size, local } = target; invariant(sha256 && size !== undefined && local, 422, diagnosticText("diagnostics.packParser.anImportedFileHasNotBeenVerified"));
     if (!hashes.has(sha256)) { if (await (options.storeCas ?? putCas)(sha256, local, size)) newDataSize += size; hashes.add(sha256); }
     files.push({ path: target.path, sha256, size, policy: filePolicy(target.path), ...(target.optional ? { optional: true } : {}) });
     progress(50 + Math.floor((i + 1) / ordered.length * 45));

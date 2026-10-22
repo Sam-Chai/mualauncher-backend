@@ -1,5 +1,11 @@
+import { errorDiagnostic, parseDiagnostic, type Diagnostic } from "./diagnostics";
 export class AppError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  readonly diagnostic: Diagnostic;
+  constructor(public status: number, message: string) {
+    const detail = parseDiagnostic(message) ?? errorDiagnostic(message);
+    super(detail.message);
+    this.diagnostic = detail;
+  }
 }
 
 export function invariant(condition: unknown, status: number, message: string): asserts condition {

@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { z } from "zod";
 import { invariant } from "./errors";
 import { safePackPath } from "./pack-path";
@@ -24,22 +25,22 @@ export type RecipeImportStatistics = { localFiles: number; remoteFiles: number; 
 export function recipePath(path: string) {
   const normalized = safePackPath(path);
   invariant(!/^(?:versions|libraries|assets|natives|runtime|\.mua|\.launcher|\.hmcl|PCL)(?:\/|$)|^(?:launcher_accounts|launcher_profiles|accounts|usercache|usernamecache)\.json$/i.test(normalized),
-    422, "v2 文件不能覆盖运行环境、账号或启动器状态");
+    422, diagnosticText("diagnostics.recipeInventory.v2FilesMustNotOverwriteRuntimeAccountOrLauncherState"));
   return normalized;
 }
 export function parseRecipeInventory(raw: unknown): RecipeInventory {
-  const result = recipeInventorySchema.safeParse(raw); invariant(result.success, 422, "v2 导入索引格式不正确");
+  const result = recipeInventorySchema.safeParse(raw); invariant(result.success, 422, diagnosticText("diagnostics.recipeInventory.invalidV2ImportIndexFormat"));
   const inventory = result.data; const paths = new Set<string>(); const sizes = new Map<string, number>(); let total = 0;
   for (const file of inventory.files) {
-    invariant(recipePath(file.path) === file.path, 422, "v2 路径必须为 NFC");
-    const folded = file.path.toLowerCase(); invariant(!paths.has(folded), 422, "v2 路径重复或大小写冲突"); paths.add(folded);
-    if (file.source.type === "local") invariant(file.source.entry === `overrides/${file.path}`, 422, "v2 本地载荷路径不匹配");
+    invariant(recipePath(file.path) === file.path, 422, diagnosticText("diagnostics.recipeInventory.v2PathsMustUseNfc"));
+    const folded = file.path.toLowerCase(); invariant(!paths.has(folded), 422, diagnosticText("diagnostics.recipeInventory.v2PathsAreDuplicatedOrConflictByCase")); paths.add(folded);
+    if (file.source.type === "local") invariant(file.source.entry === `overrides/${file.path}`, 422, diagnosticText("diagnostics.recipeInventory.theV2LocalPayloadPathDoesNotMatch"));
     const identity = "sha512" in file.hashes ? `remote:${file.hashes.sha512}` : `local:${file.hashes.sha256}`;
-    invariant(!sizes.has(identity) || sizes.get(identity) === file.size, 422, "v2 相同内容的大小声明冲突"); sizes.set(identity, file.size);
+    invariant(!sizes.has(identity) || sizes.get(identity) === file.size, 422, diagnosticText("diagnostics.recipeInventory.identicalV2ContentDeclaresConflictingSizes")); sizes.set(identity, file.size);
     total += file.size;
   }
-  invariant(total <= 40 * 1024 ** 3, 422, "v2 目标文件超过 40 GiB");
-  for (const path of paths) { const parts = path.split("/"); for (let i = 1; i < parts.length; i++) invariant(!paths.has(parts.slice(0, i).join("/")), 422, "v2 文件与目录冲突"); }
-  invariant(Buffer.byteLength(JSON.stringify(inventory), "utf8") <= 16 * 1024 ** 2, 422, "v2 导入索引超过 16 MiB");
+  invariant(total <= 40 * 1024 ** 3, 422, diagnosticText("diagnostics.recipeInventory.v2TargetFilesExceed40Gib"));
+  for (const path of paths) { const parts = path.split("/"); for (let i = 1; i < parts.length; i++) invariant(!paths.has(parts.slice(0, i).join("/")), 422, diagnosticText("diagnostics.recipeInventory.v2FileDirectoryConflict")); }
+  invariant(Buffer.byteLength(JSON.stringify(inventory), "utf8") <= 16 * 1024 ** 2, 422, diagnosticText("diagnostics.recipeInventory.theV2ImportIndexExceeds16Mib"));
   return inventory;
 }

@@ -1,3 +1,4 @@
+import { plainDiagnosticText } from "../src/lib/diagnostics";
 import "dotenv/config";
 import { open, stat, readFile } from "node:fs/promises";
 import { clientSubmissionSchema, packageFormatVersionSchema, type UploadView } from "../src/lib/client-contract";
@@ -44,7 +45,7 @@ async function main() {
         if (!instanceId) throw new Error(`Upload ${ready.id} contains multiple instances; select one in the panel or pass INSTANCE_ID as the fourth argument`);
         await api("/api/v1/clients/uploads/" + upload.id + "/select-instance", { instanceId });
       }
-      if (ready.status === "FAILED" || ready.status === "CANCELLED") throw new Error(ready.error ?? "Upload processing failed");
+      if (ready.status === "FAILED" || ready.status === "CANCELLED") throw new Error(plainDiagnosticText(ready.error) || "Upload processing failed");
       if (Date.now() > deadline) throw new Error("Worker wait timed out; the upload task remains available in the management panel");
       await new Promise(resolve => setTimeout(resolve, 1500));
     }

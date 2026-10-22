@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { createHash } from "node:crypto";
 
@@ -22,35 +23,35 @@ async function remove(bucket: string, key: string) { await storageClient().delet
 
 // Each provider has a different single-copy limit. Preserve metadata and pin the source ETag.
 export async function copyStoredObject(bucket: string, source: string, target: string) {
-  const found = await head(bucket, source); invariant(found && found.ContentLength !== undefined, 422, "回收文件不存在");
+  const found = await head(bucket, source); invariant(found && found.ContentLength !== undefined, 422, diagnosticText("diagnostics.recycleStorage.theRecycledFileDoesNotExist"));
   const s3 = storageClient(); const CopySource = `${encodeURIComponent(bucket)}/${source.split("/").map(encodeURIComponent).join("/")}`;
   if (found.ContentLength <= s3.singleCopyLimitBytes) {
     await s3.copyObject({ Bucket: bucket, Key: target, CopySource, CopySourceIfMatch: found.ETag });
   } else {
     const created = await s3.createMultipartUpload({ Bucket: bucket, Key: target, ContentType: found.ContentType, Metadata: found.Metadata });
-    invariant(created.UploadId, 503, "无法创建回收复制任务");
+    invariant(created.UploadId, 503, diagnosticText("diagnostics.recycleStorage.unableToCreateARecycleCopyTask"));
     const identity = { Bucket: bucket, Key: target, UploadId: created.UploadId }; const parts = [];
     try {
       const partSize = 512 * 1024 ** 2;
       for (let start = 0, number = 1; start < found.ContentLength; start += partSize, number++) {
         const copied = await s3.uploadPartCopy({ ...identity, PartNumber: number, CopySource, CopySourceIfMatch: found.ETag,
           CopySourceRange: `bytes=${start}-${Math.min(found.ContentLength - 1, start + partSize - 1)}` });
-        invariant(copied.CopyPartResult?.ETag, 503, "回收复制分片失败"); parts.push({ PartNumber: number, ETag: copied.CopyPartResult.ETag });
+        invariant(copied.CopyPartResult?.ETag, 503, diagnosticText("diagnostics.recycleStorage.recycleMultipartCopyFailed")); parts.push({ PartNumber: number, ETag: copied.CopyPartResult.ETag });
       }
       await s3.completeMultipartUpload({ ...identity, MultipartUpload: { Parts: parts } });
     } catch (error) { await s3.abortMultipartUpload(identity).catch(() => {}); throw error; }
   }
   const copied = await head(bucket, target);
-  invariant(copied?.ContentLength === found.ContentLength, 422, "回收复制大小校验失败");
+  invariant(copied?.ContentLength === found.ContentLength, 422, diagnosticText("diagnostics.recycleStorage.recycleCopySizeValidationFailed"));
 }
 async function verifyCas(key: string, sha: string, size: number) {
   const object = await storageClient().getObject({ Bucket: casBucket(), Key: key });
   const body = object.Body as (AsyncIterable<Uint8Array> & { destroy?: () => void }) | undefined;
   if (!body || object.ContentLength !== size) body?.destroy?.();
-  invariant(object.Body && object.ContentLength === size, 422, "回收站 CAS 大小校验失败");
+  invariant(object.Body && object.ContentLength === size, 422, diagnosticText("diagnostics.recycleStorage.recycleCasSizeValidationFailed"));
   const hash = createHash("sha256"); let length = 0;
-  for await (const chunk of object.Body as AsyncIterable<Uint8Array>) { length += chunk.length; invariant(length <= size, 422, "回收站 CAS 大小校验失败"); hash.update(chunk); }
-  invariant(length === size && hash.digest("hex") === sha, 422, "回收站 CAS SHA-256 校验失败");
+  for await (const chunk of object.Body as AsyncIterable<Uint8Array>) { length += chunk.length; invariant(length <= size, 422, diagnosticText("diagnostics.recycleStorage.recycleCasSizeValidationFailed")); hash.update(chunk); }
+  invariant(length === size && hash.digest("hex") === sha, 422, diagnosticText("diagnostics.recycleStorage.recycleCasSha256ValidationFailed"));
 }
 async function hashLock(db: Db, sha: string) {
   const key = Buffer.from(sha.slice(0, 8), "hex").readInt32BE();
@@ -58,13 +59,13 @@ async function hashLock(db: Db, sha: string) {
 }
 async function register(db: Db, clientId: string, sha256: string, size: number) {
   const object = await db.casObject.upsert({ where: { sha256 }, create: { sha256, size: BigInt(size) }, update: {} });
-  invariant(object.size === BigInt(size), 422, "CAS 文件大小冲突");
+  invariant(object.size === BigInt(size), 422, diagnosticText("diagnostics.recycleStorage.conflictingCasFileSize"));
   await db.casReference.upsert({ where: { clientId_sha256: { clientId, sha256 } }, create: { clientId, sha256 }, update: {} });
 }
 export async function putTrackedCas(clientId: string, sha: string, path: string, size: number, client: PrismaClient = prisma) {
   return client.$transaction(async db => {
     await hashLock(db, sha);
-    const owner = await db.client.findUnique({ where: { id: clientId } }); invariant(owner && !owner.deletedAt, 409, "客户端已删除");
+    const owner = await db.client.findUnique({ where: { id: clientId } }); invariant(owner && !owner.deletedAt, 409, diagnosticText("diagnostics.recycleStorage.theClientIsDeleted"));
     await register(db, clientId, sha, size);
     const trashKey = trashCasKey(sha);
     if (await head(casBucket(), trashKey)) {
@@ -91,14 +92,14 @@ export async function indexClientStorage(client: PrismaClient = prisma) {
     for (const release of owner.releases) indexes.set(release.manifestObjectKey, release.manifestSha256);
     const files = new Map<string, number>();
     for (const [key, sha] of indexes) {
-      const bytes = await readObject(key); invariant(digest(bytes) === sha, 422, "历史文件索引校验失败；回收清理暂停");
+      const bytes = await readObject(key); invariant(digest(bytes) === sha, 422, diagnosticText("diagnostics.recycleStorage.historicalFileIndexValidationFailedRecyclingIsPaused"));
       const raw = JSON.parse(bytes.toString("utf8"));
       const recipe = raw?.format === "mua-recipe-content" ? readRecipeContent(bytes) : raw?.format === "mua-recipe-manifest" ? readRecipeManifest(bytes) :
         raw?.schemaVersion === 2 && raw?.format === "mua-import-recipe" ? parseRecipeInventory(raw) : null;
       const localFiles = recipe ? recipe.files
         .filter(file => file.source.type === "local").map(file => ({ sha256: file.hashes.sha256, size: file.size })) : raw;
-      const parsed = fileList.safeParse(Array.isArray(localFiles) ? { files: localFiles } : localFiles); invariant(parsed.success, 422, "历史文件索引无效；回收清理暂停");
-      for (const file of parsed.data.files) { invariant(!files.has(file.sha256) || files.get(file.sha256) === file.size, 422, "历史 CAS 文件大小冲突"); files.set(file.sha256, file.size); }
+      const parsed = fileList.safeParse(Array.isArray(localFiles) ? { files: localFiles } : localFiles); invariant(parsed.success, 422, diagnosticText("diagnostics.recycleStorage.invalidHistoricalFileIndexRecyclingIsPaused"));
+      for (const file of parsed.data.files) { invariant(!files.has(file.sha256) || files.get(file.sha256) === file.size, 422, diagnosticText("diagnostics.recycleStorage.conflictingHistoricalCasFileSize")); files.set(file.sha256, file.size); }
     }
     await client.$transaction(async db => {
       // No GC can pass the index barrier until these references have committed.
@@ -108,7 +109,7 @@ export async function indexClientStorage(client: PrismaClient = prisma) {
         const batch = ordered.slice(start, start + 1000);
         await db.casObject.createMany({ data: batch.map(([sha256, size]) => ({ sha256, size: BigInt(size) })), skipDuplicates: true });
         const stored = await db.casObject.findMany({ where: { sha256: { in: batch.map(([sha]) => sha) } } });
-        invariant(stored.every(object => object.size === BigInt(files.get(object.sha256)!)), 422, "历史 CAS 文件大小冲突");
+        invariant(stored.every(object => object.size === BigInt(files.get(object.sha256)!)), 422, diagnosticText("diagnostics.recycleStorage.conflictingHistoricalCasFileSize"));
         await db.casReference.createMany({ data: batch.map(([sha256]) => ({ sha256, clientId: owner.id })), skipDuplicates: true });
       }
       await db.client.update({ where: { id: owner.id }, data: { storageIndexedAt: new Date() } });
@@ -123,7 +124,7 @@ export async function recycleSettings(db: Db, actor: Actor) {
 }
 export async function updateRecycleSettings(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor); const parsed = z.object({ recycleRetentionDays: z.number().int().min(1).max(365) }).strict().safeParse(raw);
-  invariant(parsed.success, 400, "回收站保留期必须为 1–365 天的整数");
+  invariant(parsed.success, 400, diagnosticText("diagnostics.recycleStorage.recycleRetentionMustBeAnIntegerFrom1To365"));
   await db.platformSettings.upsert({ where: { id: "platform" }, create: { id: "platform", ...parsed.data }, update: parsed.data });
   await audit(db, actor, "RECYCLE_SETTINGS_UPDATE", "PlatformSettings", "platform", undefined, undefined, parsed.data);
   return parsed.data;

@@ -39,7 +39,7 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     expect(internal.headers()["cache-control"]).toBe("private, no-store"); expect(operationCount(await internal.json())).toBe(apiInventory.length);
     const state = await page.request.get("/api/admin/state"); expect(state.status()).toBe(200); assertApiResponse("GET", "/api/admin/state", 200, await state.json());
     const telemetry = await page.request.get("/api/admin/storage-telemetry"); expect(telemetry.status()).toBe(200);
-    expect(telemetry.headers()["cache-control"]).toBe("no-store");
+    expect(telemetry.headers()["cache-control"]).toBe("private, no-store");
     assertApiResponse("GET", "/api/admin/storage-telemetry", 200, await telemetry.json());
     await page.goto("/admin/api");
     await expect(page.getByRole("link", { name: "API", exact: true }).first()).toBeVisible();
@@ -50,7 +50,23 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     await expect(page.getByRole("heading", { name: "Union Link API", exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("获取账号可访问服务器目录", { exact: true }).first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
-    await page.screenshot({ path: ".local/api-documentation-light.png" });
+    const panel = page.locator('[data-slot="scalar-reference"]');
+    const navigation = panel.locator(".t-doc__sidebar");
+    const navigationBefore = (await navigation.boundingBox())!;
+    const content = (await panel.locator(".references-rendered").boundingBox())!;
+    await page.mouse.move(content.x + content.width / 2, Math.min(content.y + 180, 700));
+    await page.mouse.wheel(0, 700);
+    await expect.poll(() => panel.evaluate(element => element.scrollTop)).toBeGreaterThan(300);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const navigationAfter = (await navigation.boundingBox())!;
+    expect(Math.abs(navigationAfter.y - navigationBefore.y)).toBeLessThan(2);
+    expect(navigationAfter.y + navigationAfter.height).toBeLessThanOrEqual((await panel.boundingBox())!.y + (await panel.boundingBox())!.height + 2);
+    await page.screenshot({ path: ".local/api-documentation-scrolled.png", caret: "initial" });
+    await panel.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    await page.mouse.wheel(0, 1000);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await panel.evaluate(element => { element.scrollTop = 0; });
+    await page.screenshot({ path: ".local/api-documentation-light.png", caret: "initial" });
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("link", { name: "下载 OpenAPI JSON", exact: true }).click();
     const download = await downloadPromise;
@@ -81,9 +97,9 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     await page.screenshot({ path: ".local/api-documentation-image-form.png" });
     await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeHidden();
     // Both references have separate sources; private operations disappear from the public view.
-    await page.getByRole("button", { name: "Complete administration API", exact: true }).click();
-    await page.getByRole("option", { name: "Public Launcher API", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Public Launcher API", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "All management APIs", exact: true }).click();
+    await page.getByRole("option", { name: "Launcher APIs", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Launcher APIs", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Upload or recrop the server motto image", exact: true })).toHaveCount(0);
     // Source changes can reopen the client. Close it before starting the explicit GET check.
     if (await page.getByRole("dialog").isVisible()) { await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeHidden(); }
@@ -106,8 +122,8 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(true);
     await page.screenshot({ path: ".local/api-documentation-mobile.png" });
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.getByRole("button", { name: "Public Launcher API", exact: true }).click();
-    await page.getByRole("option", { name: "Complete administration API", exact: true }).click();
+    await page.getByRole("button", { name: "Launcher APIs", exact: true }).click();
+    await page.getByRole("option", { name: "All management APIs", exact: true }).click();
     if (await page.getByRole("dialog").isVisible()) { await page.keyboard.press("Escape"); await expect(page.getByRole("dialog")).toBeHidden(); }
     await page.getByRole("button", { name: /^Open Search/ }).click();
     await page.getByRole("dialog").getByRole("combobox", { name: "Enter search query" }).fill("Sign out");

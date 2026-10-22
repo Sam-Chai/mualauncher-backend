@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import "server-only";
 import { isIP } from "node:net";
 import { lookup, resolveSrv } from "node:dns/promises";
@@ -9,20 +10,20 @@ import { DEFAULT_HIGH_LATENCY_MS, SERVER_PROBE_CACHE_MS, type ServerProbeResult 
 type Target = { hostname: string; port: number; addresses: { address: string; family: number }[] };
 export function parseMinecraftAddress(value: string) {
   const input = value.trim();
-  if (!input || input.length > 255 || /[\s\x00-\x1f\x7f\/@?#\\]/.test(input)) throw new Error("连接地址格式无效，请使用主机名或主机名:端口");
+  if (!input || input.length > 255 || /[\s\x00-\x1f\x7f\/@?#\\]/.test(input)) throw new Error(diagnosticText("diagnostics.serverProbe.invalidAddressUseAHostnameOrHostnamePort"));
   let hostname = input, port = 25565, explicitPort = false;
   if (input.startsWith("[")) {
     const match = /^\[([^\]]+)\](?::([0-9]+))?$/.exec(input);
-    if (!match || isIP(match[1]) !== 6) throw new Error("IPv6 地址格式无效，请使用 [IPv6]:端口");
+    if (!match || isIP(match[1]) !== 6) throw new Error(diagnosticText("diagnostics.serverProbe.invalidIpv6AddressUseIpv6Port"));
     hostname = match[1]; if (match[2]) { port = Number(match[2]); explicitPort = true; }
   } else if (isIP(input) !== 6 && input.includes(":")) {
-    const match = /^([^:]+):([0-9]+)$/.exec(input); if (!match) throw new Error("连接地址或端口无效");
+    const match = /^([^:]+):([0-9]+)$/.exec(input); if (!match) throw new Error(diagnosticText("diagnostics.serverProbe.invalidAddressOrPort"));
     hostname = match[1]; port = Number(match[2]); explicitPort = true;
   }
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("服务器端口必须为 1–65535");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(diagnosticText("diagnostics.serverProbe.serverPortMustBe165535"));
   if (!isIP(hostname)) {
     hostname = domainToASCII(hostname).toLowerCase().replace(/\.$/, "");
-    if (!hostname || hostname.length > 253 || !hostname.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error("服务器主机名无效");
+    if (!hostname || hostname.length > 253 || !hostname.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) throw new Error(diagnosticText("diagnostics.serverProbe.invalidServerHostname"));
   }
   return { hostname, port, explicitPort };
 }
@@ -33,7 +34,7 @@ type DnsAdapters = {
 };
 export async function resolveMinecraftTarget(value: string, dns: DnsAdapters = {}): Promise<Target> {
   const parsed = parseMinecraftAddress(value); let hostname = parsed.hostname, port = parsed.port;
-  if (isIP(hostname) && !publicDownloadAddress(hostname)) throw new Error("探测只允许公网地址，不连接本机、内网或保留地址");
+  if (isIP(hostname) && !publicDownloadAddress(hostname)) throw new Error(diagnosticText("diagnostics.serverProbe.probesRequirePublicAddressesLocalhostPrivateAndReservedAddressesAre"));
   if (!parsed.explicitPort && !isIP(hostname)) {
     try {
       const records = await (dns.srv ?? resolveSrv)(`_minecraft._tcp.${hostname}`);
@@ -43,7 +44,7 @@ export async function resolveMinecraftTarget(value: string, dns: DnsAdapters = {
       const record = sum ? group.find(record => (draw -= record.weight) < 0) : group[Math.floor(Math.random() * group.length)];
       if (record) {
         hostname = record.name.replace(/\.$/, ""); port = record.port;
-        if (!hostname || !port || port > 65535) throw new Error("Minecraft SRV 记录无效");
+        if (!hostname || !port || port > 65535) throw new Error(diagnosticText("diagnostics.serverProbe.invalidMinecraftSrvRecord"));
       }
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? error.code : null;
@@ -52,9 +53,9 @@ export async function resolveMinecraftTarget(value: string, dns: DnsAdapters = {
   }
   let addresses: Target["addresses"];
   try { addresses = isIP(hostname) ? [{ address: hostname, family: isIP(hostname) }] : dns.addresses ? await dns.addresses(hostname) : await lookup(hostname, { all: true }); }
-  catch { throw new Error("服务器域名解析失败"); }
-  if (!addresses.length) throw new Error("服务器域名没有可用地址");
-  if (addresses.some(record => !publicDownloadAddress(record.address))) throw new Error("服务器解析到内网或保留地址，已停止探测");
+  catch { throw new Error(diagnosticText("diagnostics.serverProbe.serverDnsResolutionFailed")); }
+  if (!addresses.length) throw new Error(diagnosticText("diagnostics.serverProbe.serverHostnameHasNoUsableAddresses"));
+  if (addresses.some(record => !publicDownloadAddress(record.address))) throw new Error(diagnosticText("diagnostics.serverProbe.serverResolvesToPrivateOrReservedAddressesProbeStopped"));
   const v4 = addresses.filter(record => record.family === 4), v6 = addresses.filter(record => record.family === 6);
   const ordered = Array.from({ length: Math.max(v4.length, v6.length) }, (_, index) => [v4[index], v6[index]].filter(Boolean)).flat();
   return { hostname: parsed.hostname, port, addresses: ordered.slice(0, 4) };
@@ -70,7 +71,7 @@ export function unknownProbe(address: string | null, message: string): ServerPro
 export function onlineProbe(address: string, status: MinecraftStatus, threshold = highLatencyThreshold()): ServerProbeResult {
   const high = status.latencyMs >= threshold;
   return { state: high ? "HIGH_LATENCY" : "ONLINE", address, checkedAt: new Date().toISOString(), highLatencyMs: threshold,
-    message: high ? "Minecraft 服务器在线，延迟较高" : "Minecraft 服务器在线", ...status };
+    message: high ? diagnosticText("diagnostics.serverProbe.minecraftServerOnlineWithHighLatency") : diagnosticText("diagnostics.serverProbe.minecraftServerOnline"), ...status };
 }
 
 export async function probeMinecraftAddress(address: string, dependencies: { resolve?: typeof resolveMinecraftTarget; status?: typeof minecraftStatus; timeoutMs?: number } = {}): Promise<ServerProbeResult> {
@@ -81,20 +82,20 @@ export async function probeMinecraftAddress(address: string, dependencies: { res
     const target = await (dependencies.resolve ?? resolveMinecraftTarget)(address);
     let last: unknown;
     for (const destination of target.addresses) {
-      if (expired) throw new MinecraftProbeError("TIMEOUT", "服务器探测超时");
+      if (expired) throw new MinecraftProbeError("TIMEOUT", diagnosticText("diagnostics.serverProbe.serverProbeTimedOut"));
       // Let the socket return an already verified status before the outer DNS/task watchdog fires.
       const remaining = timeoutMs - (Date.now() - started) - Math.min(25, timeoutMs / 10);
-      if (remaining <= 0) throw new MinecraftProbeError("TIMEOUT", "服务器探测超时");
+      if (remaining <= 0) throw new MinecraftProbeError("TIMEOUT", diagnosticText("diagnostics.serverProbe.serverProbeTimedOut"));
       try { return onlineProbe(address, await (dependencies.status ?? minecraftStatus)({ ...destination, port: target.port, hostname: target.hostname }, target.addresses.length > 1 ? Math.min(2000, remaining) : remaining)); }
       catch (error) { last = error; }
     }
-    throw last ?? new MinecraftProbeError("UNREACHABLE", "没有可连接的服务器地址");
+    throw last ?? new MinecraftProbeError("UNREACHABLE", diagnosticText("diagnostics.serverProbe.noConnectableServerAddresses"));
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([run(), new Promise<never>((_, reject) => { timer = setTimeout(() => { expired = true; reject(new MinecraftProbeError("TIMEOUT", "服务器探测超时，无法获得 Minecraft 状态")); }, timeoutMs); })]);
+    return await Promise.race([run(), new Promise<never>((_, reject) => { timer = setTimeout(() => { expired = true; reject(new MinecraftProbeError("TIMEOUT", diagnosticText("diagnostics.serverProbe.serverProbeTimedOutWithoutMinecraftStatus"))); }, timeoutMs); })]);
   } catch (error) {
-    return { ...unknownProbe(address, error instanceof Error ? error.message : "服务器连接失败"), state: "OFFLINE", checkedAt: new Date().toISOString() };
+    return { ...unknownProbe(address, error instanceof Error ? error.message : diagnosticText("diagnostics.serverProbe.serverConnectionFailed")), state: "OFFLINE", checkedAt: new Date().toISOString() };
   } finally { clearTimeout(timer); }
 }
 
@@ -103,13 +104,13 @@ export function createProbeCache(probe: (address: string) => Promise<ServerProbe
   let active = 0; const waiters: (() => void)[] = [];
   async function execute(address: string) {
     if (active >= 4) {
-      if (waiters.length >= 64) return unknownProbe(address, "探测任务繁忙，请稍后刷新");
+      if (waiters.length >= 64) return unknownProbe(address, diagnosticText("diagnostics.serverProbe.probeServiceBusyRefreshLater"));
       const acquired = await new Promise<boolean>(resolve => {
         const ready = () => { clearTimeout(timer); resolve(true); };
         const timer = setTimeout(() => { const index = waiters.indexOf(ready); if (index >= 0) waiters.splice(index, 1); resolve(false); }, 8000);
         waiters.push(ready);
       });
-      if (!acquired) return unknownProbe(address, "探测任务等待超时，请稍后刷新");
+      if (!acquired) return unknownProbe(address, diagnosticText("diagnostics.serverProbe.probeQueueTimedOutRefreshLater"));
     } else active++;
     try {
       const value = await probe(address);

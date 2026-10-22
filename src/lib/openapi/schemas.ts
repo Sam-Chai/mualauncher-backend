@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { muaPlatformSchema, sha256Schema, muaPlatformManifestSchema } from "../muapack-contract";
 import { recipeManifestSchema } from "../muapack-v2-contract";
+import { diagnosticSchema } from "../diagnostics";
 
 // Wire DTOs only. No database, storage, credentials or server-only imports.
 const id = z.string().uuid();
 const clientId = z.string().uuid();
 const integer = z.number().int().nonnegative();
 const timestamp = z.string().datetime({ offset: true });
-export const errorSchema = z.object({ error: z.string() }).strict();
+export const errorSchema = z.object({ error: z.string(), code: z.string(), params: diagnosticSchema.shape.params }).strict();
 export const serverParams = z.object({ serverId: z.string().regex(/^[A-Za-z]{3,5}$/) });
 export const acceptedFormats = z.enum(["1", "2", "1,2", "2,1"]);
 

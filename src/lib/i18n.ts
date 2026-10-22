@@ -1,39 +1,25 @@
-import english from "./locales/en.json";
-import extra from "./locales/extra-en.json";
-import openapi from "./locales/openapi-en.json";
-import union from "./locales/union-en.json";
-import unionDirectory from "./locales/union-directory-en.json";
+// next-intl's framework-independent core also runs in Worker/CLI processes.
+import { createTranslator } from "use-intl/core";
+import chinese from "./locales/zh-CN.json";
+import english from "./locales/en-US.json";
 
 export const LOCALE_COOKIE = "mua-locale";
-export type Locale = "zh-CN" | "en-US";
-export type Translate = (message: string, values?: Record<string, unknown>) => string;
+export const messages = { "zh-CN": chinese, "en-US": english };
+export type Locale = keyof typeof messages;
+type LeafKeys<T> = { [K in keyof T & string]: T[K] extends string ? K : `${K}.${LeafKeys<T[K]>}` }[keyof T & string];
+export type MessageKey = LeafKeys<typeof chinese>;
+export type Translate = (key: string, values?: Record<string, unknown>) => string;
 export const parseLocale = (value: unknown): Locale => value === "en-US" ? "en-US" : "zh-CN";
-const zhNavigation: Record<string, string> = {
-  Organization: "组织管理", Server: "服务器", Client: "客户端", Releases: "版本发布", System: "系统管理", Members: "成员管理", Permissions: "权限管理",
-  Storage: "存储", Worker: "任务处理", "Signing Keys": "签名密钥", "Audit Log": "审计日志", Settings: "设置",
-  PENDING: "待审批", APPROVED: "已同意", REJECTED: "已拒绝", CANCELLED: "已取消",
-};
-const enMessages: Record<string, string> = { ...english, ...extra, ...openapi, ...union, ...unionDirectory };
-const reverseMessages = Object.fromEntries(Object.entries(enMessages).map(([key, value]) => [value, key]));
-const patterns = Object.entries(enMessages).filter(([key]) => /\{\d+\}/.test(key)).map(([key, value]) => ({
-  regex: new RegExp("^" + key.split(/(\{\d+\})/).map(part => /^\{\d+\}$/.test(part) ? "(.+?)" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("") + "$"),
-  value, tokens: key.match(/\{\d+\}/g)!,
-}));
-export function translate(locale: Locale, message: string, values: Record<string, unknown> = {}): string {
-  const key = message.replace(/\s+/g, " ").trim();
-  let result = locale === "en-US" ? enMessages[key] : zhNavigation[key] ?? reverseMessages[key];
-  if (!result && locale === "en-US" && /[\u3400-\u9fff]/.test(key)) {
-    for (const pattern of patterns) {
-      const match = pattern.regex.exec(key);
-      if (match) {
-        const captures = Object.fromEntries(pattern.tokens.map((token, index) => [token, match[index + 1]]));
-        result = pattern.value.replace(/\{\d+\}/g, token => captures[token] ?? token);
-        break;
-      }
-    }
-  }
-  if (result !== undefined) result = (message.match(/^\s*/)?.[0] ?? "") + result + (message.match(/\s*$/)?.[0] ?? "");
-  return (result ?? message).replace(/\{([^{}]+)\}/g, (token, name: string) => Object.hasOwn(values, name) ? String(values[name]) : token);
+
+/** Shared controls may receive either a message key or an already rendered label. */
+export function hasMessage(key: string): key is MessageKey {
+  return typeof key.split(".").reduce<unknown>((value, part) => value && typeof value === "object" ? (value as Record<string, unknown>)[part] : undefined, chinese) === "string";
 }
-export const translator = (locale: Locale): Translate => (message, values) => translate(locale, message, values);
+export const messageValues = (values: Record<string, unknown> = {}) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, typeof value === "number" || typeof value === "string" ? value : String(value ?? "")]));
+const translators = {
+  "zh-CN": createTranslator({ locale: "zh-CN", messages: chinese }),
+  "en-US": createTranslator({ locale: "en-US", messages: english }),
+};
+export const translator = (locale: Locale): Translate => (key, values) => hasMessage(key) ? translators[locale](key, messageValues(values)) : key;
+export const translate = (locale: Locale, key: string, values?: Record<string, unknown>) => translator(locale)(key, values);
 export const localizedDate = (value: unknown, locale: Locale) => new Date(String(value)).toLocaleString(locale, { timeZone: "Asia/Shanghai", hour12: false });

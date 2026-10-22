@@ -10,15 +10,15 @@ function safeSites(sites: OrganizationSkinSite[]) {
 }
 export function OrganizationSkinSiteField({ id, sites = [] }: { id: string; sites?: OrganizationSkinSite[] }) {
   const { t } = useI18n(), valid = safeSites(sites);
-  return <section className="space-y-2"><Label htmlFor={`skin-site-${id}`}>{t("皮肤站地址")}</Label>
+  return <section className="space-y-2"><Label htmlFor={`skin-site-${id}`}>{t("organizationAccess.skinSiteUrl")}</Label>
     {valid.length ? valid.map((site,index) => <div key={`${site.code}:${site.url}`} className="space-y-1">{valid.length>1 && <p className="text-xs text-muted-foreground">{site.code} · {new URL(site.url).hostname}</p>}<Input id={index===0?`skin-site-${id}`:undefined} aria-label={index===0?undefined:`${site.code} · ${new URL(site.url).hostname}`} readOnly value={site.url} /></div>)
-      : <Input id={`skin-site-${id}`} readOnly value="" placeholder={t("暂无皮肤站地址")} />}
-    <p className="text-xs text-muted-foreground">{t("地址随联盟皮肤站映射自动填充。")}</p>
+      : <Input id={`skin-site-${id}`} readOnly value="" placeholder={t("organizationSkinSites.noSkinSiteAddress")} />}
+    <p className="text-xs text-muted-foreground">{t("organizationSkinSites.addressesAreFilledAutomaticallyFromUnionSkinSiteMappings")}</p>
   </section>;
 }
 export function VisitSkinSite({ sites = [] }: { sites?: OrganizationSkinSite[] }) {
   const { t } = useI18n(), valid = safeSites(sites);
-  if (!valid.length) return <Button type="button" variant="outline" size="sm" disabled title={t("暂无皮肤站地址")}><ExternalLink className="size-3.5" />{t("前往皮肤站")}</Button>;
-  if (valid.length===1) return <Button variant="outline" size="sm" asChild><a href={valid[0].url} target="_blank" rel="noopener noreferrer" title={valid[0].url}><ExternalLink className="size-3.5" />{t("前往皮肤站")}</a></Button>;
-  return <div className="flex flex-wrap gap-2">{valid.map(site => <Button key={`${site.code}:${site.url}`} variant="outline" size="sm" asChild><a href={site.url} target="_blank" rel="noopener noreferrer" title={site.url}><ExternalLink className="size-3.5" />{t("前往皮肤站")} · {new URL(site.url).hostname}</a></Button>)}</div>;
+  if (!valid.length) return <Button type="button" variant="outline" size="sm" disabled title={t("organizationSkinSites.noSkinSiteAddress")}><ExternalLink className="size-3.5" />{t("organizationSkinSites.visitSkinSite")}</Button>;
+  if (valid.length===1) return <Button variant="outline" size="sm" asChild><a href={valid[0].url} target="_blank" rel="noopener noreferrer" title={valid[0].url}><ExternalLink className="size-3.5" />{t("organizationSkinSites.visitSkinSite")}</a></Button>;
+  return <div className="flex flex-wrap gap-2">{valid.map(site => <Button key={`${site.code}:${site.url}`} variant="outline" size="sm" asChild><a href={site.url} target="_blank" rel="noopener noreferrer" title={site.url}><ExternalLink className="size-3.5" />{t("organizationSkinSites.visitSkinSite")} · {new URL(site.url).hostname}</a></Button>)}</div>;
 }

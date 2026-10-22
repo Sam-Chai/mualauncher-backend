@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { cookies } from "next/headers";
 import { authorized, COOKIE_NAME, login, SESSION_SECONDS, tokenDigest } from "@/lib/auth";
 import { AppError, invariant } from "@/lib/errors";
@@ -21,7 +22,7 @@ export async function POST(request: Request, context: Context) {
       const data = input.fields(raw, ["username", "password"]);
       const name = input.username(input.text(data, "username", 64));
       // Allow old passwords to fail uniformly, but cap work/input length.
-      invariant(typeof data.password === "string" && data.password.length > 0 && data.password.length <= 128, 400, "请输入有效密码");
+      invariant(typeof data.password === "string" && data.password.length > 0 && data.password.length <= 128, 400, diagnosticText("diagnostics.route.enterAValidPassword"));
       const session = await login(name, data.password, token);
       const response = json({ ok: true });
       response.cookies.set(COOKIE_NAME, session.token, { ...cookieOptions(), maxAge: SESSION_SECONDS, expires: session.expiresAt });
@@ -36,12 +37,12 @@ export async function POST(request: Request, context: Context) {
     }
     if (action === "password") {
       const data = input.fields(raw, ["currentPassword", "newPassword"]);
-      invariant(typeof data.currentPassword === "string" && data.currentPassword.length <= 128, 400, "请输入当前密码");
+      invariant(typeof data.currentPassword === "string" && data.currentPassword.length <= 128, 400, diagnosticText("diagnostics.route.enterYourCurrentPassword"));
       const nextPassword = input.password(data.newPassword);
       await authorized(token, true, async (db, actor) => {
         await validateDatabase("auth");
         const credential = await authPrisma.localCredential.findUnique({ where: { accountId: actor.id } });
-        invariant(credential && await verifyPassword(data.currentPassword as string, credential.passwordHash), 403, "当前密码错误");
+        invariant(credential && await verifyPassword(data.currentPassword as string, credential.passwordHash), 403, diagnosticText("diagnostics.route.theCurrentPasswordIsIncorrect"));
         await credentialUpdate(db, actor.id, await hashPassword(nextPassword), credential.passwordHash);
         await revokeAccountSessions(db, actor.id);
         await audit(db, actor, "AUTH_PASSWORD_CHANGE", "Account", actor.id);
@@ -50,6 +51,6 @@ export async function POST(request: Request, context: Context) {
       response.cookies.set(COOKIE_NAME, "", { ...cookieOptions(), maxAge: 0 });
       return response;
     }
-    throw new AppError(404, "接口不存在");
+    throw new AppError(404, diagnosticText("diagnostics.route.endpointNotFound"));
   } catch (error) { return failure(error); }
 }

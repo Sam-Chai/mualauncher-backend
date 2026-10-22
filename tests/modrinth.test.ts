@@ -211,16 +211,16 @@ test("CONNECT proxy pins public addresses, verifies TLS and rejects private or n
     file.downloads=['https://dual-stack.example/good'];
     assert.equal((await downloadRemoteFile(file,${JSON.stringify(join(dir, "dual-stack"))},settings,new AbortController().signal,()=>{})).sha256,${JSON.stringify(digest(bytes))});
     file.downloads=['https://mixed-private.example/good'];
-    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "mixed-private"))},settings,new AbortController().signal,()=>{}),/私有网络/);
+    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "mixed-private"))},settings,new AbortController().signal,()=>{}),/private/i);
     file.downloads=['https://1.1.1.1/private'];
-    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "private"))},settings,new AbortController().signal,()=>{}),/禁止下载/);
+    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "private"))},settings,new AbortController().signal,()=>{}),/forbidden/i);
     file.downloads=['https://1.1.1.1/unlisted'];
-    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "unlisted"))},{...settings,remoteSourceWhitelistEnabled:true,remoteSourceHosts:['1.1.1.1']},new AbortController().signal,()=>{}),/未获允许/);
+    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "unlisted"))},{...settings,remoteSourceWhitelistEnabled:true,remoteSourceHosts:['1.1.1.1']},new AbortController().signal,()=>{}),/not allowed/i);
     process.env.DOWNLOAD_DNS_OVER_HTTPS='true';
     file.downloads=['https://dual-stack.example/good'];
     assert.equal((await downloadRemoteFile(file,${JSON.stringify(join(dir, "encrypted-dns"))},settings,new AbortController().signal,()=>{})).sha256,${JSON.stringify(digest(bytes))});
     file.downloads=['https://mixed-private.example/good'];
-    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "encrypted-private"))},settings,new AbortController().signal,()=>{}),/私有或保留地址/);
+    await assert.rejects(downloadRemoteFile(file,${JSON.stringify(join(dir, "encrypted-private"))},settings,new AbortController().signal,()=>{}),/private or reserved/i);
     console.log('proxy verified');
   `;
   const child = spawn(process.execPath, ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],

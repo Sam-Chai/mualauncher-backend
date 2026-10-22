@@ -48,6 +48,7 @@ export async function requestContractSource(overrides: Record<string, string> = 
   }
   return ["// Generated from actual service validators by npm run openapi:generate. Do not edit.",
     'import { z } from "zod";', 'import { packageFormatVersionSchema } from "../client-contract";',
+    'import { diagnosticText } from "../diagnostics";',
     'import { MAX_UPLOAD_SIZE_MB, UPLOAD_MB, maxUploadSizeMbSchema } from "../upload-size-policy";',
     'import { enabledPackageFormatsSchema } from "../package-format-policy";',
     'import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "../download-sources";', ...definitions, ""].join("\n\n");

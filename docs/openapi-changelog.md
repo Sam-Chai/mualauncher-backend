@@ -1,5 +1,9 @@
 # OpenAPI 兼容性记录
 
+## 5.0.0 · 2026-10-22 英文 API 诊断与前端翻译
+
+开发期统一错误响应为 `{ error, code, params }`：error 始终为英文，code 为稳定语义标识，params 为插值参数。Worker 的失败原因、警告、进度以及探测提示改为 `{ code, message, params }`，message 为英文。前端只按 code 查询中英文词典，不再匹配旧中文消息。此为错误／诊断契约的主动调整；新增 public/admin-5.0.0 基线，接口数量仍为完整 88、公开 11。muapack 文件格式、内容身份、签名、RBAC 和授权范围保持不变。迁移 `202610220004_english_diagnostic_default` 仅将 PackageBuild 的兜底进度默认值改为英文。
+
 ## 4.0.0 · 2026-10-22 Launcher 游戏令牌换票
 
 同日组织简介增量：目录通过各站 `/api/yggdrasil` 的 `meta.serverName` 自动填充组织简介。既有组织 PATCH 在真实修改／清空简介后永久保留人工内容，省略或原样保存不停止同步；字段、路径、权限及操作数不变，仅补充行为说明。见 [目录同步](union-directory-sync.md)。

@@ -1,3 +1,4 @@
+import { diagnosticText } from "@/lib/diagnostics";
 import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { invariant } from "../errors";
@@ -26,7 +27,7 @@ export function headerHead(headers: Record<string, string>, prefix: string): Obj
     Metadata: Object.fromEntries(Object.entries(lower).filter(([key]) => key.startsWith(prefix)).map(([key, value]) => [key.slice(prefix.length), value])) };
 }
 export function noVersioning(status: string | undefined) {
-  invariant(!status || status === "Disabled", 503, "云存储桶必须关闭且从未启用版本控制，以确保禁止覆盖已签名对象");
+  invariant(!status || status === "Disabled", 503, diagnosticText("diagnostics.native.cloudBucketVersioningMustBeDisabledAndMustNeverHave"));
 }
 export async function createdUpload(operation: () => Promise<{ UploadId?: string }>, options: StorageOptions | undefined, cleanup: (id: string) => Promise<unknown>) {
   options?.abortSignal?.throwIfAborted();
@@ -39,13 +40,13 @@ export async function createdUpload(operation: () => Promise<{ UploadId?: string
 }
 export function nativePut(input: PutInput) {
   if (Buffer.isBuffer(input.Body)) {
-    if (input.ChecksumSHA256) invariant(createHash("sha256").update(input.Body).digest("base64") === input.ChecksumSHA256, 422, "对象上传 SHA-256 不匹配");
+    if (input.ChecksumSHA256) invariant(createHash("sha256").update(input.Body).digest("base64") === input.ChecksumSHA256, 422, diagnosticText("diagnostics.native.theUploadedObjectSha256DoesNotMatch"));
     return { body: input.Body, md5: createHash("md5").update(input.Body).digest("base64") };
   }
   if (!input.ChecksumSHA256) return { body: input.Body };
   const hash = createHash("sha256");
   const verified = new Transform({ transform(chunk, _, done) { hash.update(chunk); done(null, chunk); },
-    flush(done) { done(hash.digest("base64") === input.ChecksumSHA256 ? null : new Error("对象上传 SHA-256 不匹配")); } });
+    flush(done) { done(hash.digest("base64") === input.ChecksumSHA256 ? null : new Error(diagnosticText("diagnostics.native.theUploadedObjectSha256DoesNotMatch"))); } });
   const source = input.Body;
   source.on("error", error => verified.destroy(error));
   verified.once("close", () => source.destroy());
