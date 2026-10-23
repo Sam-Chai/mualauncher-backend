@@ -31,7 +31,7 @@ export function createS3Storage(configuration: StorageConfiguration): ObjectStor
     listMultipartUploads: async input => { const result = await client.send(new ListMultipartUploadsCommand(input)); return { Uploads: result.Uploads?.flatMap(row => row.Key && row.UploadId ? [{ Key: row.Key, UploadId: row.UploadId }] : []) }; },
     copyObject: input => client.send(new CopyObjectCommand(input)),
     uploadPartCopy: input => client.send(new UploadPartCopyCommand(input)),
-    signUploadPart: (input, options) => getSignedUrl(client, new UploadPartCommand(input), options),
+    signUploadPart: (input, options) => getSignedUrl(client, new UploadPartCommand(input), { ...options, signableHeaders: new Set(["content-length"]) }),
     signDownload: (input, options) => getSignedUrl(client, new GetObjectCommand(input), options),
   };
 }

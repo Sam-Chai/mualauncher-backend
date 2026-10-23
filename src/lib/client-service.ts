@@ -20,6 +20,7 @@ import { queuePackageBuilds, assertPackagesReady } from "./package-build-service
 import type { RecipeImportStatistics } from "./recipe-inventory";
 import { packageArtifactsSchema } from "./package-contract";
 import { recipeDraftTarget, recipeReleaseTarget } from "./recipe-package-service";
+import { assertDistributableFiles } from "./pack-file-policy";
 import { recipeContentSchema, type RecipeContent } from "./muapack-v2-contract";
 import { encodeMuaJson } from "./muapack-protocol";
 import { putImmutableBytes } from "./package-storage";
@@ -89,7 +90,8 @@ export async function uploadPartUrl(db: Db, actor: Actor, id: string, raw: unkno
   const upload = await findUpload(db, actor, id, true);
   invariant(upload.status === "UPLOADING" && upload.expiresAt > new Date(), 409, diagnosticText("diagnostics.clientService.uploadSessionClosedOrExpired"));
   invariant(partNumber <= Math.ceil(Number(upload.size) / upload.partSize), 400, diagnosticText("diagnostics.clientService.invalidPartNumber"));
-  return { url: await signPart(upload.sourceObjectKey, upload.multipartId, partNumber), expiresIn: 600 };
+  const contentLength = Math.min(upload.partSize, Number(upload.size) - (partNumber - 1) * upload.partSize);
+  return { url: await signPart(upload.sourceObjectKey, upload.multipartId, partNumber, contentLength), expiresIn: 600 };
 }
 export async function prepareCompletion(db: Db, actor: Actor, id: string, raw: unknown) {
   const { parts } = parse(z.object({ parts: z.array(z.object({ partNumber: z.number().int().positive(), etag: z.string().min(1).max(200) }).strict()).min(1).max(320) }).strict(), raw);
@@ -172,6 +174,7 @@ export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknow
   const draftId = randomUUID(); let manifest: ReleaseManifest | RecipeContent;
   if (upload.packageFormatVersion === 2) {
     const inventory = await readRecipeInventory(upload.filesObjectKey, upload.filesSha256);
+    assertDistributableFiles(inventory.files);
     const settings = await uploadOptions(db);
     manifest = recipeContentSchema.parse({ format: "mua-recipe-content", formatVersion: 2,
       release: { organizationId: scope.client.organizationId, clientId: upload.clientId, releaseId: draftId, version: metadata.versionLabel,
@@ -180,6 +183,7 @@ export async function submitUpload(db: Db, actor: Actor, id: string, raw: unknow
       launch: { jvmArgs: [], gameArgs: [], memory: { mode: "auto", minimumMiB: 2048, recommendedMiB: 4096 }, preLaunch: [] }, files: inventory.files });
   } else {
     const inventory = await readInventory(upload.filesObjectKey, upload.filesSha256);
+    assertDistributableFiles(inventory.files);
     manifest = { schemaVersion: 2, format: "mua-client-manifest", clientId: upload.clientId, organizationId: scope.client.organizationId,
     version: metadata.versionLabel, name: metadata.name, runtime: { minecraft: metadata.minecraftVersion, java: metadata.javaVersion },
     mods: metadata.mods, summary: metadata.summary, description: metadata.description, sourceSha256: upload.sourceSha256,
@@ -213,7 +217,7 @@ export async function reviewClient(db: Db, actor: Actor, clientId: string, draft
   assertBaseline(draft.upload, ({ releaseId: scope.client.currentReleaseId, revision: scope.client.revision }));
   invariant(draft.candidateManifestKey && draft.candidateManifestSha256, 409, diagnosticText("diagnostics.clientService.theVersionManifestIsMissing"));
   const bytes = await readObject(draft.candidateManifestKey); invariant(digest(bytes) === draft.candidateManifestSha256, 422, diagnosticText("diagnostics.clientService.theReviewManifestFailedValidation"));
-  if (draft.packageFormatVersion === 2) await recipeDraftTarget(db, draft);
+  if (data.decision === "approve") assertDistributableFiles(draft.packageFormatVersion === 2 ? (await recipeDraftTarget(db, draft)).files : (JSON.parse(bytes.toString("utf8")) as ReleaseManifest).files);
   await db.clientDraft.update({ where: { id: draftId }, data: { status: data.decision === "approve" ? "APPROVED" : "REJECTED",
     reviewedById: actor.id, reviewedRevision: draft.contentRevision, reviewedPackageRevision: draft.packageRevision, reviewedAt: new Date(), reviewNote: data.note } });
   await audit(db, actor, data.decision === "approve" ? "CLIENT_APPROVE" : "CLIENT_REJECT", "ClientDraft", draftId, scope.client.organizationId, undefined, { contentRevision: draft.contentRevision, packageRevision: draft.packageRevision, note: data.note });
@@ -233,10 +237,12 @@ export async function publishClient(db: Db, actor: Actor, clientId: string, draf
   invariant(draft.reviewedPackageRevision === draft.packageRevision, 409, diagnosticText("diagnostics.clientService.publicationPlatformsHaveNotBeenApproved"));
   assertBaseline(draft.upload, ({ releaseId: scope.client.currentReleaseId, revision: scope.client.revision }));
   let bytes = await readObject(draft.candidateManifestKey); invariant(digest(bytes) === draft.candidateManifestSha256, 422, diagnosticText("diagnostics.clientService.theManifestDigestDoesNotMatchPublishingIsBlocked"));
+  assertDistributableFiles((JSON.parse(bytes.toString("utf8")) as ReleaseManifest | RecipeContent).files);
   await assertPackagesReady(db, draftId);
   let manifestObjectKey = draft.candidateManifestKey, manifestSha256 = draft.candidateManifestSha256;
   const recipe = draft.packageFormatVersion === 2 ? await recipeReleaseTarget(db, draft) : null;
   if (recipe) { bytes = recipe.bytes; manifestObjectKey = recipe.build.targetObjectKey!; manifestSha256 = recipe.build.targetSha256!; }
+  assertDistributableFiles(recipe ? recipe.target.files : (JSON.parse(bytes.toString("utf8")) as ReleaseManifest).files);
   if (replacesDraftId !== undefined && replacesDraftId !== draft.replacesDraftId) {
     await requireClient(db, actor, clientId, "DRAFT_ARCHIVE", true);
     invariant(contentRevision === draft.contentRevision && packageRevision === draft.packageRevision, 409, diagnosticText("diagnostics.clientService.theCurrentDraftRevisionIsRequiredToChangeReplacementRelationships"));

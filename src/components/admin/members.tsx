@@ -9,6 +9,7 @@ import { api, useAdmin, type Account, type Organization } from "./provider";
 import { DataTable } from "./data-table";
 import { Heading, NoPermission } from "./common";
 import { EditorDialog, SchemaForm, nameSchema, passwordSchema, type Field } from "./form";
+import { RevokeCredentials } from "@/components/revoke-credentials";
 import { roleLabels, rolePermissions, reservedRoles } from "@/lib/roles";
 import type { Role } from "@/generated/prisma/client";
 import type { Translate } from "@/lib/i18n";
@@ -68,7 +69,7 @@ function AccountEditor({ account }: { account?: Account }) {
 function WhitelistAccounts() {
   const { t } = useI18n();
   const { state } = useAdmin();
-  const columns: ColumnDef<Account>[] = [{ accessorKey: "displayName", header: t("members.displayName") }, { id: "identity", header: t("members.signInIdentity"), accessorFn: account => [account.username, account.unionSubject].filter(Boolean).join(" "), cell: ({ row }) => <AccountIdentity {...row.original} /> }, { accessorKey: "status", header: t("clients.status"), cell: ({ row }) => <Badge variant="outline">{row.original.status === "ACTIVE" ? t("apiTokens.enabled") : t("members.disabled")}</Badge> }, { accessorKey: "isSuperAdmin", header: t("members.platformRole"), cell: ({ row }) => row.original.isSuperAdmin ? t("members.muaSuperadmin") : row.original.unionSubject ? t("members.unionAccount") : t("members.allowlistedMembers") }, { id: "actions", header: t("clients.actions"), enableHiding: false, cell: ({ row }) => <AccountEditor account={row.original} /> }];
+  const columns: ColumnDef<Account>[] = [{ accessorKey: "displayName", header: t("members.displayName") }, { id: "identity", header: t("members.signInIdentity"), accessorFn: account => [account.username, account.unionSubject].filter(Boolean).join(" "), cell: ({ row }) => <AccountIdentity {...row.original} /> }, { accessorKey: "status", header: t("clients.status"), cell: ({ row }) => <Badge variant="outline">{row.original.status === "ACTIVE" ? t("apiTokens.enabled") : t("members.disabled")}</Badge> }, { accessorKey: "isSuperAdmin", header: t("members.platformRole"), cell: ({ row }) => row.original.isSuperAdmin ? t("members.muaSuperadmin") : row.original.unionSubject ? t("members.unionAccount") : t("members.allowlistedMembers") }, { id: "actions", header: t("clients.actions"), enableHiding: false, cell: ({ row }) => <div className="flex gap-2"><AccountEditor account={row.original} /><RevokeCredentials account={row.original} self={row.original.id === state.actor.id} /></div> }];
   return <div className="space-y-5"><AccountEditor /><DataTable data={state.accounts} columns={columns} /></div>;
 }
 export function MembersPage() {

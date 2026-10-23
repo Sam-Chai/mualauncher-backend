@@ -11,6 +11,7 @@ import { api, useAdmin, type State } from "./provider";
 import { DataTable } from "./data-table";
 import { Heading, NoPermission } from "./common";
 import { SchemaForm, passwordSchema } from "./form";
+import { RevokeCredentials } from "@/components/revoke-credentials";
 import { navigateAfterAuthChange } from "@/lib/auth-navigation";
 import { ApiTokens } from "./api-tokens";
 import type { DownloadSettings } from "@/lib/download-settings";
@@ -37,7 +38,7 @@ export function SettingsPage() {
   const { state, busy, run } = useAdmin();
   return <><Heading title="navigation.settings" description={t("system.accountSecurityAndPlatformIntegrations")} /><div className="space-y-6"><div className="grid items-stretch gap-6 xl:grid-cols-2">
     <Card><CardHeader><CardTitle>{t("system.accountSecurity")}</CardTitle><CardDescription>{state.actor.displayName} {" " + t("system.changingYourPasswordRevokesAllSessionsSignInAgain")}</CardDescription></CardHeader><CardContent><SchemaForm schema={z.object({ currentPassword: z.string().min(1, t("system.enterYourCurrentPassword")).max(128), newPassword: passwordSchema })} fields={[{ name: "currentPassword", label: t("system.currentPassword"), type: "password", autoComplete: "current-password" }, { name: "newPassword", label: t("system.newPassword"), type: "password", autoComplete: "new-password" }]} defaults={{ currentPassword: "", newPassword: "" }} disabled={busy} label={t("system.changePasswordAndSignOut")}
-      onSubmit={values => run(async () => { await api("/api/auth/password", "POST", values); navigateAfterAuthChange("/login"); }, "", false)} /></CardContent></Card>
+      onSubmit={values => run(async () => { await api("/api/auth/password", "POST", values); navigateAfterAuthChange("/login"); }, "", false)} /><div className="mt-4"><RevokeCredentials /></div></CardContent></Card>
     <Card><CardHeader><CardTitle>{t("system.platformIntegrations")}</CardTitle><CardDescription>{t("system.allowlistedSignInApplicationLayerRbacAndPostgresqlRls")}</CardDescription></CardHeader><CardContent className="space-y-4 text-sm">{[[t("system.authentication"), t("system.localAllowlistEnabled")], [t("system.skinSiteSignIn"), t("system.skinSiteIdentityMemberSignIn")], [t("system.dataProtection"), t("system.integratedApplicationLayerRbacRetained")], [t("system.objectStorage"), t("system.objectStorageAdaptersIntegrated")], [t("navigation.taskProcessing"), t("system.independentWorkerPersistentPostgresqlTasks")]].map(([label, value]) => <div key={label} className="flex justify-between gap-4 border-b pb-3 last:border-0"><span className="text-muted-foreground">{label}</span><span className="text-right">{value}</span></div>)}</CardContent></Card>
   </div><div className="grid items-stretch gap-6 xl:grid-cols-2">
     <ApiTokens />

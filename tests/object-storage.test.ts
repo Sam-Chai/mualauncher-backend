@@ -12,6 +12,7 @@ import { createTencentStorage } from "../src/lib/object-storage/tencent";
 import { createHuaweiStorage } from "../src/lib/object-storage/huawei";
 import { guardImmutableStorage } from "../src/lib/object-storage/immutable";
 import { nativeError, noVersioning, xmlEscape } from "../src/lib/object-storage/native";
+import { validUploadSignature } from "./fixtures/upload-signature";
 
 const defaults = { OSS_REGION: "cn-test-1", OSS_ACCESS_KEY_ID: "test-id", OSS_SECRET_ACCESS_KEY: "test-secret" };
 const conflict = (error: unknown) => (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 412;
@@ -77,6 +78,11 @@ async function fixture(t: TestContext, provider: "ali" | "tencent" | "huawei") {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url!, "http://storage.test"), key = decodeURIComponent(url.pathname.slice(1));
     requests.push({ method: request.method, key, query: url.searchParams, headers: request.headers });
+    const signedPart = request.method === "PUT" && url.searchParams.has("uploadId") &&
+      ["x-oss-additional-headers", "q-header-list", "X-Amz-SignedHeaders"].some(name => url.searchParams.get(name)?.split(";").includes("content-length"));
+    if (signedPart && !validUploadSignature(provider, url, { ...Object.fromEntries(Object.entries(request.headers).map(([key, value]) => [key, String(value)])), host: String(request.headers["x-fixture-original-host"]) }, provider === "tencent" ? "test-bucket-1234567890" : "test-bucket")) {
+      request.resume(); response.writeHead(403); response.end("SignatureDoesNotMatch"); return;
+    }
     const body = Buffer.concat(await Array.fromAsync(request as AsyncIterable<Buffer>));
     const xml = (value: string, status = 200) => { response.writeHead(status, { "Content-Type": "application/xml" }); response.end(value); };
     const fail = (status: number, code: string) => xml(`<Error><Code>${code}</Code><Message>fixture</Message></Error>`, status);
@@ -144,7 +150,7 @@ async function fixture(t: TestContext, provider: "ali" | "tencent" | "huawei") {
   t.mock.method(http, "request", (options: http.RequestOptions, callback?: (res: http.IncomingMessage) => void) => originalRequest({ ...options, hostname: "127.0.0.1", host: "127.0.0.1", port }, callback));
   t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input)), host = url.host; url.hostname = "127.0.0.1"; url.port = String(port);
-    return originalFetch(url, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), host } });
+    return originalFetch(url, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), host, "x-fixture-original-host": host } });
   });
   const config = storageConfiguration({ ...defaults, OSS_PROVIDER: provider, OSS_ENDPOINT: `http://${provider === "tencent" ? "{bucket}." : ""}storage.test:${port}` });
   const raw = provider === "ali" ? createAliStorage(config) : provider === "tencent" ? createTencentStorage(config) : createHuaweiStorage(config);
@@ -172,7 +178,11 @@ for (const provider of ["ali", "tencent", "huawei"] as const) {
     await assert.rejects(client.copyObject({ Bucket, Key: "bad-copy", CopySource: `${Bucket}/copied`, CopySourceIfMatch: '"wrong"' }), conflict);
     const upload = await client.createMultipartUpload({ Bucket, Key: "multipart", Metadata: { sha256: sha } }); assert(upload.UploadId);
     const identity = { Bucket, Key: "multipart", UploadId: upload.UploadId };
-    const partUrl = await client.signUploadPart({ ...identity, PartNumber: 1 }, { expiresIn: 600 });
+    const partUrl = await client.signUploadPart({ ...identity, PartNumber: 1, ContentLength: bytes.length }, { expiresIn: 600 });
+    for (const body of [Buffer.concat([bytes, Buffer.from("extra")]), bytes.subarray(1)]) {
+      const rejected = await fetch(partUrl, { method: "PUT", body }); assert.equal(rejected.status, 403); await rejected.text();
+    }
+    assert.equal((await client.listParts(identity)).Parts?.length, 0, "wrong-sized parts must not reach storage");
     const put = await fetch(partUrl, { method: "PUT", body: bytes }); assert.equal(put.status, 200);
     const parts = await client.listParts(identity); assert.equal(parts.IsTruncated, false); assert.equal(parts.Parts?.[0].Size, bytes.length); assert.equal(parts.Parts?.[0].ETag, put.headers.get("etag"));
     assert((await client.listMultipartUploads({ Bucket })).Uploads?.some(row => row.UploadId === upload.UploadId));

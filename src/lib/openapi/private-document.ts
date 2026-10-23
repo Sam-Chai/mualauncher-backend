@@ -11,6 +11,7 @@ import * as s from "./private-schemas";
 import * as r from "./requests.generated";
 import { recipeDistributionSchema } from "../recipe-distribution-contract";
 import { storageTelemetrySchema } from "../storage-telemetry-contract";
+import { credentialRevocationSchema } from "../credential-revocation-contract";
 
 type Operation = { method: "get" | "post" | "patch" | "put" | "delete"; path: string; id: string; tag: string;
   response: z.ZodTypeAny; body?: z.ZodTypeAny; query?: z.AnyZodObject;
@@ -72,6 +73,8 @@ admin("put", "/organizations/{organizationId}/members/{accountId}", "setOrganiza
 admin("put", "/organizations/{organizationId}/members/{accountId}/servers/{serverId}", "setServerGrant", s.ok, s.grant, ["ORG_MEMBERS_MANAGE", "SERVER_READ"]);
 admin("post", "/accounts", "createAccount", s.createdId, s.accountCreate, [], true, 201);
 admin("patch", "/accounts/{accountId}", "updateAccount", s.ok, s.accountUpdate, [], true);
+admin("post", "/accounts/{accountId}/revoke-credentials", "revokeAccountCredentials", credentialRevocationSchema, z.object({}).strict(), [], true);
+ops.push({ method: "post", path: "/api/auth/revoke-credentials", id: "revokeOwnCredentials", response: credentialRevocationSchema, body: z.object({}).strict(), auth: "session", tag: "Authentication" });
 for (const [kind, id, schema] of [
   ["recycle-settings", "Recycle", r.RecycleSettings],
   ["upload-size-settings", "UploadSize", r.UploadSizeSettings],

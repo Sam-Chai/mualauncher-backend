@@ -1,4 +1,4 @@
-import { plainDiagnosticText } from "../src/lib/diagnostics";
+import { plainDiagnosticText, parseDiagnostic } from "../src/lib/diagnostics";
 import { fixtureClientId } from "./fixtures/identity";
 import { configureLocalTestStorage } from "./fixtures/local-storage";
 import "dotenv/config";
@@ -48,6 +48,7 @@ import { maxUploadSizeMb, uploadSizeSettings, updateUploadSizeSettings } from ".
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "../src/lib/upload-size-policy";
 import { assertApiRequest, assertApiResponse } from "./openapi-validation";
 import { recipeDistributionStats } from "../src/lib/recipe-distribution";
+import { setDatabaseActor } from "../src/lib/database-security";
 
 const suffix = randomBytes(8).toString("hex"); const schema = "mua_upload_test_" + suffix;
 process.env.DATABASE_SCHEMA = schema;
@@ -199,6 +200,25 @@ test("upload size limit covers both formats and API actors, accepts exact limits
   } finally { await work(db => updateUploadSizeSettings(db, root, { maxUploadSizeMb: 1024 })); }
 });
 
+test("MinIO rejects oversized, undersized and lengthless parts before storing bytes", async () => {
+  const publication = await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } });
+  const bytes = Buffer.from("exact-part");
+  const upload = await work(db => c.createUpload(db, admin, { packageFormatVersion: 1, clientId: publication.id, fileName: "client.zip", size: bytes.length,
+    baseReleaseId: publication.currentReleaseId, basePublicationRevision: publication.revision }));
+  try {
+    const { url } = await work(db => c.uploadPartUrl(db, admin, upload.id, { partNumber: 1 }));
+    for (const body of [Buffer.concat([bytes, Buffer.from("extra")]), bytes.subarray(1)]) {
+      const rejected = await fetch(url, { method: "PUT", body }); assert.equal(rejected.status, 403); await rejected.text();
+    }
+    const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(bytes)); controller.close(); } });
+    const chunked = await fetch(url, { method: "PUT", body, duplex: "half" } as RequestInit & { duplex: "half" });
+    assert(chunked.status >= 400 && chunked.status < 500); await chunked.text();
+    const stored = await client.clientUpload.findUniqueOrThrow({ where: { id: upload.id } });
+    assert.equal((await storageClient().listParts({ Bucket: packagesBucket(), Key: stored.sourceObjectKey, UploadId: stored.multipartId })).Parts?.length ?? 0, 0);
+    const valid = await fetch(url, { method: "PUT", body: bytes }); assert.equal(valid.status, 200); await valid.text();
+  } finally { await work(db => c.cancelUpload(db, admin, upload.id)); }
+});
+
 test("lowering upload size keeps existing multipart completion and Worker processing available", async () => {
   const org = await work(db => m.createOrganization(db, root, { displayName: "Existing upload fixtures" }));
   const identity = await work(db => c.createClient(db, root, { organizationId: org.id, name: "Existing upload size" }));
@@ -231,9 +251,10 @@ test("upload authorization and API Tokens keep real RBAC, account revocation and
   await work(db => m.setMember(db, root, organizationId, admin.id, { roles: ["ORG_ADMIN"], status: "DISABLED" }));
   await assert.rejects(work(db => c.createUpload(db, actor, { packageFormatVersion: 1, clientId: fixtureClientId("NPA"), fileName: "x.zip", size: 5, baseReleaseId: null, basePublicationRevision: 0 })), denied(404));
   await work(db => m.setMember(db, root, organizationId, admin.id, { roles: ["ORG_ADMIN"], status: "ACTIVE" }));
-  await work(db => m.updateAccount(db, root, admin.id, { status: "DISABLED" }));
+  await work(async db => { await setDatabaseActor(db, root); return m.updateAccount(db, root, admin.id, { status: "DISABLED" }); });
   await assert.rejects(apiActor(client, request, undefined), denied(401));
   await work(db => m.updateAccount(db, root, admin.id, { status: "ACTIVE" }));
+  await assert.rejects(apiActor(client, request, undefined), denied(401));
   await work(db => revokeApiToken(db, admin, token.id)); await assert.rejects(apiActor(client, request, undefined), denied(401));
 });
 test("a full ZIP becomes private CAS files and a reviewed, signed immutable current release", async () => {
@@ -1045,7 +1066,7 @@ test("corrupted recycled CAS is rejected; settings require MUA superadmin and dr
   const trash = "recycle/cas/" + casKey(sha);
   await storageClient().putObject({ Bucket: casBucket(), Key: trash, Body: Buffer.alloc(bytes.length), Metadata: { sha256: sha } });
   const b = await newRecycleClient("Corrupt restoration"); const failed = await prepare(zip, admin, b.clientId);
-  assert.equal(failed.status, "FAILED"); assert(plainDiagnosticText(failed.error)?.includes("SHA-256")); assert.equal(await objectExists(casBucket(), casKey(sha)), false);
+  assert.equal(failed.status, "FAILED"); assert.equal(parseDiagnostic(failed.error)?.code, "diagnostics.recycleStorage.recycleCasSha256ValidationFailed"); assert.equal(await objectExists(casBucket(), casKey(sha)), false);
   await work(db => updateRecycleSettings(db, root, { recycleRetentionDays: 1 }));
   await indexedMaintenance(new Date(now.getTime() + 2 * 86400000)); assert.equal(await objectExists(casBucket(), trash), false);
   await work(db => updateRecycleSettings(db, root, { recycleRetentionDays: 7 }));
@@ -1650,4 +1671,37 @@ test("real HMCL mrpack downloads and verifies declared mods in an isolated Worke
   assert.equal(digest(await readObject(casKey(mod.sha256), casBucket())), mod.sha256);
   console.log(JSON.stringify({ sample: "HMCL mrpack", minecraft: upload.detectedInfo?.minecraftVersion, java: upload.detectedInfo?.javaVersion,
     mods: upload.detectedMods.length, files: inventory.files.length, remoteBytes: remote![0].downloadedBytes, casSha256: mod.sha256 }));
+});
+
+test("legacy sensitive inventories and already-submitted manifests cannot bypass submission, approval or publication", async () => {
+  const org = (await client.client.findUniqueOrThrow({ where: { id: fixtureClientId("NPA") } })).organizationId;
+  const identity = await work(db => c.createClient(db, admin, { organizationId: org, name: "Legacy privacy guard" }));
+  const upload = await prepare(v1, admin, identity.clientId, false);
+  const saved = await client.clientUpload.findUniqueOrThrow({ where: { id: upload.id } });
+  const file = { path: "mods/legacy.jar", sha256: digest(shared), size: shared.length, policy: "managed" as const };
+  const files = [file, { ...file, path: "accounts.json" }];
+  const statistics = { previousVersion: null, addedFiles: 2, modifiedFiles: 0, deletedFiles: 0, fullSize: shared.length * 2, newDataSize: shared.length,
+    estimatedDownloadSize: shared.length, casReusePercent: 0, fileCount: 2, sourceSize: v1.length };
+  const persist = async (key: string, value: unknown) => { const bytes = Buffer.from(JSON.stringify(value)); await storageClient().putObject({ Bucket: packagesBucket(), Key: key, Body: bytes }); return digest(bytes); };
+  const indexKey = saved.sourceObjectKey + ".legacy-private";
+  const indexHash = await persist(indexKey, { schemaVersion: 1, files });
+  await client.clientUpload.update({ where: { id: upload.id }, data: { status: "PROCESSING" } });
+  await client.clientUpload.update({ where: { id: upload.id }, data: { status: "READY", sourceSha256: digest(v1), filesObjectKey: indexKey, filesSha256: indexHash, statistics } });
+  await assert.rejects(work(db => c.submitUpload(db, admin, upload.id, { ...fields, name: identity.name })), denied(422));
+  assert.equal(await client.clientDraft.count({ where: { clientId: identity.clientId } }), 0);
+  // Insert a pre-policy submitted draft as migration fixtures do. Submitted content remains immutable.
+  const manifest: ReleaseManifest = { schemaVersion: 2, format: "mua-client-manifest", clientId: identity.clientId, organizationId: org,
+    version: fields.versionLabel, name: identity.name, summary: fields.summary, description: fields.description,
+    runtime: { minecraft: fields.minecraftVersion, java: fields.javaVersion }, sourceSha256: digest(v1), mods: upload.detectedMods,
+    files, update: statistics };
+  const key = indexKey + ".manifest", sha = await persist(key, manifest);
+  const { id: draftId } = await client.clientDraft.create({ data: { clientId: identity.clientId, createdById: admin.id, status: "SUBMITTED",
+    name: identity.name, versionLabel: fields.versionLabel, summary: fields.summary, description: fields.description,
+    candidateMetadata: { ...fields, name: identity.name, mods: upload.detectedMods }, sourceObjectKey: saved.sourceObjectKey,
+    candidateManifestKey: key, candidateManifestSha256: sha } });
+  await client.clientUpload.update({ where: { id: upload.id }, data: { draftId, status: "SUBMITTED" } });
+  await assert.rejects(work(db => c.reviewClient(db, reviewer, identity.clientId, draftId, { decision: "approve", note: "privacy regression", contentRevision: 1, packageRevision: 1 })), denied(422));
+  await client.clientDraft.update({ where: { id: draftId }, data: { status: "APPROVED", reviewedById: reviewer.id, reviewedAt: new Date(), reviewedRevision: 1, reviewedPackageRevision: 1 } });
+  await assert.rejects(work(db => c.publishClient(db, root, identity.clientId, draftId, { contentRevision: 1, packageRevision: 1, activate: false })), denied(422));
+  assert.equal(await client.clientRelease.count({ where: { clientId: identity.clientId } }), 0);
 });

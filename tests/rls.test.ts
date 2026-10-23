@@ -18,6 +18,8 @@ import { validateDatabase, disconnectDatabases } from "../src/lib/prisma";
 import { performance } from "node:perf_hooks";
 import { storageTelemetry, collectStorageTelemetry } from "../src/lib/storage-telemetry";
 import { telemetryConfiguration } from "../src/lib/object-storage/telemetry";
+import { revokeCredentials } from "../src/lib/credential-revocation";
+import { apiActor } from "../src/lib/api-auth";
 
 const schema = `mua_rls_${randomBytes(8).toString("hex")}`;
 process.env.DATABASE_SCHEMA = schema;
@@ -261,4 +263,64 @@ test("restricted archival preserves history and deletion hides the client; self-
     throw rollback;
   }), error => error === rollback);
   assert.equal((await owner.account.findUniqueOrThrow({ where: { id: f.root.id } })).status, "ACTIVE");
+});
+
+test("ordinary members can revoke their own credentials; other accounts, API and launcher actors are denied by service and SQL", async () => {
+  const member = await owner.account.create({ data: { displayName: "revocation PLAYER" } });
+  await owner.organizationMember.create({ data: { organizationId: f.org.id, accountId: member.id, roles: ["PLAYER"], grantedById: f.root.id } });
+  const cookie = randomBytes(32).toString("hex");
+  const sessionData = { accountId: member.id, expiresAt: new Date(Date.now() + 60_000) };
+  await owner.session.createMany({ data: [{ ...sessionData, tokenHash: tokenDigest(cookie) }, { ...sessionData, tokenHash: tokenDigest("launcher-revocation-fixture"), kind: "LAUNCHER" }] });
+  const api = await owner.apiToken.create({ data: { accountId: member.id, name: "revoke me", tokenHash: tokenDigest("mua_revoke_fixture"), permissions: [], serverIds: [], expiresAt: sessionData.expiresAt } });
+  await owner.launcherLoginAttempt.create({ data: { accountId: member.id, challenge: "a".repeat(43), expiresAt: sessionData.expiresAt } });
+  await assert.rejects(as(f.admin, db => revokeCredentials(db, f.admin, member.id, {})));
+  await assert.rejects(as(f.admin, db => db.$queryRaw`SELECT ${securityFunction("revoke_credentials")}(${member.id}::uuid)`));
+  await assert.rejects(as(member, db => revokeCredentials(db, member, f.root.id, {})));
+  await assert.rejects(as(member, db => revokeCredentials(db, member, member.id, { accountId: f.root.id })));
+  for (const actor of [{ ...member, sessionKind: "LAUNCHER" }, { ...f.root, apiScope: { permissions: [], serverIds: [] } }]) {
+    await assert.rejects(as(actor, db => revokeCredentials(db, actor, member.id, {})));
+    await assert.rejects(as(actor, db => db.$queryRaw`SELECT ${securityFunction("revoke_credentials")}(${member.id}::uuid)`));
+  }
+  const actor = await actorFromToken(web, cookie); assert.equal(actor.canManage, false);
+  const result = await as(actor, db => revokeCredentials(db, actor, actor.id, {}));
+  assert.deepEqual(result, { ok: true, sessions: 2, apiTokens: 1, launcherApprovals: 1 });
+  await assert.rejects(actorFromToken(web, cookie));
+  assert((await owner.apiToken.findUniqueOrThrow({ where: { id: api.id } })).revokedAt);
+  assert.equal(await owner.launcherLoginAttempt.count({ where: { accountId: member.id } }), 0);
+  assert.equal(await owner.auditEvent.count({ where: { action: "ACCOUNT_CREDENTIALS_REVOKE", targetId: member.id } }), 1);
+  assert((await as(f.root, db => revokeCredentials(db, f.root, member.id, {}))).ok);
+});
+
+test("revocation rolls back sessions, API tokens and approvals when the enclosing transaction fails", async () => {
+  const target = await owner.account.create({ data: { displayName: "atomic revocation" } });
+  await owner.session.create({ data: { accountId: target.id, tokenHash: tokenDigest(target.id), expiresAt: new Date(Date.now() + 60_000) } });
+  const token = await owner.apiToken.create({ data: { accountId: target.id, name: "rollback", tokenHash: tokenDigest(`api-${target.id}`), permissions: [], serverIds: [], expiresAt: new Date(Date.now() + 60_000) } });
+  await owner.launcherLoginAttempt.create({ data: { accountId: target.id, challenge: "c".repeat(43), expiresAt: new Date(Date.now() + 60_000) } });
+  const rollback = new Error("abort revocation transaction");
+  await assert.rejects(as(f.root, async db => { await revokeCredentials(db, f.root, target.id, {}); throw rollback; }), error => error === rollback);
+  assert.equal(await owner.session.count({ where: { accountId: target.id } }), 1);
+  assert.equal((await owner.apiToken.findUniqueOrThrow({ where: { id: token.id } })).revokedAt, null);
+  assert.equal(await owner.launcherLoginAttempt.count({ where: { accountId: target.id } }), 1);
+  assert.equal(await owner.auditEvent.count({ where: { action: "ACCOUNT_CREDENTIALS_REVOKE", targetId: target.id } }), 0);
+});
+
+test("password reset, disable and demotion revoke all credential types; reenabling never restores API tokens", async () => {
+  for (const change of [{ password: "reset-password-fixture" }, { status: "DISABLED" }, { isSuperAdmin: false }]) {
+    const target = await owner.account.create({ data: { displayName: "revocation target", isSuperAdmin: true } });
+    await owner.localCredential.create({ data: { accountId: target.id, username: `reset-${target.id}`, passwordHash: await hashPassword("old-password-fixture") } });
+    await owner.session.create({ data: { accountId: target.id, tokenHash: tokenDigest(target.id), expiresAt: new Date(Date.now() + 60_000) } });
+    const secret = `mua_${randomBytes(32).toString("hex")}`;
+    const request = new Request("https://link.example/api/v1/clients", { headers: { Authorization: `Bearer ${secret}` } });
+    const token = await owner.apiToken.create({ data: { accountId: target.id, name: "all credentials", tokenHash: tokenDigest(secret), permissions: ["SERVER_READ"], serverIds: ["AAA"], expiresAt: new Date(Date.now() + 60_000) } });
+    assert.equal((await apiActor(web, request, undefined)).id, target.id);
+    await owner.launcherLoginAttempt.create({ data: { accountId: target.id, challenge: "b".repeat(43), expiresAt: new Date(Date.now() + 60_000) } });
+    await as(f.root, db => m.updateAccount(db, f.root, target.id, change));
+    assert.equal(await owner.session.count({ where: { accountId: target.id } }), 0);
+    assert.equal(await owner.launcherLoginAttempt.count({ where: { accountId: target.id } }), 0);
+    assert((await owner.apiToken.findUniqueOrThrow({ where: { id: token.id } })).revokedAt);
+    await assert.rejects(apiActor(web, request, undefined));
+    await as(f.root, db => m.updateAccount(db, f.root, target.id, { status: "ACTIVE" }));
+    assert((await owner.apiToken.findUniqueOrThrow({ where: { id: token.id } })).revokedAt);
+    await assert.rejects(apiActor(web, request, undefined));
+  }
 });

@@ -75,8 +75,9 @@ export async function beginMultipart(key: string) {
   const result = await storageClient().createMultipartUpload({ Bucket: packagesBucket(), Key: key, ContentType: "application/zip" });
   invariant(result.UploadId, 503, diagnosticText("diagnostics.storage.unableToCreateAnUploadSession")); return result.UploadId;
 }
-export function signPart(key: string, uploadId: string, partNumber: number) {
-  return storageClient().signUploadPart({ Bucket: packagesBucket(), Key: key, UploadId: uploadId, PartNumber: partNumber }, { expiresIn: 600 });
+export function signPart(key: string, uploadId: string, partNumber: number, contentLength: number) {
+  invariant(Number.isSafeInteger(contentLength) && contentLength > 0 && contentLength <= 64 * 1024 * 1024, 400, diagnosticText("diagnostics.storage.invalidUploadPartSize"));
+  return storageClient().signUploadPart({ Bucket: packagesBucket(), Key: key, UploadId: uploadId, PartNumber: partNumber, ContentLength: contentLength }, { expiresIn: 600 });
 }
 export async function completeMultipart(key: string, uploadId: string, size: number, partSize: number, parts: { partNumber: number; etag: string }[]) {
   const client = storageClient(); const identity = { Bucket: packagesBucket(), Key: key, UploadId: uploadId };

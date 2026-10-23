@@ -11,10 +11,11 @@ import { actorFromToken, locked, login, tokenDigest, type Actor, type Db } from 
 import { prisma } from "../src/lib/prisma";
 import { AppError } from "../src/lib/errors";
 import { hashPassword, verifyPassword } from "../src/lib/password";
+import { loginQuotas } from "../src/lib/login-policy";
 import { requireServer, expandRoles } from "../src/lib/rbac";
 import { sameOrigin } from "../src/lib/http";
 import { publishedServers } from "../src/lib/catalog";
-import { securityFunction } from "../src/lib/database-security";
+import { securityFunction, setDatabaseActor } from "../src/lib/database-security";
 import * as m from "../src/lib/management";
 import * as c from "../src/lib/client-service";
 import { requireClient } from "../src/lib/rbac";
@@ -237,6 +238,7 @@ test("membership revocation and account disabling invalidate existing access", (
   await actorFromToken(db, token);
   await m.setMember(db, f.root, f.org.id, f.beta.id, { roles: [], status: "DISABLED" });
   await assert.rejects(requireServer(db, f.beta, "NPB", "SERVER_READ"), denied(404));
+  await setDatabaseActor(db, f.root);
   await m.updateAccount(db, f.root, f.beta.id, { status: "DISABLED" });
   assert.equal(await db.session.count({ where: { accountId: f.beta.id } }), 0);
   await assert.rejects(actorFromToken(db, token), denied(401));
@@ -421,8 +423,10 @@ test("switching from a MUA superuser to an organization admin changes the authen
 }));
 
 test("login throttling is shared and writes require the configured origin", async () => {
-  await client.loginThrottle.upsert({ where: { key: tokenDigest("login:user:blocked") }, create: { key: tokenDigest("login:user:blocked"), attempts: 10, resetAt: new Date(Date.now() + 60000) }, update: {} });
-  await assert.rejects(login("blocked", "testing-password-2026", undefined, client), denied(429));
+  const clientKey = "browser:throttled", [, pair] = loginQuotas(clientKey, "blocked");
+  await client.loginThrottle.upsert({ where: { key: pair.key }, create: { key: pair.key, attempts: pair.limit, resetAt: new Date(Date.now() + 60000) }, update: {} });
+  await assert.rejects(login("blocked", "testing-password-2026", undefined, client, clientKey), denied(429));
+  await assert.rejects(login("blocked", "testing-password-2026", undefined, client, "browser:other"), denied(401));
   const prior = process.env.APP_ORIGIN; process.env.APP_ORIGIN = "http://localhost:3000";
   try {
     assert.throws(() => sameOrigin(new Request("http://localhost:3000/api/admin/state", { method: "POST", headers: { origin: "https://untrusted.example" } })), denied(403));
@@ -431,12 +435,28 @@ test("login throttling is shared and writes require the configured origin", asyn
   } finally { if (prior === undefined) delete process.env.APP_ORIGIN; else process.env.APP_ORIGIN = prior; }
 });
 
+test("one client's exhausted quota and legacy global quota never block another client's valid login", async () => {
+  await client.localCredential.create({ data: { username: "quota-valid", passwordHash, account: { create: { displayName: "Quota isolation" } } } });
+  const [source] = loginQuotas("ip:attacker", "quota-valid");
+  for (const [key, attempts] of [[source.key, 60], [tokenDigest("login:global"), 60], [tokenDigest("login:user:quota-valid"), 10]] as const) {
+    await client.loginThrottle.upsert({ where: { key }, create: { key, attempts, resetAt: new Date(Date.now() + 60000) }, update: { attempts, resetAt: new Date(Date.now() + 60000) } });
+  }
+  await assert.rejects(login("quota-valid", "testing-password-2026", undefined, client, "ip:attacker"), denied(429));
+  const result = await login("quota-valid", "testing-password-2026", undefined, client, "ip:legitimate");
+  assert.equal((await actorFromToken(client, result.token)).username, "quota-valid");
+  await assert.rejects(login("quota-missing", "incorrect", undefined, client, "ip:legitimate"), denied(401));
+  const [, pair] = loginQuotas("ip:legitimate", "quota-missing");
+  assert.equal((await client.loginThrottle.findUniqueOrThrow({ where: { key: pair.key } })).attempts, 1, "failed authentication must not roll back quota accounting");
+});
+
 test("concurrent administrator downgrades leave one active administrator", async () => {
   const accounts = await Promise.all(["concurrent-a", "concurrent-b"].map(displayName => client.account.create({ data: { displayName, isSuperAdmin: true } })));
   const tokens = ["c".repeat(64), "d".repeat(64)];
   await client.session.createMany({ data: accounts.map((account, index) => ({ accountId: account.id, tokenHash: tokenDigest(tokens[index]), expiresAt: new Date(Date.now() + 60000) })) });
-  const results = await Promise.allSettled(accounts.map((account, index) => locked(async db =>
-    m.updateAccount(db, await actorFromToken(db, tokens[index]), account.id, { isSuperAdmin: false }), client)));
+  const results = await Promise.allSettled(accounts.map((account, index) => locked(async db => {
+    const actor = await actorFromToken(db, tokens[index]); await setDatabaseActor(db, actor);
+    return m.updateAccount(db, actor, account.id, { isSuperAdmin: false });
+  }, client)));
   assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
   const rejected = results.find(result => result.status === "rejected") as PromiseRejectedResult;
   assert(denied(409)(rejected.reason));

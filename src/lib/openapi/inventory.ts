@@ -23,6 +23,7 @@ export const apiInventory = [
   ...([ ...["state", "pipeline", "storage-telemetry", "tokens", "recycle-settings", "download-settings", "package-format-settings", "upload-size-settings"].map(action => ["GET", `/api/admin/${action}`] as const),
     ["GET", "/api/admin/organizations/{organizationId}/account-search"],
     ["POST", "/api/admin/tokens"], ["POST", "/api/admin/tokens/{tokenId}/revoke"],
+    ["POST", "/api/admin/accounts/{accountId}/revoke-credentials"],
     ...["organizations", "servers", "accounts"].map(kind => ["POST", `/api/admin/${kind}`] as const),
     ["PATCH", "/api/admin/organizations/{organizationId}"], ["PATCH", "/api/admin/servers/{serverId}"], ["PATCH", "/api/admin/accounts/{accountId}"],
     ["POST", "/api/admin/organizations/{organizationId}/archive"], ["POST", "/api/admin/servers/{serverId}/archive"],
@@ -31,6 +32,6 @@ export const apiInventory = [
     ["GET", "/api/admin/servers/{serverId}/probe"],
     ...["GET", "POST", "DELETE"].map(method => [method, "/api/admin/servers/{serverId}/motto-image"] as Entry),
   ] satisfies Entry[]).map(([method, path]) => ({ method, path, group: "Admin", authentication: "session", documented: true, source: "src/app/api/admin" })),
-  ...["login", "logout", "password"].map(action => ({ method: "POST" as const, path: `/api/auth/${action}`, group: "Auth",
-    authentication: action === "password" ? "session + same-origin" : "same-origin", documented: true, source: "src/app/api/auth/[action]/route.ts" })),
+  ...["login", "logout", "password", "revoke-credentials"].map(action => ({ method: "POST" as const, path: `/api/auth/${action}`, group: "Auth",
+    authentication: ["password", "revoke-credentials"].includes(action) ? "session + same-origin" : "same-origin", documented: true, source: "src/app/api/auth/[action]/route.ts" })),
 ];

@@ -10,4 +10,8 @@ Settings（`/admin/system/settings`）增加“muapack 上传大小”，单位 
 
 修改配置只控制新建上传；已创建上传仍可获取分片链接、完成、重试、导入、审核和发布。调整不删除旧任务、不下架历史、不修改签名，也不限制 Worker 生成的最终 full／update muapack 体积。当前不新增直接导入 `.muapack` 的能力。
 
+2026-10-23：新签发的每个 PUT URL 都把从上传记录计算的精确分片字节数纳入签名，非末片 64 MiB，末片也必须精确匹配。MinIO／AWS／S3 的 SigV4、阿里 OSS V4 additional headers、腾讯 COS 签名头都包含 Content-Length；华为 OBS 使用原生 SDK 显式 V4 签名方法，仅改变上传链接，不改变其他 OBS 操作。浏览器 Blob／脚本 Buffer 自动发送长度，不要求 JavaScript 设置受限请求头；不接受无长度的流式直传。完整合并时的分片数、大小和 ETag 校验继续保留。
+
+返回字段、权限和有效期不变，现有任务按创建时已保存的 size 计算，降低 Settings 上限不影响其继续上传。部署前已签出的旧 URL 最长仍可用十分钟，不能通过代码升级追溯撤销；需要立即阻断时应取消对应 multipart。真实云端须运行 `npm run storage:verify`，其中新增超长和过短分片拒绝验证，并验收浏览器 CORS。SDK 签名及本地 HTTP fixture 通过不代表真实云已验收。
+
 部署执行 `npm run db:deploy`、`npm run db:generate`，已有设置行迁移后默认 1024 MB，不改动其他设置和上传记录。

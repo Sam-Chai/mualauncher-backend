@@ -43,6 +43,6 @@ export interface ObjectStorage {
   listMultipartUploads(input: BucketInput): Promise<{ Uploads?: { Key: string; UploadId: string }[] }>;
   copyObject(input: CopyInput): Promise<unknown>;
   uploadPartCopy(input: PartCopyInput): Promise<{ CopyPartResult?: { ETag?: string } }>;
-  signUploadPart(input: MultipartInput & { PartNumber: number }, options: SignOptions): Promise<string>;
+  signUploadPart(input: MultipartInput & { PartNumber: number; ContentLength: number }, options: SignOptions): Promise<string>;
   signDownload(input: ObjectInput & { ResponseContentDisposition?: string }, options: SignOptions): Promise<string>;
 }

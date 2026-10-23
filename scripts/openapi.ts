@@ -1,6 +1,6 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { validate } from "@scalar/openapi-parser";
-import { publicOpenApi, PUBLIC_OPERATION_IDS } from "../src/lib/openapi/document";
+import { publicOpenApi, PUBLIC_OPERATION_IDS, OPENAPI_VERSION } from "../src/lib/openapi/document";
 import { apiInventory } from "../src/lib/openapi/inventory";
 import { syncRequestContracts } from "./openapi-sources";
 import { verifyCoverage } from "./openapi-coverage";
@@ -22,7 +22,7 @@ async function main() {
       if (count !== expected) throw new Error(`${scope}: expected ${expected} operations, got ${count}`);
       if (locale === "en-US" && /[\u3400-\u9fff]/.test(JSON.stringify(document))) throw new Error(`${scope}: untranslated English document`);
       if (scope === "admin") await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]);
-      if (check && locale === "en-US") await checkCompatibility(document, `docs/openapi/baselines/${scope === "public" ? "public-5.0.0" : "admin-5.0.0"}.json`);
+      if (check && locale === "en-US") await checkCompatibility(document, `docs/openapi/baselines/${scope}-${OPENAPI_VERSION}.json`);
       outputs.set(`docs/openapi/union-link.${scope === "admin" ? "admin." : ""}${locale}.json`, JSON.stringify(document, null, 2) + "\n");
     }
   }
@@ -31,6 +31,7 @@ async function main() {
   sourceFiles.push("prisma/migrations/202610220002_union_login_audit_context/migration.sql", "src/app/api/admin/launcher-providers/route.ts", "src/app/api/auth/launcher/providers/route.ts", "src/app/api/auth/launcher/yggdrasil/start/route.ts", "src/app/api/auth/launcher/yggdrasil/exchange/route.ts");
   sourceFiles.push("src/lib/i18n.ts", "src/lib/locales/zh-CN.json", "src/lib/locales/en-US.json", "src/lib/openapi/document.ts", "src/lib/openapi/private-document.ts", "src/lib/openapi/union-document.ts");
   sourceFiles.push("src/lib/diagnostics.ts", "src/lib/errors.ts", "prisma/migrations/202610220004_english_diagnostic_default/migration.sql");
+  sourceFiles.push("src/lib/credential-revocation.ts", "src/lib/credential-revocation-contract.ts", "src/lib/pack-file-policy.ts", "prisma/migrations/202610230001_account_credential_revocation/migration.sql");
   sourceFiles.sort();
   outputs.set("docs/openapi/source-manifest.json", JSON.stringify(Object.fromEntries(await Promise.all(sourceFiles.map(async path => [path, createHash("sha256").update((await readFile(path, "utf8")).replace(/\r\n/g, "\n")).digest("hex")]))), null, 2) + "\n");
   outputs.set("docs/api-inventory.md", ["# Union Link API 接口清单", "",

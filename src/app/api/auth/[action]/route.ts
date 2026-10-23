@@ -7,12 +7,20 @@ import * as input from "@/lib/input";
 import { audit } from "@/lib/management";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { authPrisma, validateDatabase } from "@/lib/prisma";
-import { credentialUpdate, revokeAccountSessions } from "@/lib/database-security";
+import { credentialUpdate, revokeAccountCredentials } from "@/lib/database-security";
+import { revokeOwnCredentials } from "@/lib/credential-revocation";
+import { loginClient, LOGIN_CLIENT_COOKIE, LOGIN_CLIENT_SECONDS } from "@/lib/login-policy";
 
 type Context = { params: Promise<{ action: string }> };
 const cookieOptions = () => ({ httpOnly: true, secure: appOrigin().startsWith("https://"), sameSite: "lax" as const, path: "/" });
 
 export async function POST(request: Request, context: Context) {
+  let browserCookie: string | undefined;
+  const finish = (response: ReturnType<typeof json>) => {
+    if (browserCookie) response.cookies.set(LOGIN_CLIENT_COOKIE, browserCookie, { ...cookieOptions(), path: "/api/auth", maxAge: LOGIN_CLIENT_SECONDS });
+    if (response.status === 429) response.headers.set("Retry-After", "60");
+    return response;
+  };
   try {
     sameOrigin(request);
     const { action } = await context.params;
@@ -23,15 +31,23 @@ export async function POST(request: Request, context: Context) {
       const name = input.username(input.text(data, "username", 64));
       // Allow old passwords to fail uniformly, but cap work/input length.
       invariant(typeof data.password === "string" && data.password.length > 0 && data.password.length <= 128, 400, diagnosticText("diagnostics.route.enterAValidPassword"));
-      const session = await login(name, data.password, token);
+      const source = loginClient(request, (await cookies()).get(LOGIN_CLIENT_COOKIE)?.value);
+      browserCookie = source.cookie;
+      const session = await login(name, data.password, token, authPrisma, source.key);
       const response = json({ ok: true });
       response.cookies.set(COOKIE_NAME, session.token, { ...cookieOptions(), maxAge: SESSION_SECONDS, expires: session.expiresAt });
-      return response;
+      return finish(response);
     }
     if (action === "logout") {
       input.fields(raw, []);
       if (token) { await validateDatabase("auth"); await authPrisma.session.deleteMany({ where: { tokenHash: tokenDigest(token) } }); }
       const response = json({ ok: true });
+      response.cookies.set(COOKIE_NAME, "", { ...cookieOptions(), maxAge: 0 });
+      return response;
+    }
+    if (action === "revoke-credentials") {
+      const result = await revokeOwnCredentials(token, raw);
+      const response = json(result);
       response.cookies.set(COOKIE_NAME, "", { ...cookieOptions(), maxAge: 0 });
       return response;
     }
@@ -44,7 +60,7 @@ export async function POST(request: Request, context: Context) {
         const credential = await authPrisma.localCredential.findUnique({ where: { accountId: actor.id } });
         invariant(credential && await verifyPassword(data.currentPassword as string, credential.passwordHash), 403, diagnosticText("diagnostics.route.theCurrentPasswordIsIncorrect"));
         await credentialUpdate(db, actor.id, await hashPassword(nextPassword), credential.passwordHash);
-        await revokeAccountSessions(db, actor.id);
+        await revokeAccountCredentials(db, actor.id);
         await audit(db, actor, "AUTH_PASSWORD_CHANGE", "Account", actor.id);
       });
       const response = json({ ok: true });
@@ -52,5 +68,5 @@ export async function POST(request: Request, context: Context) {
       return response;
     }
     throw new AppError(404, diagnosticText("diagnostics.route.endpointNotFound"));
-  } catch (error) { return failure(error); }
+  } catch (error) { return finish(failure(error)); }
 }

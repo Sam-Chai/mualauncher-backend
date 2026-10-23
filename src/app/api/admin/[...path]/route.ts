@@ -13,6 +13,7 @@ import { recycleSettings, updateRecycleSettings } from "@/lib/recycle-storage";
 import { downloadSettings, updateDownloadSettings } from "@/lib/download-settings";
 import { packageFormatSettings, updatePackageFormatSettings } from "@/lib/package-format-settings";
 import { uploadSizeSettings, updateUploadSizeSettings } from "@/lib/upload-size-settings";
+import { revokeCredentials } from "@/lib/credential-revocation";
 
 type Context = { params: Promise<{ path: string[] }> };
 async function handle(request: Request, context: Context) {
@@ -37,6 +38,7 @@ async function handle(request: Request, context: Context) {
         if (path.length === 3 && kind === "organizations" && action === "account-search") return management.searchAccounts(db, actor, uuid(id), new URL(request.url).searchParams.get("q") ?? "");
       }
       if (request.method === "POST") {
+        if (path.length === 3 && kind === "accounts" && action === "revoke-credentials") return revokeCredentials(db, actor, uuid(id), raw);
         if (path.length === 1 && kind === "tokens") return createApiToken(db, actor, raw);
         if (path.length === 3 && kind === "tokens" && action === "revoke") return revokeApiToken(db, actor, uuid(id));
         if (path.length === 1 && kind === "organizations") return management.createOrganization(db, actor, raw);

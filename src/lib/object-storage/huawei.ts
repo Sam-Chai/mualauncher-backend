@@ -8,19 +8,21 @@ import { nativeError, nativePut, noVersioning, signedRead, signedRequest, trunca
 type ObsResult = { CommonMsg: { Status: number; Code?: string }; InterfaceResult?: Record<string, unknown> };
 type ObsClient = {
   [method: string]: (input: Record<string, unknown>, callback: (error: unknown, result: ObsResult) => void) => unknown;
-} & { close(): void; createSignedUrlSync(input: Record<string, unknown>): { SignedUrl: string; ActualSignedRequestHeaders: Record<string, string> } };
+} & { close(): void; createSignedUrlSync(input: Record<string, unknown>): { SignedUrl: string; ActualSignedRequestHeaders: Record<string, string> };
+  createV4SignedUrlSync(input: Record<string, unknown>): { SignedUrl: string; ActualSignedRequestHeaders: Record<string, string> } };
 export function createHuaweiStorage(config: StorageConfiguration): ObjectStorage {
   const OBS = createRequire(import.meta.url)("esdk-obs-nodejs") as new (options: Record<string, unknown>) => ObsClient;
   const clients = new Map<string, ObsClient>();
-  const client = (bucket: string) => {
-    let found = clients.get(bucket);
+  const client = (bucket: string, signature = "obs") => {
+    const cacheKey = `${signature}:${bucket}`;
+    let found = clients.get(cacheKey);
     if (!found) { found = new OBS({ access_key_id: config.accessKeyId, secret_access_key: config.secretAccessKey, security_token: config.sessionToken,
-      server: config.endpoint?.replaceAll("{bucket}", bucket), region: config.region, path_style: false, signature: "obs", is_signature_negotiation: false,
+      server: config.endpoint?.replaceAll("{bucket}", bucket), region: config.region, path_style: false, signature, is_signature_negotiation: false,
       is_cname: config.customDomain, ssl_verify: true, timeout: 120, max_retry_count: 3,
       // Preserve native SDK request construction while restoring TLS hostname verification.
       third_http_lib: { request: (options: https.RequestOptions) => config.endpoint?.startsWith("http:")
         ? http.request(options) : https.request({ ...options, checkServerIdentity }) },
-    }); clients.set(bucket, found); }
+    }); clients.set(cacheKey, found); }
     return found;
   };
   const call = <T>(method: string, input: Record<string, unknown>) => new Promise<T>((resolve, reject) => {
@@ -103,7 +105,14 @@ export function createHuaweiStorage(config: StorageConfiguration): ObjectStorage
       const etag = /<ETag>([^<]+)<\/ETag>/.exec(text)?.[1]?.replaceAll("&quot;", '"');
       return { CopyPartResult: { ETag: etag } };
     },
-    signUploadPart: async (input, options) => sign(input, "PUT", options.expiresIn, { uploadId: input.UploadId, partNumber: input.PartNumber }).url,
+    // OBS V2 does not authenticate Content-Length. Use the native SDK's V4
+    // signer for browser parts only; keep OBS signing for other operations.
+    // 3.26.x maps signature:"v4" to V2 in createSignedUrlSync; invoke its
+    // explicit V4 method so Content-Length cannot silently become unsigned.
+    signUploadPart: async (input, options) => client(input.Bucket, "v4").createV4SignedUrlSync({
+      Bucket: config.customDomain ? undefined : input.Bucket, Key: input.Key, Method: "PUT", Expires: options.expiresIn,
+      QueryParams: { uploadId: input.UploadId, partNumber: input.PartNumber }, Headers: { "content-length": String(input.ContentLength) },
+    }).SignedUrl,
     signDownload: async (input, options) => sign(input, "GET", options.expiresIn, input.ResponseContentDisposition ? { "response-content-disposition": input.ResponseContentDisposition } : {}).url,
   };
 }

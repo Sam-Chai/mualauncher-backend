@@ -52,7 +52,7 @@ Worker 为独立进程。任务保存在 PostgreSQL，领取、租约续期、�
 | POST /api/v1/clients/:clientId/unbind | {serverId:null或当前服务器ID,publicationRevision:null或当前绑定修订}；解绑或取消待绑定请求 |
 | POST /api/v1/clients/uploads | {clientId,fileName,size,baseReleaseId,basePublicationRevision,comparisonDraftId?,packageFormatVersion:1或2}；必须显式提供格式，返回 id、partSize、锁定的 packageFormatVersion |
 | POST /api/v1/clients/uploads/:id/parts | {partNumber} 获取仅限该任务该分片的 10 分钟 PUT URL |
-| PUT 返回的 URL | 二进制分片，记录响应 ETag；每片 64 MiB，末片可更小 |
+| PUT 返回的 URL | 二进制分片，记录响应 ETag；精确长度已签入 URL，非末片 64 MiB，末片为剩余字节；使用自动携带 Content-Length 的 Blob／Buffer，不使用无长度流 |
 | POST /api/v1/clients/uploads/:id/complete | {parts:[{partNumber,etag}]} 校验全部分片、大小和 ETag，合并后两种格式均排队，由 Worker 按保存格式分支处理；大对象合并不持有数据库写锁，重复完成保留既有状态与格式 |
 | GET /api/v1/clients/uploads/:id | packageFormatVersion、状态、processingPhase、提前保存的 detectedInfo／detectedMods、进度、警告、错误及差异统计 |
 | POST /api/v1/clients/uploads/:id/select-instance | {instanceId}；在 SELECT_INSTANCE 阶段选择包内候选实例，沿用上传所有者／RBAC／基准校验，不重新上传 |

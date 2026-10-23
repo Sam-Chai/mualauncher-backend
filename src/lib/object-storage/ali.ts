@@ -76,7 +76,7 @@ export function createAliStorage(config: StorageConfiguration): ObjectStorage {
         { sourceBucketName: decodeURIComponent(bucket), sourceKey: key.map(decodeURIComponent).join("/") }, { headers: { "x-oss-copy-source-if-match": input.CopySourceIfMatch } });
       return { CopyPartResult: { ETag: result.etag } };
     },
-    signUploadPart: (input, options) => sign(input.Bucket, input.Key, "PUT", options.expiresIn, { uploadId: input.UploadId, partNumber: input.PartNumber }),
+    signUploadPart: (input, options) => sign(input.Bucket, input.Key, "PUT", options.expiresIn, { uploadId: input.UploadId, partNumber: input.PartNumber }, { "content-length": String(input.ContentLength) }),
     signDownload: (input, options) => sign(input.Bucket, input.Key, "GET", options.expiresIn, input.ResponseContentDisposition ? { "response-content-disposition": input.ResponseContentDisposition } : {}),
   };
 }

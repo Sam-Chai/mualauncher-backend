@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "5.0.0",
+    "version": "5.1.0",
     "description": "The complete panel reference includes Launcher, client automation, administration and authentication. Documentation access grants no business permissions. Each request still checks scope, RBAC, revisions and lifecycle. Follow upload, review, build and publication stages using actual progress."
   },
   "servers": [
@@ -16987,7 +16987,7 @@
           "Uploads"
         ],
         "summary": "Sign a single multipart PUT",
-        "description": "Requires an unexpired UPLOADING task and a partNumber within its part count. PUT binary bytes directly to the returned storage URL and save the original ETag; this is not backend multipart/form-data. Nonfinal parts use partSize; the last may be smaller. Browser storage CORS must expose ETag. Only the upload owner or superadmin may write; updates also require DRAFT_EDIT.\n\nCookie writes require same-origin Origin; Bearer writes do not. An Authorization header selects Bearer exclusively; an invalid token never falls back to Cookie. JSON is required; use {} for actions that ignore the parsed body.",
+        "description": "Requires an unexpired UPLOADING task and a partNumber within its part count. PUT binary bytes directly to the returned storage URL and save the original ETag; this is not backend multipart/form-data. Nonfinal parts use partSize; the last may be smaller. Browser storage CORS must expose ETag. Only the upload owner or superadmin may write; updates also require DRAFT_EDIT.\n\nCookie writes require same-origin Origin; Bearer writes do not. An Authorization header selects Bearer exclusively; an invalid token never falls back to Cookie. JSON is required; use {} for actions that ignore the parsed body.\n\nThe URL signs the exact Content-Length computed from the saved upload size and part number, including the final part. Send exactly those bytes using a Blob or a known-length buffer; browsers set Content-Length automatically. Missing or altered lengths fail storage authentication before completion. Huawei uses V4 for these upload URLs.",
         "security": [
           {
             "SessionCookie": []
@@ -30273,6 +30273,593 @@
         }
       }
     },
+    "/api/admin/accounts/{accountId}/revoke-credentials": {
+      "post": {
+        "operationId": "revokeAccountCredentials",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "Revoke account credentials",
+        "description": "MUA superadmin browser session only. Revokes all browser and launcher sessions, API tokens and approved launcher grants for the target account. Returns affected counts and records an audit event. Does not change passwords or upstream tokens.",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "x-request-body-max-bytes": 32768,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "accountId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "The current site's complete origin, sent automatically by browsers."
+            },
+            "required": true,
+            "name": "Origin",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success; field visibility remains subject to current RBAC and resource state.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "sessions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "apiTokens": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "launcherApprovals": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "sessions",
+                    "apiTokens",
+                    "launcherApprovals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/revoke-credentials": {
+      "post": {
+        "operationId": "revokeOwnCredentials",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Revoke own credentials",
+        "description": "Browser session only, including ordinary members. Atomically signs out every browser and launcher, revokes API tokens and cancels approved launcher grants. Clears the current session cookie. Does not change passwords or upstream skin-site tokens.",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": false,
+        "x-request-body-max-bytes": 32768,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "The current site's complete origin, sent automatically by browsers."
+            },
+            "required": true,
+            "name": "Origin",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success; field visibility remains subject to current RBAC and resource state.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or clears mua_session. Password login may also set the non-authentication mua_login_client throttle cookie, including on rejected credentials.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "sessions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "apiTokens": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "launcherApprovals": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "sessions",
+                    "apiTokens",
+                    "launcherApprovals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/recycle-settings": {
       "get": {
         "operationId": "getRecycleSettings",
@@ -33704,7 +34291,7 @@
           "Authentication"
         ],
         "summary": "Sign in with an allowlisted account",
-        "description": "Same-origin Origin is required; an old Cookie is optional. Returns ok and sets mua_session with HttpOnly, SameSite=Strict, Path=/, Secure on HTTPS, and 12-hour expiry. Invalid credentials/disabled accounts return 401; throttling returns 429.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.",
+        "description": "Same-origin Origin is required; an old Cookie is optional. Returns ok and sets mua_session with HttpOnly, SameSite=Lax, Path=/, Secure on HTTPS, and 12-hour expiry. Invalid credentials/disabled accounts return 401; throttling returns 429.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.\n\nQuotas are isolated by trusted proxy client address or, without AUTH_CLIENT_IP_HEADER, a resettable HttpOnly mua_login_client cookie (Path=/api/auth, SameSite=Lax, one day). The cookie is not a login credential. One client has 60 attempts per five minutes and 10 per username per 15 minutes. Password verification has bounded process concurrency; no shared whole-site attempt quota is used. Invalid trusted address headers return 400; invalid server header configuration returns 503. Production deployments without a trusted IP header need edge rate limiting.",
         "security": [],
         "x-permissions": [],
         "x-superadmin-only": false,
@@ -33761,7 +34348,7 @@
                 }
               },
               "Set-Cookie": {
-                "description": "Sets or clears mua_session, managed by the browser.",
+                "description": "Sets or clears mua_session. Password login may also set the non-authentication mua_login_client throttle cookie, including on rejected credentials.",
                 "schema": {
                   "type": "string"
                 }
@@ -34034,7 +34621,7 @@
                 }
               },
               "Set-Cookie": {
-                "description": "Sets or clears mua_session, managed by the browser.",
+                "description": "Sets or clears mua_session. Password login may also set the non-authentication mua_login_client throttle cookie, including on rejected credentials.",
                 "schema": {
                   "type": "string"
                 }
@@ -34329,7 +34916,7 @@
                 }
               },
               "Set-Cookie": {
-                "description": "Sets or clears mua_session, managed by the browser.",
+                "description": "Sets or clears mua_session. Password login may also set the non-authentication mua_login_client throttle cookie, including on rejected credentials.",
                 "schema": {
                   "type": "string"
                 }

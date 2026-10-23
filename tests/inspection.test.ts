@@ -4,6 +4,8 @@ import { inspectMinecraftRuntime } from "../src/lib/minecraft-inspection";
 import { inspectPackMods } from "../src/lib/pack-inspection";
 import { minecraftJava } from "../src/lib/minecraft-java";
 import { uploadProcessingLabel, runtimeAutofill, type PackFile } from "../src/lib/client-contract";
+import { parseDiagnostic } from "../src/lib/diagnostics";
+import { translator } from "../src/lib/i18n";
 
 function inspect(records: Record<string, unknown>, jars: Record<string, unknown> = {}, selected?: string) {
   return inspectMinecraftRuntime([...Object.keys(records), ...Object.keys(jars)], {
@@ -41,7 +43,7 @@ test("JAR metadata supplies missing game identity and Java; conflicting game ver
 });
 test("missing parent metadata and cyclic inheritance produce warnings without executing or downloading uploaded references", async () => {
   const missing = await inspect({ "versions/custom/custom.json": { inheritsFrom: "1.20.4", downloads: { client: { url: "http://127.0.0.1/private" } } } });
-  assert.equal(missing.minecraftVersion, "1.20.4"); assert.equal(missing.javaVersion, 17); assert(missing.warnings.some(w => /parent version.*missing/i.test(w)));
+  assert.equal(missing.minecraftVersion, "1.20.4"); assert.equal(missing.javaVersion, 17); assert(missing.warnings.some(w => parseDiagnostic(w)?.code === "diagnostics.minecraftInspection.parentVersion0IsMissingFromThePackCheckThat"));
   const cycle = await inspect({ "versions/a/a.json": { inheritsFrom: "b" }, "versions/b/b.json": { inheritsFrom: "a" } }, {}, "a");
   assert(cycle.warnings.some(w => /cycl/i.test(w))); assert.equal(cycle.minecraftVersion, null);
 });
@@ -58,8 +60,10 @@ test("isolated mods use only the selected instance and retain real paths; root l
 });
 test("Worker feedback distinguishes recognition, CAS and instance selection", () => {
   assert.equal(uploadProcessingLabel({ status: "PROCESSING", processingPhase: "INSPECTING", progress: 0 }), "正在识别客户端信息");
-  assert.match(uploadProcessingLabel({ status: "PROCESSING", processingPhase: "CAS", progress: 25 }), /校验与去重 25%/);
-  assert.match(uploadProcessingLabel({ status: "QUEUED", processingPhase: "SELECT_INSTANCE", progress: 0 }), /请选择/);
+  assert.equal(uploadProcessingLabel({ status: "PROCESSING", processingPhase: "CAS", progress: 25 }), translator("zh-CN")("clientUpload.processing.validating", { percent: 25 }));
+  const selection = uploadProcessingLabel({ status: "QUEUED", processingPhase: "SELECT_INSTANCE", progress: 0 });
+  assert.equal(selection, uploadProcessingLabel({ status: "PROCESSING", processingPhase: "SELECT_INSTANCE", progress: 0 }));
+  assert.notEqual(selection, uploadProcessingLabel({ status: "QUEUED", processingPhase: null, progress: 0 }));
 });
 test("new runtime replaces prefilled update values, preserves manual edits and clears unresolved old runtime", async () => {
   const info = await inspect({ "versions/test/test.json": { id: "test", clientVersion: "26.1", javaVersion: { majorVersion: 25 } } });

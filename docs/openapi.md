@@ -1,6 +1,6 @@
 # Union Link OpenAPI 与 Scalar
 
-2026-10-22：OpenAPI 4.0.0，完整 88／公开 11 操作，新增只读 Launcher 游戏令牌换票及超管来源配置。公开规范现在包含 Launcher 必需认证、成员自查及四个分发 GET，后台仍不公开。见 [实施说明](launcher-game-token-exchange.md)。下方旧数量为历史记录。
+2026-10-23：OpenAPI 5.1.0，完整 90／公开 11 操作，新增本人及超管账号凭据撤销。新增操作仅在完整规范中；公开 Launcher 操作不变。见 [过滤与撤销](credential-revocation-and-pack-privacy.md)。下方旧数量为历史记录。
 
 2026-10-21 后续：OpenAPI 3.0.0 完整规范 83 操作，新增目录同步和组织头像 5 操作；组织资料 JSON 不再接受裸 avatarObjectKey，使用独立 multipart 头像接口。新增 3.0.0 基线并保留历史基线。详见 [变更记录](openapi-changelog.md) 和 [目录与头像](union-directory-sync.md)。
 

@@ -1,4 +1,10 @@
 {
+  "credentials": {
+    "revoke": "Revoke all credentials",
+    "confirm": "Revoke credentials for {name}?",
+    "yourAccount": "your account",
+    "description": "Sign out every browser and launcher, revoke all API tokens, and cancel pending launcher approvals. This includes your current session when revoking your own account. The password and skin-site tokens remain valid; change the password separately if it was exposed."
+  },
   "accountIdentity": {
     "noSignInIdentityConfigured": "No sign-in identity configured"
   },
@@ -489,7 +495,7 @@
     "displayName": "Display name",
     "resetPassword": "Reset password",
     "initialPassword": "Initial password",
-    "leaveBlankToKeepThePasswordResettingRevokesAll": "Leave blank to keep the current password. A reset signs this account out on all devices.",
+    "leaveBlankToKeepThePasswordResettingRevokesAll": "Leave blank to keep the current password. A reset revokes all sessions, API tokens and pending launcher approvals.",
     "atLeast12Characters": "At least 12 characters.",
     "muaSuperadmin": "MUA superadmin",
     "editAccount": "Edit account",
@@ -834,7 +840,7 @@
     "searchActionsObjectsOrActors": "Search actions, items or people…",
     "accountSecurityAndPlatformIntegrations": "Manage account security, downloads and platform services.",
     "accountSecurity": "Account security",
-    "changingYourPasswordRevokesAllSessionsSignInAgain": "· Changing your password signs you out on all devices.",
+    "changingYourPasswordRevokesAllSessionsSignInAgain": "· Changing your password revokes all sessions, API tokens and pending launcher approvals.",
     "enterYourCurrentPassword": "Enter your current password",
     "currentPassword": "Current password",
     "newPassword": "New password",
@@ -1028,12 +1034,14 @@
     "serverDiscoveryManifestsAndPackageLinksRequireMemberAuthentication": "Server discovery, manifests and package links require member authentication and live organization, access-grant and distribution checks.",
     "jsonEncodedCropTextLeftTopWidthAndHeight": "JSON-encoded crop text: left, top, width and height are ratios from 0 to 1; width and height must be positive.",
     "jsonEncodedCurrentObjectKeyForAFirstUpload": "JSON-encoded current object key. For a first upload enter the text null.",
-    "setsOrClearsMuaSessionManagedByTheBrowser": "Sets or clears mua_session, managed by the browser.",
+    "setsOrClearsMuaSessionManagedByTheBrowser": "Sets or clears mua_session. Password login may also set the non-authentication mua_login_client throttle cookie, including on rejected credentials.",
     "requiredForCookieWritesOnlyBrowsersSendTheirActual": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
     "theCurrentSiteSCompleteOriginSentAutomaticallyBy": "The current site''s complete origin, sent automatically by browsers.",
     "successFieldVisibilityRemainsSubjectToCurrentRbacAnd": "Success; field visibility remains subject to current RBAC and resource state.",
     "theCompletePanelReferenceIncludesLauncherClientAutomationAdministration": "The complete panel reference includes Launcher, client automation, administration and authentication. Documentation access grants no business permissions. Each request still checks scope, RBAC, revisions and lifecycle. Follow upload, review, build and publication stages using actual progress.",
     "operations": {
+      "revokeOwnCredentials": { "summary": "Revoke own credentials", "description": "Browser session only, including ordinary members. Atomically signs out every browser and launcher, revokes API tokens and cancels approved launcher grants. Clears the current session cookie. Does not change passwords or upstream skin-site tokens." },
+      "revokeAccountCredentials": { "summary": "Revoke account credentials", "description": "MUA superadmin browser session only. Revokes all browser and launcher sessions, API tokens and approved launcher grants for the target account. Returns affected counts and records an audit event. Does not change passwords or upstream tokens." },
       "listLauncherProviders": {
         "summary": "List approved Launcher authentication providers",
         "description": "Public safe projection of approved, active providers only. Cookies never select the account; Authorization and query parameters are rejected. Directory synchronization does not enable new authentication endpoints. An empty list means no approved providers; browser login remains available."
@@ -1176,7 +1184,7 @@
       },
       "signUploadPart": {
         "summary": "Sign a single multipart PUT",
-        "description": "Requires an unexpired UPLOADING task and a partNumber within its part count. PUT binary bytes directly to the returned storage URL and save the original ETag; this is not backend multipart/form-data. Nonfinal parts use partSize; the last may be smaller. Browser storage CORS must expose ETag. Only the upload owner or superadmin may write; updates also require DRAFT_EDIT.\n\nCookie writes require same-origin Origin; Bearer writes do not. An Authorization header selects Bearer exclusively; an invalid token never falls back to Cookie. JSON is required; use '{}' for actions that ignore the parsed body."
+        "description": "Requires an unexpired UPLOADING task and a partNumber within its part count. PUT binary bytes directly to the returned storage URL and save the original ETag; this is not backend multipart/form-data. Nonfinal parts use partSize; the last may be smaller. Browser storage CORS must expose ETag. Only the upload owner or superadmin may write; updates also require DRAFT_EDIT.\n\nCookie writes require same-origin Origin; Bearer writes do not. An Authorization header selects Bearer exclusively; an invalid token never falls back to Cookie. JSON is required; use '{}' for actions that ignore the parsed body.\n\nThe URL signs the exact Content-Length computed from the saved upload size and part number, including the final part. Send exactly those bytes using a Blob or a known-length buffer; browsers set Content-Length automatically. Missing or altered lengths fail storage authentication before completion. Huawei uses V4 for these upload URLs."
       },
       "completeClientUpload": {
         "summary": "Complete multipart upload and queue import",
@@ -1376,7 +1384,7 @@
       },
       "login": {
         "summary": "Sign in with an allowlisted account",
-        "description": "Same-origin Origin is required; an old Cookie is optional. Returns ok and sets mua_session with HttpOnly, SameSite=Strict, Path=/, Secure on HTTPS, and 12-hour expiry. Invalid credentials/disabled accounts return 401; throttling returns 429.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads."
+        "description": "Same-origin Origin is required; an old Cookie is optional. Returns ok and sets mua_session with HttpOnly, SameSite=Lax, Path=/, Secure on HTTPS, and 12-hour expiry. Invalid credentials/disabled accounts return 401; throttling returns 429.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads.\n\nQuotas are isolated by trusted proxy client address or, without AUTH_CLIENT_IP_HEADER, a resettable HttpOnly mua_login_client cookie (Path=/api/auth, SameSite=Lax, one day). The cookie is not a login credential. One client has 60 attempts per five minutes and 10 per username per 15 minutes. Password verification has bounded process concurrency; no shared whole-site attempt quota is used. Invalid trusted address headers return 400; invalid server header configuration returns 503. Production deployments without a trusted IP header need edge rate limiting."
       },
       "logout": {
         "summary": "Sign out the current session",
@@ -1406,6 +1414,11 @@
     "checkedAt": "Checked at: {time}"
   },
   "diagnostics": {
+    "credentials": { "cookieOwnerOrSuperadminRequired": "A browser session belonging to the account or a MUA superadmin is required" },
+    "packPolicy": {
+      "sensitiveFilesBlocked": "Sensitive files prevent publication. Reimport a sanitized source package",
+      "filtered": "Filtered {count} sensitive file entries before import"
+    },
     "apiAuth": {
       "thisAccountHasNoAdministrationPermissions": "This account has no administration permissions.",
       "invalidApiToken": "The API access key isn’t valid",
@@ -1420,6 +1433,8 @@
       "signInFirst": "Sign in first",
       "sessionExpiredSignInAgain": "Your sign-in has expired. Sign in again",
       "tooManySignInAttemptsTryAgainLater": "Too many sign-in attempts. Try again later.",
+      "invalidClientIpConfiguration": "The sign-in client address configuration is invalid",
+      "invalidClientAddress": "The trusted proxy must supply one valid client IP address",
       "incorrectUsernameOrPasswordOrAccountDisabled": "Incorrect username or password, or account disabled",
       "accountStatusChangedSignInAgain": "Account status changed. Sign in again."
     },
@@ -2168,6 +2183,7 @@
       "theUploadSizeDoesNotMatch": "The upload size does not match",
       "uploadPartsAreIncomplete": "The upload is incomplete. Upload again",
       "uploadPartSizeOrEtagDoesNotMatch": "Upload part size or ETag does not match",
+      "invalidUploadPartSize": "The upload part size is invalid",
       "theCompleteClientSizeDoesNotMatch": "The complete client size does not match"
     },
     "unionOauth": {

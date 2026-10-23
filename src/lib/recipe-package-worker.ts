@@ -16,6 +16,7 @@ import { createRecipePackMetadata, recipeModrinthIndex, signRecipePackMetadata }
 import { validateRecipePackArchive } from "./muapack-v2-archive";
 import { signingIdentity } from "./signing";
 import { packageArtifactsSchema } from "./package-contract";
+import { assertDistributableFiles } from "./pack-file-policy";
 
 type Context = { draft: ClientDraft; upload: ClientUpload; client: Client };
 export async function runRecipePackageBuild(db: PrismaClient, build: PackageBuild, directory: string, signal: AbortSignal,
@@ -23,6 +24,7 @@ export async function runRecipePackageBuild(db: PrismaClient, build: PackageBuil
   let context = await checkpoint(diagnosticText("diagnostics.recipePackageWorker.preparingTheCompleteV2Recipe"), 10);
   invariant(build.platform === "universal" && build.revision === context.draft.packageRevision, 409, diagnosticText("diagnostics.recipePackageWorker.theV2BuildPlanHasChanged"));
   const target = await recipeDraftTarget(db, context.draft), targetBytes = encodeMuaJson(target);
+  assertDistributableFiles(target.files);
   const targetObjectKey = `muapacks/${context.client.id}/${build.draftId}/universal/r${build.revision}/targets/${digest(targetBytes)}.json`;
   if (build.targetObjectKey) {
     const stored = await readObject(build.targetObjectKey);

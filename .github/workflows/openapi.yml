@@ -76,6 +76,9 @@ jobs:
       - run: npm run test:openapi
       - run: npm run test:downloads
       - run: npm run test:admin-ui
+      - run: npm run test:security
+      - run: npm run test:rls
+      - run: npm run test:storage
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build

@@ -27,7 +27,12 @@ async function verifyBucket(Bucket: string) {
     const create = async () => {
       const { UploadId } = await client.createMultipartUpload({ Bucket, Key: keys[1], Metadata: { sha256 } }); assert(UploadId); active.set(UploadId, keys[1]);
       const identity = { Bucket, Key: keys[1], UploadId };
-      const url = await client.signUploadPart({ ...identity, PartNumber: 1 }, { expiresIn: 600 });
+      const url = await client.signUploadPart({ ...identity, PartNumber: 1, ContentLength: bytes.length }, { expiresIn: 600 });
+      // Reject an over-size part at the storage boundary, before completion.
+      for (const body of [Buffer.concat([bytes, Buffer.from("extra")]), bytes.subarray(1)]) {
+        const rejected = await fetch(url, { method: "PUT", body, redirect: "error" });
+        assert.equal(rejected.status, 403, "Storage must enforce the signed part length"); await rejected.arrayBuffer();
+      }
       const response = await fetch(url, { method: "PUT", body: bytes, redirect: "error" }); assert.equal(response.status, 200); await response.arrayBuffer();
       const etag = response.headers.get("etag"); assert(etag);
       const listed = await client.listParts(identity); assert.equal(listed.IsTruncated, false); assert.equal(listed.Parts?.[0].Size, bytes.length); assert.equal(listed.Parts?.[0].ETag, etag);

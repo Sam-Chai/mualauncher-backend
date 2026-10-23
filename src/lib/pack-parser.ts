@@ -17,6 +17,7 @@ import { downloadRemoteFile, remoteSourceUrl } from "./remote-download";
 import { DEFAULT_REMOTE_HOSTS, type DownloadSettings } from "./download-settings";
 import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "./download-sources";
 import { safePackPath } from "./pack-path";
+import { sensitivePackPath } from "./pack-file-policy";
 import { parseRecipeInventory, recipePath, type RecipeFile, type RecipeImportStatistics } from "./recipe-inventory";
 export { safePackPath } from "./pack-path";
 
@@ -27,7 +28,7 @@ export function filePolicy(path: string): PackFile["policy"] {
   return /^(?:versions\/[^/]+\/)?(?:options(?:of|shaders)?\.txt|servers\.dat(?:_old)?|saves\/)/i.test(path) ? "preserve" : "managed";
 }
 function excluded(path: string) {
-  return /^(?:versions\/[^/]+\/)?(?:logs\/|crash-reports\/|screenshots\/|webcache(?:\/|$)|launcher_accounts\.json$|launcher_profiles\.json$|usercache\.json$|usernamecache\.json$|\.mua\/|\.launcher\/|\.hmcl\/|PCL\/)/i.test(path);
+  return sensitivePackPath(path) || /^(?:versions\/[^/]+\/)?(?:logs\/|crash-reports\/|screenshots\/|webcache(?:\/|$))/i.test(path);
 }
 async function openZip(path: string) {
   return new Promise<ZipFile>((resolve, reject) => yauzl.open(path, { lazyEntries: true, autoClose: false, strictFileNames: true, validateEntrySizes: true }, (error, zip) => error ? reject(error) : resolve(zip!)));
@@ -154,6 +155,8 @@ export async function parseClientPack(path: string, tempDirectory: string, previ
     const detectedMods = info.requiresSelection ? [] : inspectPackMods(inspection.format, [...normalized.keys()].filter(retained).map(path => ({ path, sha256: "", size: 0, policy: filePolicy(path) })), info.instanceId);
     await options.onInspected?.(info, detectedMods);
     if (info.requiresSelection) return null;
+    const sensitiveCount = [...normalized.keys()].filter(sensitivePackPath).length;
+    if (sensitiveCount) info.warnings.push(diagnosticText("diagnostics.packPolicy.filtered", { count: sensitiveCount }));
     const warnings = [...info.warnings];
     let newDataSize = 0; let skipped = 0;
     for (let i = 0; i < list.length; i++) {
@@ -210,10 +213,11 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
   const { index, files: declared, info } = inspectModrinthIndex(rawIndex, wrapper);
   const settings = options.downloadSettings ?? { remoteSourceWhitelistEnabled: false, remoteSourceHosts: DEFAULT_REMOTE_HOSTS, downloadProxyEnabled: false, downloadProxyUrl: "", ...DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS };
   type Target = { path: string; optional: boolean; entry?: Entry; remote?: (typeof declared)[number]; local?: string; size?: number; sha256?: string; view?: ImportFile };
-  const targets = new Map<string, Target>(); const foldedPaths = new Map<string, string>();
+  const targets = new Map<string, Target>(); const foldedPaths = new Map<string, string>(); let sensitiveCount = 0;
   const unsupported = new Set(index.files.filter(file => file.env?.client === "unsupported").map(file => file.path.toLowerCase()));
   function add(target: Target) {
     const path = safePackPath(target.path); const folded = path.toLowerCase();
+    if (sensitivePackPath(path)) { sensitiveCount++; return; }
     if (excluded(path) || unsupported.has(folded)) return;
     if (options.packageFormatVersion === 2) recipePath(path);
     invariant(!/^(versions|libraries|assets|natives|runtime)\//i.test(path), 422, diagnosticText("diagnostics.packParser.mrpackFilesMustNotOverwriteGameEnvironmentsManagedByMua"));
@@ -226,6 +230,7 @@ async function parseModrinthZip(zip: ZipFile, list: Entry[], temp: string, previ
   for (const prefix of ["overrides/", "client-overrides/"]) for (const entry of list) {
     if (entry.fileName.startsWith(prefix)) add({ path: entry.fileName.slice(prefix.length), optional: false, entry });
   }
+  if (sensitiveCount) info.warnings.push(diagnosticText("diagnostics.packPolicy.filtered", { count: sensitiveCount }));
   invariant(targets.size > 0 && targets.size <= MAX_FILES, 422, diagnosticText("diagnostics.packParser.theMrpackContainsNoPublishableFilesOrTooManyFiles"));
   let total = 0;
   for (const target of targets.values()) {

@@ -1,5 +1,17 @@
 # OpenAPI 兼容性记录
 
+## 5.1.0 · 2026-10-23 敏感文件与账号凭据撤销
+
+新增 `POST /api/auth/revoke-credentials`（本人浏览器，包含 PLAYER）及 `POST /api/admin/accounts/{accountId}/revoke-credentials`（超管浏览器），严格空 JSON、同源校验，返回受影响会话、API Token 和启动器授权数量。完整 90／公开 11；相对 5.0.0 无既有操作删除或请求响应结构变化，新增 5.1.0 基线并保留旧基线。
+
+改密、重置密码、停用及超管标志变化会撤销全部 API Token 和 Launcher 授权；重新启用不恢复。新导入在下载及 CAS 前过滤敏感文件，旧草稿含敏感路径阻止新发布；不改写历史签名。见 [边界与契约](credential-revocation-and-pack-privacy.md)。
+
+## 5.0.0 安全约束补充 · 2026-10-23
+
+密码登录改为客户端及客户端与用户名组合配额，不再使用匿名请求可以耗尽的全站登录尝试预算；未配置可信地址头时设置非认证的 mua_login_client 限流 Cookie。API 文档修正已有 Session Cookie 为实现中的 SameSite=Lax，并描述错误凭据响应也可能设置限流 Cookie。上传 PUT URL 绑定保存记录计算出的精确 Content-Length（包括末片），拒绝大小不符或缺少长度的请求。现有 Blob／Buffer 客户端无须更改。
+
+这是既有参数约束落实及说明校正，无操作、JSON 字段、权限、有效期或签名产物协议变更；OpenAPI 保持 5.0.0、完整 88／公开 11，保留现有基线。Next.js 与 eslint-config-next 同步升级到 16.4.1；Forge 执行隔离和敏感文件过滤留待下一轮。
+
 ## 5.0.0 · 2026-10-22 英文 API 诊断与前端翻译
 
 开发期统一错误响应为 `{ error, code, params }`：error 始终为英文，code 为稳定语义标识，params 为插值参数。Worker 的失败原因、警告、进度以及探测提示改为 `{ code, message, params }`，message 为英文。前端只按 code 查询中英文词典，不再匹配旧中文消息。此为错误／诊断契约的主动调整；新增 public/admin-5.0.0 基线，接口数量仍为完整 88、公开 11。muapack 文件格式、内容身份、签名、RBAC 和授权范围保持不变。迁移 `202610220004_english_diagnostic_default` 仅将 PackageBuild 的兜底进度默认值改为英文。

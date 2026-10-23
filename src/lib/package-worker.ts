@@ -24,6 +24,7 @@ import { putImmutableBytes, downloadStoredFile, uploadPackageFile } from "./pack
 import { signingIdentity } from "./signing";
 import { packageArtifactsSchema } from "./package-contract";
 import { runRecipePackageBuild } from "./recipe-package-worker";
+import { assertDistributableFiles } from "./pack-file-policy";
 
 async function owner(db: Db, build: PackageBuild) {
   const draft = await db.clientDraft.findUnique({ where: { id: build.draftId }, include: { upload: true } });
@@ -83,6 +84,7 @@ export async function runPackageWorker(client: PrismaClient = prisma, resolver: 
         async message => { phase = message; progress = 15; signal.throwIfAborted(); await checkpoint(); });
       const filesBytes = await readObject(context.upload.filesObjectKey!); invariant(muaDigest(filesBytes) === context.upload.filesSha256, 422, diagnosticText("diagnostics.packageWorker.theUploadFileIndexFailedValidation"));
       const inventory = JSON.parse(filesBytes.toString("utf8")) as FileInventory;
+      assertDistributableFiles(inventory.files);
       const instance = info?.instanceId; const isolated = !!instance && inventory.files.some(file => file.path.startsWith(`versions/${instance}/mods/`) || file.path.startsWith(`versions/${instance}/config/`));
       const instanceFiles: MuaFile[] = inventory.files.flatMap(file => {
         let path = file.path;
@@ -104,7 +106,8 @@ export async function runPackageWorker(client: PrismaClient = prisma, resolver: 
         await owner(db, build); await db.packageBuild.update({ where: { id: build.id }, data: { targetObjectKey, targetSha256: muaDigest(targetBytes) } });
       }, client);
     }
-    const target = readMuaPlatformManifest(targetBytes); const documents = await readEnvironmentDocuments(target); validateMuaEnvironments(target, documents);
+    const target = readMuaPlatformManifest(targetBytes); assertDistributableFiles(target.files);
+    const documents = await readEnvironmentDocuments(target); validateMuaEnvironments(target, documents);
     const fresh = await checkpoint();
     if (fresh.draft.status !== "APPROVED") {
       await locked(async db => { const current = await db.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); invariant(current.leaseToken === build.leaseToken, 409, diagnosticText("diagnostics.packageWorker.theBuildLeaseIsNoLongerValid"));

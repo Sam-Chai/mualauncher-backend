@@ -10,6 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-23 安全：所有已支持导入共用敏感路径过滤，在下载/CAS 前排除账号、凭据及启动器私有目录；提交、批准、组包和发布再次拒绝敏感路径，历史签名不重写。本人（含 PLAYER）及超管可通过 Cookie+同源接口撤销账号全部 WEB/LAUNCHER 会话、API Token 和待领取 Launcher 授权；改密、重置、停用和超管标志变化同步撤销，重新启用不恢复 Token。上游游戏 Token/密码须另行撤销或修改。迁移 `202610230001_account_credential_revocation`，无新增表，OpenAPI 5.1.0 完整 90／公开 11。见 [过滤与撤销](docs/credential-revocation-and-pack-privacy.md)。Forge 隔离另行实施。
+
+- 2026-10-23 登录与上传安全修复：密码登录按可信代理客户端 IP／无代理时的独立 HttpOnly 浏览器标识隔离配额，不使用全站共享尝试次数；AUTH_CLIENT_IP_HEADER 仅允许强制代理覆盖的单 IP 头，无代理退路需入口抗机器人限流。昂贵校验最多进程内并发两次。上传 PUT 签入由保存记录计算的精确 Content-Length，四类 SDK 均覆盖，OBS 仅上传 URL 显式使用 V4；已有旧 URL 最长十分钟过渡，云端需 storage:verify。Next.js／eslint-config-next 为 16.4.1；本阶段无需迁移，后续敏感文件和撤销功能的迁移与规范版本见上一条。Forge 隔离尚未实施。见 [登录安全](docs/login-form-security.md)、[上传限制](docs/upload-size-settings.md)。
+
 - 2026-10-22 界面国际化采用 next-intl、稳定语义键及独立的 `src/lib/locales/zh-CN.json`／`en-US.json`。修改文案只改词典值，保持键及 ICU 变量一致。API 错误返回英文 error＋code＋params；Worker 警告／失败／进度与探测提示返回英文 message 的结构化诊断，前端按 code 翻译，不匹配中文／英文原句。诊断序列化存现有文本字段；无新增表，默认进度迁移 `202610220004_english_diagnostic_default`。`useI18n` 保留 Cookie、路由与主题；业务名称／简介不翻译。OpenAPI 5.0.0，完整 88／公开 11。见 [界面偏好](docs/interface-preferences.md)。
 
 - 2026-10-22 Union 组织简介：授权页别名来自各站 `/api/yggdrasil` 的 `meta.serverName`，目录 Worker 每分钟将其同步到 `description`，不改本地组织别名或 CODE。`descriptionMode=AUTO/MANUAL`；已有非空或有简介编辑审计的资料保留，手动修改／清空后数据库永久锁定 MANUAL，原样保存或只改别名不停止同步。站点失败保留原值，停用／归档及抓取期间人工修改均受保护。迁移 `202610220003_union_site_descriptions`，无新增表／接口字段，OpenAPI 仍 4.0.0、完整 88／公开 11。见 [目录同步](docs/union-directory-sync.md)。

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "5.0.0",
+    "version": "5.1.0",
     "description": "后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。"
   },
   "servers": [
@@ -16987,7 +16987,7 @@
           "Uploads"
         ],
         "summary": "签发单个分片 PUT 链接",
-        "description": "要求 UPLOADING 且未过期、分片编号不超过总片数。直接 PUT 二进制到返回的 OSS URL，保存原始 ETag；这不是后台 multipart/form-data 上传。非末片为 partSize，末片可更小。浏览器依赖 OSS CORS 暴露 ETag。写上传操作只允许所有者或超管。\n\nCookie 写请求要求同源 Origin；Bearer 写请求不要求 Origin。Authorization 存在时只采用 Bearer，错误 Token 不回退 Cookie。请求必须包含 JSON，忽略正文的操作推荐 {}。",
+        "description": "要求 UPLOADING 且未过期、分片编号不超过总片数。直接 PUT 二进制到返回的 OSS URL，保存原始 ETag；这不是后台 multipart/form-data 上传。非末片为 partSize，末片可更小。浏览器依赖 OSS CORS 暴露 ETag。写上传操作只允许所有者或超管。\n\nCookie 写请求要求同源 Origin；Bearer 写请求不要求 Origin。Authorization 存在时只采用 Bearer，错误 Token 不回退 Cookie。请求必须包含 JSON，忽略正文的操作推荐 {}。\n\n链接签入由已保存上传大小和分片编号计算的精确 Content-Length，末片也必须匹配。使用 Blob 或已知长度的 Buffer 发送精确字节；浏览器自动设置 Content-Length。缺少或改动长度将在存储认证阶段被拒绝，无须等到合并。华为上传链接使用 V4 签名。",
         "security": [
           {
             "SessionCookie": []
@@ -30273,6 +30273,593 @@
         }
       }
     },
+    "/api/admin/accounts/{accountId}/revoke-credentials": {
+      "post": {
+        "operationId": "revokeAccountCredentials",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "撤销账号凭据",
+        "description": "仅限 MUA 超管浏览器会话。撤销目标账号全部浏览器和启动器会话、API Token 及已批准的启动器授权，返回影响数量并记录审计。不修改密码或上游 Token。",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "x-request-body-max-bytes": 32768,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "accountId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "当前网站的完整 origin；浏览器自动发送。"
+            },
+            "required": true,
+            "name": "Origin",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；字段可见性仍受当前 RBAC 和资源状态约束。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "sessions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "apiTokens": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "launcherApprovals": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "sessions",
+                    "apiTokens",
+                    "launcherApprovals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/revoke-credentials": {
+      "post": {
+        "operationId": "revokeOwnCredentials",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "撤销本人凭据",
+        "description": "仅限浏览器会话，普通成员也可使用。原子撤销全部浏览器和启动器会话、API Token 及已批准的启动器授权，并清除当前会话 Cookie。不修改密码或上游皮肤站 Token。",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": false,
+        "x-request-body-max-bytes": 32768,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "当前网站的完整 origin；浏览器自动发送。"
+            },
+            "required": true,
+            "name": "Origin",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功；字段可见性仍受当前 RBAC 和资源状态约束。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              },
+              "Set-Cookie": {
+                "description": "设置或清除 mua_session；密码登录也可能设置用于限流、无认证能力的 mua_login_client Cookie，包括凭据被拒绝时。",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "sessions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "apiTokens": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "launcherApprovals": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "sessions",
+                    "apiTokens",
+                    "launcherApprovals"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503：参数、会话、权限、资源状态或基础设施错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/recycle-settings": {
       "get": {
         "operationId": "getRecycleSettings",
@@ -33704,7 +34291,7 @@
           "Authentication"
         ],
         "summary": "使用白名单账号登录",
-        "description": "同源 Origin 必需。返回 ok 并设置 HttpOnly、SameSite=Strict、Path=/ 的 mua_session；HTTPS 时 Secure，有效期 12 小时。密码错误／停用返回 401，节流返回 429；旧 Cookie 可选。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。",
+        "description": "同源 Origin 必需。返回 ok 并设置 HttpOnly、SameSite=Lax、Path=/ 的 mua_session；HTTPS 时 Secure，有效期 12 小时。密码错误／停用返回 401，节流返回 429；旧 Cookie 可选。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。\n\n限流按可信代理客户端地址隔离；未配置 AUTH_CLIENT_IP_HEADER 时使用可重置的 HttpOnly mua_login_client Cookie（Path=/api/auth、SameSite=Lax、一天），该 Cookie 不是登录凭据。每客户端每五分钟 60 次，每客户端与用户名组合每十五分钟 10 次。密码校验限制进程内并发，不使用全站共享尝试次数配额。可信地址头无效返回 400，服务端头名称配置无效返回 503。未配置可信 IP 头的生产部署须在入口限流。",
         "security": [],
         "x-permissions": [],
         "x-superadmin-only": false,
@@ -33761,7 +34348,7 @@
                 }
               },
               "Set-Cookie": {
-                "description": "mua_session 会话设置或清除，由浏览器管理。",
+                "description": "设置或清除 mua_session；密码登录也可能设置用于限流、无认证能力的 mua_login_client Cookie，包括凭据被拒绝时。",
                 "schema": {
                   "type": "string"
                 }
@@ -34034,7 +34621,7 @@
                 }
               },
               "Set-Cookie": {
-                "description": "mua_session 会话设置或清除，由浏览器管理。",
+                "description": "设置或清除 mua_session；密码登录也可能设置用于限流、无认证能力的 mua_login_client Cookie，包括凭据被拒绝时。",
                 "schema": {
                   "type": "string"
                 }
@@ -34329,7 +34916,7 @@
                 }
               },
               "Set-Cookie": {
-                "description": "mua_session 会话设置或清除，由浏览器管理。",
+                "description": "设置或清除 mua_session；密码登录也可能设置用于限流、无认证能力的 mua_login_client Cookie，包括凭据被拒绝时。",
                 "schema": {
                   "type": "string"
                 }

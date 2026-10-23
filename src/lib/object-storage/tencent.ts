@@ -62,7 +62,7 @@ export function createTencentStorage(config: StorageConfiguration): ObjectStorag
     listMultipartUploads: async input => ({ Uploads: (await call<{ Upload: { Key: string; UploadId: string }[] }>("multipartList", input)).Upload }),
     copyObject: input => call("putObjectCopy", { ...input, CopySource: copySource(input.CopySource) }),
     uploadPartCopy: async input => ({ CopyPartResult: { ETag: (await call<CosResult>("uploadPartCopy", { ...input, CopySource: copySource(input.CopySource) })).ETag } }),
-    signUploadPart: (input, options) => sign(input, "PUT", options.expiresIn, { uploadId: input.UploadId, partNumber: input.PartNumber }),
+    signUploadPart: (input, options) => sign({ ...input, Headers: { "content-length": String(input.ContentLength) } }, "PUT", options.expiresIn, { uploadId: input.UploadId, partNumber: input.PartNumber }),
     signDownload: (input, options) => sign(input, "GET", options.expiresIn, input.ResponseContentDisposition ? { "response-content-disposition": input.ResponseContentDisposition } : {}),
   };
 }

@@ -8,6 +8,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { AppError, invariant } from "./errors";
 import { dummyHash, verifyPassword } from "./password";
 import type { Permission } from "./roles";
+import { loginQuotas, withLoginWork } from "./login-policy";
 
 export const COOKIE_NAME = "mua_session";
 export const SESSION_SECONDS = 60 * 60 * 12;
@@ -41,19 +42,25 @@ export async function authorized<T>(token: string | undefined, write: boolean, w
   return write ? locked(run) : prisma.$transaction(run);
 }
 
-export async function login(name: string, password: string, oldToken?: string, client = authPrisma) {
+export async function login(name: string, password: string, oldToken?: string, client = authPrisma, clientKey = `internal:${randomBytes(32).toString("hex")}`) {
+  return withLoginWork(() => passwordLogin(name, password, oldToken, client, clientKey));
+}
+async function passwordLogin(name: string, password: string, oldToken: string | undefined, client: typeof authPrisma, clientKey: string) {
   if (client === authPrisma) await validateDatabase("auth");
-  const now = new Date();
-  await locked(async db => {
-    for (const [key, limit, seconds] of [["global", 60, 300], [`user:${name}`, 10, 900]] as const) {
-      const digest = tokenDigest(`login:${key}`);
-      const prior = await db.loginThrottle.findUnique({ where: { key: digest } });
+  await client.$transaction(async db => {
+    // Serialize this client only; anonymous failures must not take the shared
+    // management-write lock. Quota commits even when authentication later fails.
+    const lockId = createHash("sha256").update(clientKey).digest().readInt32BE(0);
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(731403, ${lockId}::integer)`;
+    const now = new Date();
+    for (const { key, limit, seconds } of loginQuotas(clientKey, name)) {
+      const prior = await db.loginThrottle.findUnique({ where: { key } });
       invariant(!prior || prior.resetAt <= now || prior.attempts < limit, 429, diagnosticText("diagnostics.auth.tooManySignInAttemptsTryAgainLater"));
-      await db.loginThrottle.upsert({ where: { key: digest }, create: { key: digest, attempts: 1, resetAt: new Date(now.getTime() + seconds * 1000) },
+      await db.loginThrottle.upsert({ where: { key }, create: { key, attempts: 1, resetAt: new Date(now.getTime() + seconds * 1000) },
         update: prior && prior.resetAt > now ? { attempts: { increment: 1 } } : { attempts: 1, resetAt: new Date(now.getTime() + seconds * 1000) } });
     }
     await db.loginThrottle.deleteMany({ where: { resetAt: { lt: now } } });
-  }, client);
+  }, { maxWait: 1000, timeout: 5000 });
   const credential = await client.localCredential.findUnique({ where: { username: name }, include: { account: true } });
   const valid = await verifyPassword(password, credential?.passwordHash ?? dummyHash);
   invariant(valid && credential?.account.status === "ACTIVE", 401, diagnosticText("diagnostics.auth.incorrectUsernameOrPasswordOrAccountDisabled"));

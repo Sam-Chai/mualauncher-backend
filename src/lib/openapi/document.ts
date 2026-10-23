@@ -7,7 +7,7 @@ import { acceptedFormats, directorySchema, errorSchema, clientManifestSchema, pa
 import { unionOpenApi, PUBLIC_AUTH_OPERATION_IDS } from "./union-document";
 
 extendZodWithOpenApi(z);
-export const OPENAPI_VERSION = "5.0.0";
+export const OPENAPI_VERSION = "5.1.0";
 export const PUBLIC_OPERATION_IDS = ["listServers", "getServerManifest", "getServerPackages", "refreshReleasePackages", ...PUBLIC_AUTH_OPERATION_IDS] as const;
 
 export function publicOpenApi(locale: Locale = "zh-CN") {

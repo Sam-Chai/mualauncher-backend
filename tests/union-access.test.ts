@@ -407,6 +407,34 @@ test(`${httpMode} HTTP gates every resource endpoint, preserves password login a
     const tokenHeader={Authorization:`Bearer ${session.token}`};assert.equal((await fetch(origin+"/api/member",{headers:tokenHeader})).status,200);assert.equal((await fetch(origin+"/api/v1/clients",{headers:tokenHeader})).status,401);
     assert.equal((await fetch(origin+"/api/auth/launcher/logout",{method:"POST",headers:tokenHeader})).status,200);assert.equal((await fetch(origin+"/api/member",{headers:tokenHeader})).status,401);
     if(process.env.MUA_AUTH_BROWSER_TEST==="1"){
+      // The revocation routes operate only on browser cookies and never accept bearer identities.
+      const revokedCookie=randomBytes(32).toString("hex");
+      const [{id:revokedId}]=await auth.$queryRaw<{id:string}[]>`SELECT ${securityFunction("union_login")}('MUA:125','revocation member',${tokenDigest(revokedCookie)},${new Date(Date.now()+600_000)}) AS id`;
+      const revokedHeaders={Cookie:`mua_session=${revokedCookie}`,Origin:origin,"Content-Type":"application/json"};
+      const adminRevoke=origin+`/api/admin/accounts/${revokedId}/revoke-credentials`;
+      assert.equal((await fetch(adminRevoke,{method:"POST",headers:adminHeaders,body:"{}"})).status,403);
+      assert.equal((await fetch(adminRevoke,{method:"POST",headers:{...rootHeaders,Origin:"https://untrusted.invalid"},body:"{}"})).status,403);
+      const selfRevoke=origin+"/api/auth/revoke-credentials";
+      assert.equal((await fetch(selfRevoke,{method:"POST",headers:{Origin:origin,"Content-Type":"application/json",Authorization:`Bearer ${session.token}`},body:"{}"})).status,401);
+      assert.equal((await fetch(selfRevoke,{method:"POST",headers:{...revokedHeaders,Origin:"https://untrusted.invalid"},body:"{}"})).status,403);
+      assert.equal((await fetch(selfRevoke,{method:"POST",headers:revokedHeaders,body:JSON.stringify({accountId:root.id})})).status,400);
+      const token=await owner.apiToken.create({data:{accountId:revokedId,name:"HTTP revocation",tokenHash:tokenDigest("mua_http_revocation"),permissions:[],serverIds:[],expiresAt:new Date(Date.now()+600_000)}});
+      await owner.launcherLoginAttempt.create({data:{accountId:revokedId,challenge:"r".repeat(43),expiresAt:new Date(Date.now()+600_000)}});
+      const revoked=await fetch(selfRevoke,{method:"POST",headers:revokedHeaders,body:"{}"});assert.equal(revoked.status,200);assert.deepEqual(await revoked.json(),{ok:true,sessions:1,apiTokens:1,launcherApprovals:1});assert.match(revoked.headers.get("set-cookie")!,/mua_session=;.*Max-Age=0/i);
+      assert.equal((await fetch(origin+"/api/member",{headers:revokedHeaders})).status,401);
+      assert((await owner.apiToken.findUniqueOrThrow({where:{id:token.id}})).revokedAt);
+      // A new explicit login is permitted. Test the member UI in both languages and revoke via its confirmation dialog.
+      await owner.session.create({data:{accountId:revokedId,tokenHash:tokenDigest(revokedCookie),expiresAt:new Date(Date.now()+600_000)}});
+      const {chromium}=await import("@playwright/test"),browser=await chromium.launch({channel:"msedge",headless:true});
+      try {
+        const ctx=await browser.newContext();await ctx.addCookies([{name:"mua_session",value:revokedCookie,url:origin},{name:"mua-locale",value:"en-US",url:origin}]);const page=await ctx.newPage();
+        await page.goto(origin+"/member");await page.getByRole("button",{name:"Revoke all credentials",exact:true}).click();await page.getByRole("alertdialog").waitFor();
+        await page.getByRole("button",{name:"Cancel",exact:true}).click();
+        await ctx.addCookies([{name:"mua-locale",value:"zh-CN",url:origin}]);await page.reload();await page.getByRole("button",{name:"撤销全部凭据",exact:true}).click();
+        await page.getByRole("alertdialog").getByRole("button",{name:"撤销全部凭据",exact:true}).click();await page.waitForURL(origin+"/login");
+        await ctx.close();
+      } finally {await browser.close();}
+      const bulk=await fetch(adminRevoke,{method:"POST",headers:rootHeaders,body:"{}"});assert.equal(bulk.status,200);
       // Use only the isolated schema's synthetic credentials and the loopback test server.
       // Never send local bootstrap credentials to a deployed site from this harness.
       const browserTests=spawn(process.execPath,["node_modules/@playwright/test/cli.js","test","--config","playwright.auth.config.ts"],{

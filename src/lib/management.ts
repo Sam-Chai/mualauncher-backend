@@ -8,7 +8,7 @@ import * as input from "./input";
 import { hashPassword } from "./password";
 import { enabledPackageFormats } from "./package-format-settings";
 import { maxUploadSizeMb } from "./upload-size-settings";
-import { accountDirectory, credentialCreate, credentialUpdate, revokeAccountSessions, serverSummaries, securityFunction } from "./database-security";
+import { accountDirectory, credentialCreate, credentialUpdate, revokeAccountCredentials, serverSummaries, securityFunction } from "./database-security";
 import { serverMottoUrl } from "./server-motto-contract";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
 
@@ -267,9 +267,9 @@ export async function updateAccount(db: Db, actor: Actor, id: string, raw: unkno
   if (existing.isSuperAdmin && existing.status === "ACTIVE" && (!isSuperAdmin || status === "DISABLED")) {
     invariant(await db.account.count({ where: { isSuperAdmin: true, status: "ACTIVE", id: { not: id } } }) > 0, 409, diagnosticText("diagnostics.management.atLeastOneActiveMuaSuperAdministratorMustRemain"));
   }
+  if (status === "DISABLED" || existing.isSuperAdmin !== isSuperAdmin || data.password !== undefined) await revokeAccountCredentials(db, id);
   await db.account.update({ where: { id }, data: { status, isSuperAdmin, ...(data.displayName !== undefined ? { displayName: input.text(data, "displayName") } : {}) } });
   if (data.password !== undefined) await credentialUpdate(db, id, await hashPassword(input.password(data.password)));
-  if (status === "DISABLED" || existing.isSuperAdmin !== isSuperAdmin || data.password !== undefined) await revokeAccountSessions(db, id);
   await audit(db, actor, "ACCOUNT_EDIT", "Account", id, undefined, undefined, { fields: Object.keys(data), status, isSuperAdmin });
   return { ok: true };
 }
