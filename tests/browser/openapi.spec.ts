@@ -6,6 +6,70 @@ import { apiInventory } from "../../src/lib/openapi/inventory";
 
 const operationCount = (document: { paths: Record<string, object> }) => Object.values(document.paths).reduce((sum, path) => sum + ["get", "post", "patch", "put", "delete"].filter(method => method in path).length, 0);
 
+test("dashboard plots real activity in both languages and keeps dark tooltips readable", async ({ page, baseURL }) => {
+  const login = await page.request.post("/api/auth/login", { headers: { Origin: baseURL! }, data: await credentials() });
+  expect(login.status()).toBe(200);
+  await page.addInitScript(() => localStorage.setItem("mua-theme", "dark"));
+  await page.context().addCookies([{ name: "mua-locale", value: "zh-CN", url: baseURL! }]);
+  try {
+    const response = await page.request.get("/api/admin/state");
+    expect(response.status()).toBe(200);
+    const { auditActivity } = await response.json() as { auditActivity: { date: string; count: number }[] };
+    expect(auditActivity.length).toBeGreaterThan(1);
+    await page.goto("/admin");
+    for (const locale of ["zh-CN", "en-US"] as const) {
+      await expect(page.getByRole("heading", { name: locale === "zh-CN" ? "控制台" : "Console", exact: true })).toBeVisible();
+      const chart = page.locator('[data-slot="area-chart"]').first();
+      await expect(chart.locator('.recharts-area-curve[d]')).toBeVisible();
+      await expect(chart.locator('.recharts-area-curve[d]')).toHaveAttribute("name", locale === "zh-CN" ? "操作次数" : "Actions");
+      await expect.poll(() => chart.locator('.recharts-area-curve[d]').evaluate(path => (path as SVGGraphicsElement).getBBox().height)).toBeGreaterThan(0);
+      for (const tick of await chart.locator('.recharts-yAxis .recharts-cartesian-axis-tick-value').all()) {
+        await expect(tick.locator('tspan')).toHaveCount(1);
+      }
+      const size = (await chart.boundingBox())!;
+      await chart.hover({ position: { x: size.width * 0.55, y: 120 } });
+      const tooltip = chart.locator('[data-slot="chart-tooltip"]');
+      await expect(tooltip).toBeVisible();
+      await expect(tooltip).toContainText(locale === "zh-CN" ? "操作次数" : "Actions");
+      const day = await tooltip.locator("p").first().innerText();
+      const point = auditActivity.find(point => point.date.slice(5) === day);
+      expect(point).toBeDefined();
+      await expect(tooltip).toContainText(locale === "zh-CN" ? `${point!.count} 次` : `${point!.count} actions`);
+      await expect(tooltip).toHaveCSS("background-color", "rgb(32, 47, 64)");
+      await expect(tooltip.locator("p").first()).toHaveCSS("color", "rgb(228, 221, 208)");
+      await page.screenshot({ path: `.local/dark-theme-dashboard-${locale}.png`, caret: "initial" });
+      if (locale === "zh-CN") {
+        await page.getByRole("button", { name: "切换语言", exact: true }).click();
+        await page.getByRole("menuitem", { name: /English/ }).click();
+      }
+    }
+    const header = page.locator('[data-slot="admin-header"]');
+    expect((await header.boundingBox())!.y).toBe(8);
+    await expect(header).toHaveCSS("backdrop-filter", "blur(24px)");
+    await expect(header).toHaveCSS("box-shadow", "none");
+    const frame = page.locator('[data-slot="admin-content-panel"]');
+    await expect(frame).toHaveCSS("border-top-right-radius", "14px");
+    await expect(frame).toHaveCSS("border-bottom-right-radius", "14px");
+    await expect(frame).toHaveCSS("overflow", "hidden");
+    const frameBounds = (await frame.boundingBox())!;
+    expect(frameBounds.y - ((await header.boundingBox())!.y + (await header.boundingBox())!.height)).toBe(8);
+    const scrollBounds = (await page.locator('[data-slot="admin-content"]').boundingBox())!;
+    expect(frameBounds.x + frameBounds.width - scrollBounds.x - scrollBounds.width).toBe(4);
+    expect(frameBounds.y + frameBounds.height - scrollBounds.y - scrollBounds.height).toBe(4);
+    await page.locator('[data-slot="admin-content"]').hover({ position: { x: 250, y: 250 } });
+    await page.mouse.wheel(0, 700);
+    await expect.poll(() => page.locator('[data-slot="admin-content"]').evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    expect((await header.boundingBox())!.y).toBe(8);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await page.screenshot({ path: ".local/dark-theme-floating-header.png", caret: "initial" });
+    await page.locator('a[href="/admin/organizations"]').first().click();
+    await expect(page.getByRole("heading", { name: "Organization", exact: true })).toBeVisible();
+    await expect.poll(() => page.locator('[data-slot="admin-content"]').evaluate(element => element.scrollTop)).toBe(0);
+  } finally {
+    await page.request.post("/api/auth/logout", { headers: { Origin: baseURL! }, data: {} });
+  }
+});
+
 async function credentials() {
   if (process.env.SMOKE_USERNAME && process.env.SMOKE_PASSWORD) return { username: process.env.SMOKE_USERNAME, password: process.env.SMOKE_PASSWORD };
   const file = (await readdir(".local")).filter(name => /^initial-admin-\d+\.txt$/.test(name)).sort().at(-1);
@@ -75,6 +139,8 @@ test("embedded Scalar protects sessions, follows preferences, downloads the spec
     await page.getByRole("button", { name: "切换黑白主题", exact: true }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expect(page.locator(".dark-mode").first()).toBeVisible();
+    await expect(page.locator('[data-slot="admin-header"]')).toHaveCSS("border-radius", "14px");
+    await expect(page.locator('[data-slot="sidebar-inner"]')).toHaveCSS("border-radius", "14px");
     await page.screenshot({ path: ".local/api-documentation-dark.png" });
     await page.getByRole("button", { name: "切换语言", exact: true }).click();
     await page.getByRole("menuitem", { name: "English" }).click();

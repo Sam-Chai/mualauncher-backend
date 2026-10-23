@@ -4,16 +4,16 @@ export type ColorUtility = "bg" | "stroke" | "fill" | "text"
 
 export const chartColors = {
   blue: {
-    bg: "bg-blue-500",
-    stroke: "stroke-blue-500",
-    fill: "fill-blue-500",
-    text: "text-blue-500",
+    bg: "bg-blue-500 dark:bg-[#62c6d0]",
+    stroke: "stroke-blue-500 dark:stroke-[#62c6d0]",
+    fill: "fill-blue-500 dark:fill-[#62c6d0]",
+    text: "text-blue-500 dark:text-[#62c6d0]",
   },
   emerald: {
-    bg: "bg-emerald-500",
-    stroke: "stroke-emerald-500",
-    fill: "fill-emerald-500",
-    text: "text-emerald-500",
+    bg: "bg-emerald-500 dark:bg-[#cdaa66]",
+    stroke: "stroke-emerald-500 dark:stroke-[#cdaa66]",
+    fill: "fill-emerald-500 dark:fill-[#cdaa66]",
+    text: "text-emerald-500 dark:text-[#cdaa66]",
   },
   violet: {
     bg: "bg-violet-500",

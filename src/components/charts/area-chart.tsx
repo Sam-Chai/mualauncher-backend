@@ -54,7 +54,7 @@ const LegendItem = ({
         // base
         "group inline-flex flex-nowrap items-center gap-1.5 rounded-sm px-2 py-1 whitespace-nowrap transition",
         hasOnValueChange
-          ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+          ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-accent"
           : "cursor-default",
       )}
       onClick={(e) => {
@@ -75,9 +75,9 @@ const LegendItem = ({
           // base
           "truncate text-xs whitespace-nowrap",
           // text color
-          "text-gray-700 dark:text-gray-300",
+          "text-gray-700 dark:text-muted-foreground",
           hasOnValueChange &&
-            "group-hover:text-gray-900 dark:group-hover:text-gray-50",
+            "group-hover:text-gray-900 dark:group-hover:text-foreground",
           activeLegend && activeLegend !== name ? "opacity-40" : "opacity-100",
         )}
       >
@@ -98,7 +98,7 @@ const ScrollButton = ({ icon: Icon, onClick, disabled }: ScrollButtonProps) => {
   const { t } = useI18n()
   return (
   <button type="button" disabled={disabled} aria-label={t(Icon === RiArrowLeftSLine ? "areaChart.scrollLegendLeft" : "areaChart.scrollLegendRight")}
-    className="group inline-flex size-5 items-center rounded-sm text-gray-700 transition disabled:cursor-not-allowed disabled:text-gray-400"
+    className="group inline-flex size-5 items-center rounded-sm text-gray-700 transition disabled:cursor-not-allowed disabled:text-gray-400 dark:text-foreground dark:disabled:text-muted-foreground dark:disabled:opacity-40"
     onClick={(event) => { event.stopPropagation(); onClick?.(); }}>
     <Icon className="size-full" aria-hidden="true" />
   </button>
@@ -248,7 +248,7 @@ const Legend = React.forwardRef<HTMLOListElement, LegendProps>((props, ref) => {
               // base
               "absolute top-0 right-0 bottom-0 flex h-full items-center justify-center pr-1",
               // background color
-              "bg-white dark:bg-gray-950",
+              "bg-white dark:bg-card",
             )}
           >
             <ScrollButton
@@ -352,13 +352,14 @@ const ChartTooltip = ({
   if (active && payload && payload.length) {
     return (
       <div
+        data-slot="chart-tooltip"
         className={cx(
           // base
           "rounded-md border text-sm shadow-md",
           // border color
-          "border-gray-200 dark:border-gray-800",
+          "border-gray-200 dark:border-border",
           // background color
-          "bg-white dark:bg-gray-950",
+          "bg-white dark:bg-popover",
         )}
       >
         <div className={cx("border-b border-inherit px-4 py-2")}>
@@ -367,7 +368,7 @@ const ChartTooltip = ({
               // base
               "font-medium",
               // text color
-              "text-gray-900 dark:text-gray-50",
+              "text-gray-900 dark:text-foreground",
             )}
           >
             {label}
@@ -392,7 +393,7 @@ const ChartTooltip = ({
                     // base
                     "text-right whitespace-nowrap",
                     // text color
-                    "text-gray-700 dark:text-gray-300",
+                    "text-gray-700 dark:text-muted-foreground",
                   )}
                 >
                   {category}
@@ -403,7 +404,7 @@ const ChartTooltip = ({
                   // base
                   "text-right font-medium whitespace-nowrap tabular-nums",
                   // text color
-                  "text-gray-900 dark:text-gray-50",
+                  "text-gray-900 dark:text-foreground",
                 )}
               >
                 {valueFormatter(value)}
@@ -606,6 +607,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
     return (
       <div
         ref={ref}
+        data-slot="area-chart"
         className={cx("h-80 w-full", className)}
         tremor-id="tremor-raw"
         {...other}
@@ -634,7 +636,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
           >
             {showGridLines ? (
               <CartesianGrid
-                className={cx("stroke-gray-200 stroke-1 dark:stroke-gray-800")}
+                className={cx("stroke-gray-200 stroke-1 dark:stroke-border")}
                 horizontal={true}
                 vertical={false}
               />
@@ -644,7 +646,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
               hide={!showXAxis}
               dataKey={index}
               interval={startEndOnly ? "preserveStartEnd" : intervalType}
-              tick={{ transform: "translate(0, 6)" }}
+              tick={{ transform: "translate(0, 6)", fill: "var(--chart-label, #6b7280)" }}
               ticks={
                 startEndOnly
                   ? [data[0][index], data[data.length - 1][index]]
@@ -656,7 +658,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                 // base
                 "text-xs",
                 // text fill
-                "fill-gray-500 dark:fill-gray-500",
+                "fill-gray-500 dark:fill-muted-foreground",
               )}
               tickLine={false}
               axisLine={false}
@@ -666,7 +668,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                 <Label
                   position="insideBottom"
                   offset={-20}
-                  className="fill-gray-800 text-sm font-medium dark:fill-gray-200"
+                  className="fill-gray-800 text-sm font-medium dark:fill-foreground"
                 >
                   {xAxisLabel}
                 </Label>
@@ -679,14 +681,14 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
               tickLine={false}
               type="number"
               domain={yAxisDomain as AxisDomain}
-              tick={{ transform: "translate(-3, 0)" }}
+              tick={{ transform: "translate(-3, 0)", fill: "var(--chart-label, #6b7280)" }}
               fill=""
               stroke=""
               className={cx(
                 // base
                 "text-xs",
                 // text fill
-                "fill-gray-500 dark:fill-gray-500",
+                "fill-gray-500 dark:fill-muted-foreground",
               )}
               tickFormatter={
                 type === "percent" ? valueToPercent : valueFormatter
@@ -699,7 +701,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                   style={{ textAnchor: "middle" }}
                   angle={-90}
                   offset={-15}
-                  className="fill-gray-800 text-sm font-medium dark:fill-gray-200"
+                  className="fill-gray-800 text-sm font-medium dark:fill-foreground"
                 >
                   {yAxisLabel}
                 </Label>
@@ -709,7 +711,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
               wrapperStyle={{ outline: "none" }}
               isAnimationActive={true}
               animationDuration={100}
-              cursor={{ stroke: "#d1d5db", strokeWidth: 1 }}
+              cursor={{ stroke: "var(--chart-cursor, #d1d5db)", strokeWidth: 1 }}
               offset={20}
               position={{ y: 0 }}
       content={({ active, payload, label: rawLabel }) => {
@@ -833,7 +835,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                       return (
                         <Dot
                           className={cx(
-                            "stroke-white dark:stroke-gray-950",
+                            "stroke-white dark:stroke-background",
                             onValueChange ? "cursor-pointer" : "",
                             getColorClassName(
                               categoryColors.get(
@@ -887,7 +889,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                             strokeLinejoin={strokeLinejoin}
                             strokeWidth={strokeWidth}
                             className={cx(
-                              "stroke-white dark:stroke-gray-950",
+                              "stroke-white dark:stroke-background",
                               onValueChange ? "cursor-pointer" : "",
                               getColorClassName(
                                 categoryColors.get(

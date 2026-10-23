@@ -19,5 +19,5 @@ async function Login({ searchParams }: { searchParams: Promise<{ returnTo?: stri
 // Session validation can redirect authenticated requests to /admin.
 export const instant = false;
 export default function LoginPage({ searchParams }: { searchParams: Promise<{ returnTo?: string; unionError?: string }> }) {
-  return <main className="flex min-h-svh items-center justify-center bg-muted/30 p-6"><Suspense fallback={<LocalizedLoading />}><Login searchParams={searchParams} /></Suspense></main>;
+  return <main className="flex min-h-svh items-center justify-center bg-muted/30 p-6 dark:bg-transparent"><Suspense fallback={<LocalizedLoading />}><Login searchParams={searchParams} /></Suspense></main>;
 }

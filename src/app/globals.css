@@ -39,21 +39,68 @@
 }
 .dark {
   color-scheme: dark;
-  --background: oklch(.145 0 0); --foreground: oklch(.985 0 0);
-  --card: oklch(.205 0 0); --card-foreground: oklch(.985 0 0);
-  --popover: oklch(.205 0 0); --popover-foreground: oklch(.985 0 0);
-  --primary: oklch(.922 0 0); --primary-foreground: oklch(.205 0 0);
-  --secondary: oklch(.269 0 0); --secondary-foreground: oklch(.985 0 0);
-  --muted: oklch(.269 0 0); --muted-foreground: oklch(.708 0 0);
-  --accent: oklch(.269 0 0); --accent-foreground: oklch(.985 0 0);
+  --background: #172330; --foreground: #e4ddd0;
+  --card: #1c2938; --card-foreground: #e4ddd0;
+  --popover: #202f40; --popover-foreground: #e4ddd0;
+  --primary: #e4ddd0; --primary-foreground: #172330;
+  --secondary: #29394c; --secondary-foreground: #e4ddd0;
+  --muted: #223142; --muted-foreground: #bfb9ad;
+  --accent: #304359; --accent-foreground: #f0e9dd;
   --destructive: oklch(.704 .191 22.216);
-  --border: oklch(1 0 0 / 12%); --input: oklch(1 0 0 / 18%); --ring: oklch(.556 0 0);
-  --sidebar: oklch(.205 0 0); --sidebar-foreground: oklch(.985 0 0);
-  --sidebar-primary: oklch(.922 0 0); --sidebar-primary-foreground: oklch(.205 0 0);
-  --sidebar-accent: oklch(.269 0 0); --sidebar-accent-foreground: oklch(.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%); --sidebar-ring: oklch(.556 0 0);
+  --border: rgb(228 221 208 / 18%); --input: rgb(228 221 208 / 24%); --ring: #c9bfae;
+  --chart-cursor: var(--ring);
+  --chart-label: var(--muted-foreground);
+  --sidebar: #111b27; --sidebar-foreground: #e4ddd0;
+  --sidebar-primary: #e4ddd0; --sidebar-primary-foreground: #111b27;
+  --sidebar-accent: #e4ddd0; --sidebar-accent-foreground: #111b27;
+  --sidebar-border: rgb(228 221 208 / 20%); --sidebar-ring: #e4ddd0;
 }
 :root:not(.dark) { color-scheme: light; }
+
+.dark body {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Blur only the bottom wallpaper layer, leaving text and solid surfaces sharp. */
+.dark body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("/images/themes/dark-flow.png");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(24px);
+  clip-path: inset(0);
+}
+
+/* The wallpaper shows only outside the opaque navigation and content panels. */
+.dark [data-slot="sidebar-wrapper"] {
+  background-color: transparent;
+}
+
+.dark [data-slot="table-container"] {
+  background-color: var(--card);
+}
+
+.dark [data-slot="sidebar-inner"],
+.dark [data-slot="admin-header"] {
+  --muted-foreground: var(--sidebar-foreground);
+}
+
+.dark [data-slot="sidebar-group-label"] {
+  color: var(--sidebar-foreground);
+}
+
+.dark [data-slot="input"],
+.dark [data-slot="textarea"],
+.dark [data-slot="select-trigger"] {
+  background-color: var(--background);
+}
+
 @layer base {
   * { @apply border-border outline-ring/50; }
   body { @apply bg-background text-foreground font-sans antialiased; }

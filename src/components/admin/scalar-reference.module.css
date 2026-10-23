@@ -36,3 +36,7 @@
   min-height: 100cqh;
   --full-height: 100cqh;
 }
+
+.reference :global(.dark-mode) {
+  --scalar-sidebar-background-1: var(--sidebar);
+}

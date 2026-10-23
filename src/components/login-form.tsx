@@ -40,6 +40,6 @@ export default function LoginForm({ unionEnabled = false, unionError = false, re
         fields={[{ name: "username", label: t("auth.fields.username"), autoComplete: "username", placeholder: "mua-admin" }, { name: "password", label: t("auth.fields.password"), type: "password", autoComplete: "current-password" }]}
         onSubmit={async values => { setError(""); try { await api("/api/auth/login", "POST", values); navigateAfterAuthChange(returnTo ?? "/admin"); return true; } catch (error) { setError(error instanceof Error ? serializeError(error) : t("loginForm.signInFailed")); return false; } }} /></div>
       </div>
-    </CardContent></Card><p className="flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" />{t("loginForm.allowlistedMembersOnlyOrganizationAccessIsolation")}</p>
+    </CardContent></Card><p className="mx-auto flex w-fit items-center justify-center gap-2 text-xs text-muted-foreground dark:rounded-full dark:bg-background/90 dark:px-3 dark:py-2 dark:text-foreground"><ShieldCheck className="size-3.5" />{t("loginForm.allowlistedMembersOnlyOrganizationAccessIsolation")}</p>
   </div>;
 }

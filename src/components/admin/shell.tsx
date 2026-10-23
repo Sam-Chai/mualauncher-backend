@@ -17,7 +17,7 @@ import { useAdmin } from "./provider";
 import { currentNavigation, navigation } from "./navigation";
 import { visibleNavigation } from "./navigation-access";
 import { roleLabel } from "./role-label";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 function AppSidebar() {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -27,7 +27,7 @@ function AppSidebar() {
   return <Sidebar variant="inset" collapsible="icon">
     <SidebarHeader><SidebarMenu><SidebarMenuItem><SidebarMenuButton size="lg" asChild>
       <Link href="/admin" onClick={() => setOpenMobile(false)}><div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Hexagon className="size-5" /></div>
-        <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">{PROJECT_NAME}</span><span className="truncate text-xs text-muted-foreground">{t("shell.universityAllianceManagement")}</span></div></Link>
+        <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">{PROJECT_NAME}</span><span className="truncate text-xs opacity-75">{t("shell.universityAllianceManagement")}</span></div></Link>
     </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarHeader>
     <SidebarContent>{visibleNavigation(navigation, state).map(group => <SidebarGroup key={group.title || "overview"}>
       {group.title && <SidebarGroupLabel>{t(group.title)}</SidebarGroupLabel>}
@@ -37,9 +37,9 @@ function AppSidebar() {
         </SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu></SidebarGroupContent>
     </SidebarGroup>)}</SidebarContent>
     <SidebarFooter><SidebarMenu><SidebarMenuItem><DropdownMenu>
-      <DropdownMenuTrigger asChild><SidebarMenuButton size="lg">
+      <DropdownMenuTrigger asChild><SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
         <Avatar className="size-8 rounded-lg"><AvatarFallback className="rounded-lg">{state.actor.displayName.slice(0, 2)}</AvatarFallback></Avatar>
-        <div className="grid flex-1 text-left text-sm"><span className="truncate font-medium">{state.actor.displayName}</span><span className="truncate text-xs text-muted-foreground">{roleLabel(state, t)}</span></div><ChevronsUpDown className="ml-auto size-4" />
+        <div className="grid flex-1 text-left text-sm"><span className="truncate font-medium">{state.actor.displayName}</span><span data-slot="sidebar-user-role" className="truncate text-xs opacity-75">{roleLabel(state, t)}</span></div><ChevronsUpDown className="ml-auto size-4" />
       </SidebarMenuButton></DropdownMenuTrigger>
       <DropdownMenuContent side={isMobile ? "bottom" : "right"} align="end" className="w-56">
         <DropdownMenuLabel>{state.actor.unionSubject ? `Union · ${state.actor.unionSubject}` : state.actor.username ? `@${state.actor.username}` : t("members.allowlistedAccount")}</DropdownMenuLabel><DropdownMenuSeparator />
@@ -51,12 +51,15 @@ function AppSidebar() {
 }
 export function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
-  const current = currentNavigation(usePathname());
+  const pathname = usePathname();
+  const current = currentNavigation(pathname);
   const embeddedPage = current.href === "/admin/api";
+  const contentRef = useRef<HTMLElement>(null);
+  useEffect(() => { contentRef.current?.scrollTo(0, 0); }, [pathname]);
   const { state, organizationId, setOrganizationId, busy, run } = useAdmin();
-  return <SidebarProvider className={embeddedPage ? "h-svh overflow-hidden" : undefined} style={{ "--sidebar-width": "16rem", "--header-height": "3.5rem" } as React.CSSProperties}>
-    <AppSidebar /><SidebarInset className={embeddedPage ? "min-h-0 min-w-0 overflow-hidden" : "min-w-0"}>
-      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur lg:px-6">
+  return <SidebarProvider className="h-svh overflow-hidden" style={{ "--sidebar-width": "16rem", "--header-height": "3.5rem" } as React.CSSProperties}>
+    <AppSidebar /><SidebarInset className="m-2 min-h-0 min-w-0 gap-2 rounded-xl bg-transparent">
+      <header data-slot="admin-header" className="z-20 flex h-14 shrink-0 items-center gap-2 rounded-xl border bg-background/70 px-4 backdrop-blur-xl dark:text-foreground lg:px-6">
         <SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
         <Breadcrumb className="hidden min-w-0 sm:block"><BreadcrumbList><BreadcrumbItem className="hidden sm:block"><BreadcrumbLink asChild><Link href="/admin">{current.group ? t(current.group) : PROJECT_NAME}</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator className="hidden sm:block" /><BreadcrumbItem><BreadcrumbPage>{t(current.title)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
         <div className="ml-auto flex items-center gap-2">
@@ -65,7 +68,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <Button variant="ghost" size="icon" disabled={busy} aria-label={t("shell.refreshData")} onClick={() => void run(async () => {}, t("shell.dataRefreshed"))}><RefreshCw className={busy ? "size-4 animate-spin" : "size-4"} /></Button>
         </div>
       </header>
-      <main className={`@container/main flex flex-1 flex-col gap-6 p-4 md:p-6${embeddedPage ? " min-h-0 overflow-hidden" : ""}`}>{children}</main>
+      <div data-slot="admin-content-panel" className="flex min-h-0 flex-1 overflow-hidden rounded-xl bg-background p-1">
+        <main ref={contentRef} data-slot="admin-content" className={`@container/main flex min-h-0 min-w-0 flex-1 flex-col gap-6 rounded-lg p-3 md:p-5${embeddedPage ? " overflow-hidden" : " overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"}`}>{children}</main>
+      </div>
     </SidebarInset><Toaster richColors position="top-right" />
   </SidebarProvider>;
 }

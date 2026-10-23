@@ -15,7 +15,7 @@ export function AddOrganizationMember({ org }: { org: Organization }) {
   if (!state.actor.isSuperAdmin && !org.permissions.includes("ORG_MEMBERS_MANAGE")) return null;
   const disabled = busy || !!org.archivedAt;
   return <EditorDialog title={t("organizationMemberAdd.addMember")} disabled={disabled}
-    trigger={<Button size="sm" disabled={disabled} className="bg-black text-white hover:bg-black/90 dark:bg-black dark:text-white dark:hover:bg-black/90"><UserPlus className="size-3.5" />{t("organizationMemberAdd.addMember")}</Button>}
+    trigger={<Button size="sm" disabled={disabled} className="bg-black text-white hover:bg-black/90 dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"><UserPlus className="size-3.5" />{t("organizationMemberAdd.addMember")}</Button>}
     description={`${org.displayName} · ${t("organizationMemberAdd.searchExistingAllowlistedAccountsAddThemToTheOrganization")}`}>
     {close => <div className="space-y-4"><SchemaForm schema={z.object({ query: z.string().trim().min(3, t("organizationMemberAdd.enterAtLeast3Characters")).max(64) })} fields={[{ name: "query", label: t("organizationMemberAdd.usernameOrDisplayName") }]} defaults={{ query: "" }} disabled={disabled} label={t("organizationMemberAdd.searchAccounts")}
       onSubmit={values => run(async () => { setCandidates(await api<Account[]>(`/api/admin/organizations/${org.id}/account-search?q=${encodeURIComponent(String(values.query))}`)); }, "", false)} />
