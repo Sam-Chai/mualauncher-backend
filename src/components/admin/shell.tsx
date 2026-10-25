@@ -57,8 +57,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const contentRef = useRef<HTMLElement>(null);
   useEffect(() => { contentRef.current?.scrollTo(0, 0); }, [pathname]);
   const { state, organizationId, setOrganizationId, busy, run } = useAdmin();
-  return <SidebarProvider className="h-svh overflow-hidden" style={{ "--sidebar-width": "16rem", "--header-height": "3.5rem" } as React.CSSProperties}>
-    <AppSidebar /><SidebarInset className="m-2 min-h-0 min-w-0 gap-2 rounded-xl bg-transparent">
+  // Only admin-content scrolls. Unlike hidden, clip prevents focus and
+  // scrollIntoView (including route navigation) from scrolling away the header.
+  return <SidebarProvider className="h-svh overflow-clip" style={{ "--sidebar-width": "16rem", "--header-height": "3.5rem" } as React.CSSProperties}>
+    <AppSidebar /><SidebarInset className="m-2 min-h-0 min-w-0 gap-2 overflow-clip rounded-xl bg-transparent">
       <header data-slot="admin-header" className="z-20 flex h-14 shrink-0 items-center gap-2 rounded-xl border bg-background/70 px-4 backdrop-blur-xl dark:text-foreground lg:px-6">
         <SidebarTrigger className="-ml-1" /><Separator orientation="vertical" className="mx-2 data-[orientation=vertical]:h-4" />
         <Breadcrumb className="hidden min-w-0 sm:block"><BreadcrumbList><BreadcrumbItem className="hidden sm:block"><BreadcrumbLink asChild><Link href="/admin">{current.group ? t(current.group) : PROJECT_NAME}</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator className="hidden sm:block" /><BreadcrumbItem><BreadcrumbPage>{t(current.title)}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
@@ -68,7 +70,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <Button variant="ghost" size="icon" disabled={busy} aria-label={t("shell.refreshData")} onClick={() => void run(async () => {}, t("shell.dataRefreshed"))}><RefreshCw className={busy ? "size-4 animate-spin" : "size-4"} /></Button>
         </div>
       </header>
-      <div data-slot="admin-content-panel" className="flex min-h-0 flex-1 overflow-hidden rounded-xl bg-background p-1">
+      <div data-slot="admin-content-panel" className="flex min-h-0 flex-1 overflow-clip rounded-xl bg-background p-1">
         <main ref={contentRef} data-slot="admin-content" className={`@container/main flex min-h-0 min-w-0 flex-1 flex-col gap-6 rounded-lg p-3 md:p-5${embeddedPage ? " overflow-hidden" : " overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"}`}>{children}</main>
       </div>
     </SidebarInset><Toaster richColors position="top-right" />

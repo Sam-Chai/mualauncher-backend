@@ -2,7 +2,7 @@ import "server-only";
 import { spawn } from "node:child_process";
 import { copyFile, mkdir } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { delimiter, dirname, join, sep } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { executionPlanSchema, executionPlanDigest, type ExecutionBackend, type ExecutionObserver } from "./execution-contract";
 import { executionPolicy, ExecutionError } from "./execution-policy";
 import { executionInputs } from "./execution-archive";
@@ -48,7 +48,7 @@ export async function probeBare() {
 }
 export async function bareProfileIdentity() {
   const policy = barePolicy(), java = await probeBare();
-  return createHash("sha256").update(JSON.stringify({ revision: "bare-java-1", platform: process.platform, architecture: process.arch, java: policy.java, version: java.version, heap: policy.heapMiB })).digest("hex");
+  return createHash("sha256").update(JSON.stringify({ revision: "bare-java-2", platform: process.platform, architecture: process.arch, java: policy.java, version: java.version, heap: policy.heapMiB })).digest("hex");
 }
 export class BareExecutionBackend {
   constructor(private readonly observer?: ExecutionObserver) {}
@@ -75,7 +75,7 @@ export class BareExecutionBackend {
         const stepSignal = AbortSignal.any([signal, AbortSignal.timeout(policy.stepSeconds * 1000)]);
         const result = await hostCommand(policy.java, [`-Xmx${policy.heapMiB}m`, `-XX:ActiveProcessorCount=${policy.cpus}`, `-Djava.io.tmpdir=${destination}`, "-Djava.awt.headless=true", "-cp",
           step.classpath.map(path => join(work, path)).join(delimiter), step.mainClass,
-          ...step.args.map(arg => arg.replace(/\/workspace(?=\/|$)/g, () => work).split("/workspace/").join(work + sep))], stepSignal, work)
+          ...step.args.map(arg => arg.replace(/\/workspace(?=\/|$)/g, () => work))], stepSignal, work)
           .catch(error => { if (stepSignal.aborted && !signal.aborted) throw new ExecutionError("timeout", false, step.id); throw error; });
         if (result.code !== 0) throw new ExecutionError("failed", false, step.id);
       }

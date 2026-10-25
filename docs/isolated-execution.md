@@ -1,5 +1,7 @@
 # Docker / gVisor 统一执行
 
+2026-10-25 WSL2 增量：已在独立 Ubuntu Docker Engine + runsc 20261019.0 上通过真实十项隔离探针和每次资源回收检查，开发网站也已确认 Worker 的 gVisor 就绪。环境、命令和剩余边界见 [WSL 开发与验收](wsl-isolation-development.md)。下文 Windows Docker Desktop 未配置 runsc 的记录属于此前基线，不能据此判断新 Ubuntu daemon 状态；原生 Linux/macOS 生产与真实 Forge 新执行链验收仍未完成。
+
 本页描述现有 Worker 的 Docker/gVisor 模式，不接入 Argo。当前设置页也可显式选择裸机，模式选择、状态和实例列表见 [运行环境管理](execution-management.md)；裸机不具备本页的容器边界。下述协议与验收结果分别记录，部署支持不等于已完成目标机器验收。
 
 ## 信任与协议

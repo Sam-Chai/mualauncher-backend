@@ -28,7 +28,7 @@ async function main() {
       credentialPath = path;
     }
     return account;
-  }); } catch (error) {
+  }, prisma); } catch (error) {
     if (credentialPath) await unlink(credentialPath);
     throw error;
   }

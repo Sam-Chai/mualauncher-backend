@@ -46,7 +46,10 @@ export function SettingsPage() {
     {state.actor.isSuperAdmin && <RecycleSettings />}
   </div>
     {state.actor.isSuperAdmin && <DownloadSettingsCards />}
-    {state.actor.isSuperAdmin && <ExecutionSettingsCard />}
+    {state.actor.isSuperAdmin && <div className="grid items-stretch gap-6 xl:grid-cols-2">
+      <ExecutionSettingsCard />
+      <Card className="min-w-0"><CardHeader><CardTitle>{t("sandboxManagement.title")}</CardTitle><CardDescription>{t("sandboxManagement.description")}</CardDescription></CardHeader><CardContent><div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground"><p className="font-medium text-foreground">{t("sandboxManagement.notConnected")}</p><p className="mt-2">{t("sandboxManagement.placeholder")}</p></div></CardContent></Card>
+    </div>}
     {state.actor.isSuperAdmin && <UnionSyncSettings />}
   </div></>;
 }

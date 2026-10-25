@@ -1,4 +1,10 @@
 {
+  "sandboxManagement": {
+    "title": "沙箱管理",
+    "description": "集中管理沙箱任务与工作流。",
+    "notConnected": "尚未接入",
+    "placeholder": "此处预留控制面板，后续可接入 GitHub Actions、Argo 等工作流系统。"
+  },
   "executionSettings": {
     "exited": "已退出",
     "title": "安装器运行环境", "description": "选择后续 Forge 等安装器任务的运行方式。状态由实际执行任务的 Worker 上报。",

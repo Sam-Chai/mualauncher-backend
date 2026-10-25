@@ -1,5 +1,7 @@
 # 实施进度
 
+2026-10-25 WSL2 验收：独立 Ubuntu-24.04 开发副本、Linux Node 24、JDK 21、独立 Docker Engine / runsc 20261019.0 及固定镜像已部署；PostgreSQL 16、MinIO、签名与凭据和 Windows 原环境分离。真实十项隔离探针及每次容器/卷清理通过，网站已读取 Worker 的真实沙箱就绪状态。首次部署工具和裸机 Linux 路径重复替换问题已修复，裸机缓存修订为 bare-java-2。WSL 结果不替代原生生产 Linux/macOS、真实 Forge 完整链或故障恢复验收，见 [WSL 环境](wsl-isolation-development.md)。
+
 2026-10-25 执行管理：超管 Settings 新增 Docker + gVisor／裸机选择，默认 Docker + gVisor，根据新鲜 Worker 心跳及实际探测结果禁用不可用选项，绝不自动降级。后台任务新增执行实例历史和容器 ID／名称／状态、镜像、架构及资源参数；状态探测与容器核对由 Worker 执行。裸机明确共享宿主权限、资源和网络，仅保留 Java 堆、超时、日志及产物校验。迁移 `202610250001_execution_management` 已应用本地数据库，新增 ExecutionRun，34 张业务表 FORCE RLS；仅超管 Cookie 可读写设置及读取历史，Worker 只写运行遥测，模式变更不影响已固定的执行任务。OpenAPI 5.2.0 完整 93／公开 11。详见 [执行管理](execution-management.md)。
 
 本增量全量回归各组共 332 项通过，两个真实导入样本因未提供而跳过；包含生产 HTTP、25 项执行／Forge 专项（含本机 Java 真实执行）、权限／修订／状态过期及容器遥测测试。中英文设置页浏览器检查、类型、Lint、生产构建、OpenAPI 93/93 和数据库四类受限连接检查通过。本机 Docker 可连接但未注册 runsc 且未配置执行镜像，Docker + gVisor 保持默认并置灰；原生 Linux/macOS 隔离验收边界沿用下条。

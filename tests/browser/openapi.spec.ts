@@ -50,7 +50,7 @@ test("dashboard plots real activity in both languages and keeps dark tooltips re
     const frame = page.locator('[data-slot="admin-content-panel"]');
     await expect(frame).toHaveCSS("border-top-right-radius", "14px");
     await expect(frame).toHaveCSS("border-bottom-right-radius", "14px");
-    await expect(frame).toHaveCSS("overflow", "hidden");
+    await expect(frame).toHaveCSS("overflow", "clip");
     const frameBounds = (await frame.boundingBox())!;
     expect(frameBounds.y - ((await header.boundingBox())!.y + (await header.boundingBox())!.height)).toBe(8);
     const scrollBounds = (await page.locator('[data-slot="admin-content"]').boundingBox())!;

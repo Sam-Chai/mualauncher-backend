@@ -36,6 +36,7 @@ async function main() {
     const database = (await db.query('SELECT current_database() AS name')).rows[0].name as string;
     await db.query(`GRANT CREATE ON DATABASE "${database.replaceAll('"','""')}" TO mua_owner`);
     await db.query(`GRANT USAGE,CREATE ON SCHEMA "${schema}" TO mua_owner,mua_lookup`);
+    await db.query(`ALTER SCHEMA "${schema}" OWNER TO mua_owner`);
     await db.query('COMMIT');
     if (process.argv.includes("--adopt")) {
       await db.query("BEGIN");

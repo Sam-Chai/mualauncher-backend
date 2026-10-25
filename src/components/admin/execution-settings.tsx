@@ -16,7 +16,7 @@ export function ExecutionSettingsCard() {
     refresh(); const timer = setInterval(refresh, 10000); return () => { active = false; clearInterval(timer); };
   }, []);
   const mode = draft?.mode ?? data?.mode ?? "DOCKER_GVISOR";
-  return <Card><CardHeader><CardTitle>{t("executionSettings.title")}</CardTitle><CardDescription>{t("executionSettings.description")}</CardDescription></CardHeader><CardContent className="space-y-5">
+  return <Card className="min-w-0"><CardHeader><CardTitle>{t("executionSettings.title")}</CardTitle><CardDescription>{t("executionSettings.description")}</CardDescription></CardHeader><CardContent className="space-y-5 break-words">
     {error && <p role="alert" className="text-sm text-destructive">{formatMessage(t, error)}</p>}
     {!data ? <p role="status">{t("executionSettings.loading")}</p> : <>
       <div className="flex flex-wrap items-end gap-3"><div className="grid gap-2 text-sm"><label htmlFor="execution-mode">{t("executionSettings.mode")}</label>

@@ -2,6 +2,8 @@
 
 2026-10-25：设置页新增“安装器运行环境”，后台任务新增“执行实例”。页面、三条 API 和数据库第二层保护均仅允许超管 Cookie；普通管理员、PLAYER、API Token 不可读取或修改。Worker 只能读设置、上报状态及写执行记录，不能改变运行方式。
 
+设置页在宽屏下将“安装器运行环境”与“沙箱管理”分为左右等宽板块，窄屏上下排列。“沙箱管理”仅为占位，明确显示尚未接入，预留后续 GitHub Actions、Argo 等工作流控制面板。后台外层布局使用不可滚动的裁剪容器，仅内容区独立滚动，避免焦点定位或路由切换将顶部导航栏滚出视口。
+
 默认 `DOCKER_GVISOR`。没有新鲜的合格 Worker 时选项置灰，默认值仍保持 Docker，不会悄悄改成裸机。真正可选要求 Docker CLI/daemon 连通、Linux daemon、注册 runsc、固定执行镜像，以及真实容器指纹、UID/capabilities、资源策略与 Java 探针通过。macOS 使用专用 Colima Linux VM；原生目标机部署及隔离验收仍见 [Docker/gVisor 部署](isolated-execution.md)。
 
 裸机需要手动选择 `BARE` 并保存，且至少有一个在线 Worker 上报 Java 21+。优先使用 `FORGE_PROCESSOR_JAVA`，其次 JAVA_HOME，最后 PATH。仅精简进程环境变量并限制 JVM heap、时间、日志与输入/输出校验；不限制宿主总内存、CPU、磁盘、PID 或网络，不隔离同账号文件、进程及凭据。POSIX 按进程组、Windows 按 taskkill 终止可追踪后代，不能保证清理主动脱离的程序。页面会明确说明这一边界；生产应使用专用低权限 Worker 账号。

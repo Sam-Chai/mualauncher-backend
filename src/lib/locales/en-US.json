@@ -1,4 +1,10 @@
 {
+  "sandboxManagement": {
+    "title": "Sandbox management",
+    "description": "Manage sandbox tasks and workflows in one place.",
+    "notConnected": "Not connected",
+    "placeholder": "This panel is reserved for future integration with workflow systems such as GitHub Actions and Argo."
+  },
   "executionSettings": {
     "exited": "Exited",
     "title": "Installer execution", "description": "Choose how future Forge and other installer tasks run. Status is reported by execution workers.",

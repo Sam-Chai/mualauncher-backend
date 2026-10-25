@@ -37,7 +37,7 @@ const modColumns = (t: Translate): ColumnDef<ModRow>[] => [
 const modRowId = (row: ModRow) => row.path;
 export function ModTable({ mods, details, empty = "clientShared.noModJarFilesDetected" }: { mods: readonly string[]; details?: readonly ModDetail[]; empty?: string }) {
   const { t } = useI18n();
-  return <DataTable data={mods.map(name => { const path = name.startsWith("versions/") ? name : `mods/${name}`; return { fileName: name.split("/").at(-1)!, path, detail: details?.find(detail => detail.path === path) }; })}
+  return <DataTable preservePagination data={mods.map(name => { const path = name.startsWith("versions/") ? name : `mods/${name}`; return { fileName: name.split("/").at(-1)!, path, detail: details?.find(detail => detail.path === path) }; })}
     columns={modColumns(t)} getRowId={modRowId} caption={t("clientShared.modList")} searchPlaceholder={t("clientShared.searchModFilesOrPaths")} empty={empty} />;
 }
 

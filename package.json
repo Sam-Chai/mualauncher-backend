@@ -54,7 +54,8 @@
     "sandbox:reap": "node --conditions=react-server --import tsx scripts/execution-admin.ts reap",
     "sandbox:image": "node --conditions=react-server --import tsx scripts/execution-admin.ts image",
     "sandbox:verify": "node --conditions=react-server --import tsx scripts/execution-admin.ts verify",
-    "test:execution:browser": "playwright test --config playwright.execution.config.ts"
+    "test:execution:browser": "playwright test --config playwright.execution.config.ts",
+    "test:pagination:browser": "playwright test --config playwright.pagination.config.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "7.3.4",
