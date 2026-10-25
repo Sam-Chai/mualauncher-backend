@@ -2,11 +2,13 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ZipFile } from "yazl";
-import { forgeArtifactPath, forgeInstallerSource, forgeToken, forgeProcessorAllowed, prepareForgeInstaller, installForgeClient, runForgeProcessor } from "../src/lib/forge-installer";
+import { forgeArtifactPath, forgeInstallerSource, forgeToken, forgeProcessorAllowed, prepareForgeInstaller, installForgeClient } from "../src/lib/forge-installer";
+import { executeIsolated } from "../src/lib/execution-docker";
+import { executionPlanDigest, type ExecutionPlan, type ExecutionBackend } from "../src/lib/execution-contract";
 import { environmentCandidates, trustedEnvironmentUrl, type EnvironmentSettings } from "../src/lib/environment-source-policy";
 import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "../src/lib/download-sources";
 import { environmentCacheIdentity } from "../src/lib/environment-resolver";
@@ -71,7 +73,40 @@ test("Wrong Minecraft identity, unknown processor and bad embedded hash cannot p
   });
 });
 test("Cancelled processor does not spawn Java, and Forge/NeoForge cache identities remain distinct", async()=>{
-  const signal = AbortSignal.abort(new Error("cancelled")); await assert.rejects(runForgeProcessor("not-an-executable", [], "a.b", [], "/work", signal), /cancelled/);
+  const signal = AbortSignal.abort(new Error("cancelled")); await assert.rejects(executeIsolated({} as ExecutionPlan, new Map(), "/work", signal), /cancelled/);
   const base = { minecraft: "1.21.1", javaMajor: 21, platform: "windows-amd64" as const };
   assert.notEqual(environmentCacheIdentity({...base, loader: {type:"forge",version:"21.1.256"}}, "jre"), environmentCacheIdentity({...base, loader:{type:"neoforge",version:"21.1.256"}}, "jre"));
+});
+
+test("Modern Forge migrates to a portable offline execution plan and rejects unbound results before storing files", async () => {
+  for (const corrupt of [false, true]) await folder(async dir => {
+    const tool = "net.minecraftforge:installertools:1.4.1", target = "net.minecraftforge:forge:1.20.1-47.4.0:client";
+    const toolPath = forgeArtifactPath(tool), targetPath = forgeArtifactPath(target), generated = Buffer.from("generated client jar");
+    const toolBytes = await zipBytes({ "META-INF/MANIFEST.MF": Buffer.from("Manifest-Version: 1.0\r\nMain-Class: example.Processor\r\n\r\n") });
+    const library = (name: string, bytes: Buffer) => ({ name, downloads: { artifact: { path: forgeArtifactPath(name), sha1: hash(bytes), size: bytes.length, url: "" } } });
+    const profile = { id: "1.20.1-forge-47.4.0", inheritsFrom: "1.20.1", mainClass: "example.Game", libraries: [library(target, generated)] };
+    const install = { spec: 1, minecraft: "1.20.1", version: profile.id, json: "/version.json", libraries: [library(tool, toolBytes)],
+      data: { PATCHED: { client: `[${target}]` }, PATCHED_SHA: { client: `'${hash(generated)}'` } },
+      processors: [{ jar: tool, classpath: [], args: ["--task", "MCP_DATA", "--output", "{PATCHED}"], outputs: { "{PATCHED}": "{PATCHED_SHA}" } }] };
+    const installer = await zipBytes({ "install_profile.json": Buffer.from(JSON.stringify(install)), "version.json": Buffer.from(JSON.stringify(profile)), [`maven/${toolPath}`]: toolBytes });
+    let executed = false; const stored: string[] = [];
+    const execute: ExecutionBackend = async (plan, bindings, destination) => {
+      executed = true; assert.equal(plan.adapter, "forge-client"); assert.equal(plan.steps.length, 1);
+      assert.equal(plan.steps[0].args.at(-1), `/workspace/instance/libraries/${targetPath}`);
+      assert.ok(plan.inputs.every(file => !file.path.includes("\\") && bindings.has(file.path)));
+      assert.equal(plan.inputs.some(file => file.path === "installer.jar"), true);
+      await mkdir(destination); const local = join(destination, "generated"); await writeFile(local, generated);
+      return { protocolVersion: 1, executionId: "12345678-1234-4234-8234-123456789abc", planSha256: corrupt ? "0".repeat(64) : executionPlanDigest(plan),
+        image: `sha256:${"a".repeat(64)}`, architecture: "amd64", artifacts: [{ path: `instance/libraries/${targetPath}`, local, size: generated.length, sha1: hash(generated), sha256: hash(generated, "sha256") }] };
+    };
+    const deps = { downloader: { bytes: async () => Buffer.from(hash(installer)) } as unknown as ReturnType<typeof createEnvironmentDownloader>,
+      remote: async (path: string) => { const local = join(dir, "installer.jar"); await writeFile(local, installer); return { local, file: { root: "instance" as const, path, sha256: hash(installer, "sha256"), size: installer.length, policy: "managed" as const, executable: false } }; },
+      store: async (path: string, local: string) => { stored.push(path); const bytes = await readFile(local); return { root: "instance" as const, path, sha256: hash(bytes, "sha256"), size: bytes.length, policy: "managed" as const, executable: false }; }, execute };
+    const prepared = await prepareForgeInstaller("forge", "1.20.1", "47.4.0", dir, new AbortController().signal, deps);
+    const game = join(dir, "game.jar"); await writeFile(game, "game");
+    if (corrupt) { await assert.rejects(installForgeClient(prepared, game, undefined, new AbortController().signal, async () => {})); assert.equal(stored.length, 0); }
+    else { const result = await installForgeClient(prepared, game, undefined, new AbortController().signal, async () => {});
+      assert.ok(result.execution); assert.deepEqual(result.classpath, [`libraries/${targetPath}`]); assert.deepEqual(stored, [`libraries/${targetPath}`]); }
+    assert.equal(executed, true);
+  });
 });

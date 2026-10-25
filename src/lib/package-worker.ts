@@ -25,6 +25,9 @@ import { signingIdentity } from "./signing";
 import { packageArtifactsSchema } from "./package-contract";
 import { runRecipePackageBuild } from "./recipe-package-worker";
 import { assertDistributableFiles } from "./pack-file-policy";
+import { ExecutionError } from "./execution-policy";
+import { workerExecutionMode } from "./execution-settings";
+import { executionContext } from "./execution-management";
 
 async function owner(db: Db, build: PackageBuild) {
   const draft = await db.clientDraft.findUnique({ where: { id: build.draftId }, include: { upload: true } });
@@ -46,16 +49,19 @@ async function claim(client: PrismaClient) {
       JOIN "Client" c ON c."id"=d."clientId" JOIN "Organization" o ON o."id"=c."organizationId"
       WHERE b."required" AND c."deletedAt" IS NULL AND c."archivedAt" IS NULL AND o."archivedAt" IS NULL AND d."archivedAt" IS NULL
       AND d."packageFormatVersion" IN (1,2) AND d."status" IN ('SUBMITTED','APPROVED') AND b."attempts"<3
-      AND (b."status"='QUEUED' OR b."status"='PROCESSING' AND b."leaseUntil"<NOW() OR b."status"='PREPARED' AND d."status"='APPROVED')
+      AND (b."status"='QUEUED' AND (b."leaseUntil" IS NULL OR b."leaseUntil"<NOW()) OR b."status"='PROCESSING' AND b."leaseUntil"<NOW() OR b."status"='PREPARED' AND d."status"='APPROVED')
       ORDER BY CASE WHEN b."status"='PREPARED' THEN 0 ELSE 1 END,b."createdAt",b."platform" FOR UPDATE OF b SKIP LOCKED LIMIT 1`;
     if (!rows[0]) return null;
     return db.packageBuild.update({ where: { id: rows[0].id }, data: { status: "PROCESSING", phase: rows[0].format === 2 ? diagnosticText("diagnostics.packageWorker.preparingV2Recipe") : diagnosticText("diagnostics.packageWorker.preparingEnvironment"), error: null,
       attempts: { increment: 1 }, leaseToken: randomUUID(), leaseUntil: new Date(Date.now() + 120000) } });
   }, client);
 }
-export async function runPackageWorker(client: PrismaClient = prisma, resolver: EnvironmentResolver = resolveEnvironment) {
+export async function runPackageWorker(client: PrismaClient = prisma, resolver: EnvironmentResolver = resolveEnvironment, shutdown?: AbortSignal, workerId = `worker-${process.pid}`) {
+  if (shutdown?.aborted) return false;
   const build = await claim(client); if (!build) return false;
   const directory = await mkdtemp(join(tmpdir(), "mua-package-worker-")); const controller = new AbortController();
+  const stop = () => controller.abort(new ExecutionError("unavailable", true, "worker-stopping"));
+  shutdown?.addEventListener("abort", stop, { once: true }); if (shutdown?.aborted) stop();
   const { signal } = controller; let phase = build.platform === "universal" ? diagnosticText("diagnostics.packageWorker.preparingV2Recipe") : diagnosticText("diagnostics.packageWorker.preparingEnvironment"), progress = 1, renewing = false;
   const checkpoint = async () => locked(async db => {
     const current = await db.packageBuild.findUnique({ where: { id: build.id } });
@@ -74,13 +80,16 @@ export async function runPackageWorker(client: PrismaClient = prisma, resolver: 
     }
     const metadata = clientMetadataSchema.parse(context.draft.candidateMetadata);
     const platform = muaPlatformSchema.parse(build.platform); let targetBytes: Buffer;
-    if (build.targetObjectKey && build.targetSha256) {
+    const inspection = context.upload.detectedInfo as ClientInspection | null;
+    const execution = ["forge", "neoforge"].includes(inspection?.loader ?? "") ? await executionContext(await workerExecutionMode(client), workerId, build.id) : undefined;
+    const executionRevision = execution ? `${execution.mode}-${execution.profile}` : null;
+    if (build.targetObjectKey && build.targetSha256 && (!executionRevision || build.targetObjectKey.includes(`/${executionRevision}/`))) {
       targetBytes = await readObject(build.targetObjectKey); invariant(muaDigest(targetBytes) === build.targetSha256, 422, diagnosticText("diagnostics.packageWorker.thePreparedManifestFailedValidation"));
     } else {
-      const info = context.upload.detectedInfo as ClientInspection | null;
+      const info = inspection;
       invariant(!info?.loader || info.loaderVersion, 422, diagnosticText("diagnostics.packageWorker.theLoaderVersionCouldNotBeDetectedALaunchablePackage"));
       const loader = info?.loader ? { type: zLoader(info.loader), version: info.loaderVersion! } : null;
-      const environment = await resolver({ minecraft: metadata.minecraftVersion, javaMajor: metadata.javaVersion, loader, platform }, directory, signal,
+      const environment = await resolver({ minecraft: metadata.minecraftVersion, javaMajor: metadata.javaVersion, loader, platform, execution }, directory, signal,
         async message => { phase = message; progress = 15; signal.throwIfAborted(); await checkpoint(); });
       const filesBytes = await readObject(context.upload.filesObjectKey!); invariant(muaDigest(filesBytes) === context.upload.filesSha256, 422, diagnosticText("diagnostics.packageWorker.theUploadFileIndexFailedValidation"));
       const inventory = JSON.parse(filesBytes.toString("utf8")) as FileInventory;
@@ -99,7 +108,7 @@ export async function runPackageWorker(client: PrismaClient = prisma, resolver: 
         platform, runtime: { minecraft: metadata.minecraftVersion, loader, java: environment.java }, environments: environment.environments, launch: environment.launch,
         mods: instanceFiles.filter(file => /^mods\/.+\.jar$/i.test(file.path)).map(file => ({ path: file.path, name: null, version: null, ...(file.optional ? { optional: true } : {}) })), files: [...environment.files, ...instanceFiles] });
       validateMuaEnvironments(target, await readEnvironmentDocuments(environment)); targetBytes = encodeMuaJson(target);
-      const targetObjectKey = `muapacks/${context.client.id}/${build.draftId}/${platform}/targets/${muaDigest(targetBytes)}.json`;
+      const targetObjectKey = `muapacks/${context.client.id}/${build.draftId}/${platform}/targets/${executionRevision ? executionRevision + "/" : ""}${muaDigest(targetBytes)}.json`;
       await putImmutableBytes(packagesBucket(), targetObjectKey, targetBytes); await checkpoint();
       await locked(async db => {
         const current = await db.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); invariant(current.leaseToken === build.leaseToken && current.status === "PROCESSING", 409, diagnosticText("diagnostics.packageWorker.theBuildLeaseIsNoLongerValid"));
@@ -162,9 +171,15 @@ export async function runPackageWorker(client: PrismaClient = prisma, resolver: 
   } catch (error) {
     const message = error instanceof AppError || error instanceof Error ? serializeError(error) : diagnosticText("diagnostics.packageWorker.packageBuildFailed");
     await locked(async db => { const current = await db.packageBuild.findUnique({ where: { id: build.id } });
-      if (current?.status === "PROCESSING" && current.leaseToken === build.leaseToken) await db.packageBuild.update({ where: { id: build.id }, data: { status: "FAILED", phase: diagnosticText("diagnostics.packageContract.generationFailed"), error: message, leaseToken: null, leaseUntil: null } }); }, client).catch(() => {});
+      if (current?.status === "PROCESSING" && current.required && current.leaseToken === build.leaseToken) {
+        const retry = shutdown?.aborted || error instanceof ExecutionError && (error.retryable || error.reason === "configuration");
+        await db.packageBuild.update({ where: { id: build.id }, data: retry ? {
+          status: "QUEUED", phase: diagnosticText(shutdown?.aborted ? "diagnostics.execution.stopping" : "diagnostics.execution.retrying"), error: message,
+          attempts: Math.max(0, current.attempts - 1), leaseToken: null, leaseUntil: new Date(Date.now() + (shutdown?.aborted ? 0 : 30000)),
+        } : { status: "FAILED", phase: diagnosticText("diagnostics.packageContract.generationFailed"), error: message, leaseToken: null, leaseUntil: null } });
+      } }, client).catch(() => {});
     console.error(`Package build ${build.id}: ${message}`); return true;
-  } finally { clearInterval(timer); clearTimeout(deadline); controller.abort();
+  } finally { clearInterval(timer); clearTimeout(deadline); shutdown?.removeEventListener("abort", stop); controller.abort();
     const root = resolve(tmpdir()) + sep; invariant(resolve(directory).startsWith(root), 500, diagnosticText("diagnostics.packageWorker.unsafeTemporaryBuildDirectory")); await rm(directory, { recursive: true, force: true }); }
 }
 function zLoader(loader: string) {

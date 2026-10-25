@@ -1,4 +1,16 @@
 {
+  "executionSettings": {
+    "exited": "Exited",
+    "title": "Installer execution", "description": "Choose how future Forge and other installer tasks run. Status is reported by execution workers.",
+    "loading": "Loading execution status…", "mode": "Execution mode", "docker": "Docker + gVisor (default)", "bare": "Bare host", "save": "Save execution mode", "saved": "Execution mode saved",
+    "dockerUnavailable": "Docker + gVisor is unavailable: no worker has a fresh successful runtime and image check. The option is disabled; the system will not switch to bare host automatically.",
+    "bareWarning": "Bare host execution shares the worker account’s filesystem permissions and network. Docker CPU, memory, disk and PID isolation does not apply. Only enable it on a trusted dedicated host.",
+    "workerStatus": "Execution worker status", "noWorkers": "No workers have reported in the last day.", "fresh": "Current", "stale": "Stale / offline", "notReported": "This worker has not reported execution capabilities yet.",
+    "connected": "Connected", "disconnected": "Installed, disconnected", "notInstalled": "Not installed / unavailable", "verified": "Sandbox verified", "notReady": "Registered, verification incomplete", "notRegistered": "Not registered", "unavailable": "Unavailable",
+    "instancesTitle": "Execution instances", "instancesDescription": "The latest 100 execution attempts, including container IDs and retained lifecycle records after cleanup. Unknown cleanup is not reported as removed.",
+    "startedAt": "Started", "state": "Task status", "instances": "Containers", "parameters": "Parameters", "details": "View parameters", "worker": "Worker", "task": "Package task", "image": "Image / Java identity", "architecture": "Architecture", "memory": "Memory", "heap": "Java heap", "workspace": "Workspace", "network": "Network", "deadline": "Time limit", "hostShared": "Shared with host", "offline": "Disabled",
+    "preparing": "Preparing", "running": "Running", "succeeded": "Succeeded", "failed": "Failed", "cancelled": "Cancelled", "interrupted": "Interrupted", "cleanupFailed": "Cleanup failed", "created": "Created", "removed": "Removed", "unknown": "Unknown", "notCreated": "No container created"
+  },
   "credentials": {
     "revoke": "Revoke all credentials",
     "confirm": "Revoke credentials for {name}?",
@@ -1414,6 +1426,19 @@
     "checkedAt": "Checked at: {time}"
   },
   "diagnostics": {
+    "execution": {
+      "invalidSettings": "Invalid execution settings", "settingsChanged": "Execution settings changed; refresh and try again", "backendUnavailable": "No available worker supports this execution backend",
+      "configuration": "The isolated execution configuration is invalid ({operation})",
+      "unavailable": "Isolated execution is temporarily unavailable ({operation})",
+      "integrity": "Isolated execution input or output validation failed ({operation})",
+      "timeout": "Isolated execution exceeded its time limit ({operation})",
+      "failed": "The isolated program failed ({operation})",
+      "cleanup": "Isolated execution cleanup must finish before accepting results ({operation})",
+      "step": "Isolated execution: {step}",
+      "collecting": "Validating isolated execution artifacts",
+      "retrying": "Waiting for isolated execution to recover; retrying shortly",
+      "stopping": "Worker stopping; the build will resume on an available worker"
+    },
     "credentials": { "cookieOwnerOrSuperadminRequired": "A browser session belonging to the account or a MUA superadmin is required" },
     "packPolicy": {
       "sensitiveFilesBlocked": "Sensitive files prevent publication. Reimport a sanitized source package",

@@ -14,6 +14,8 @@ import { downloadSettings, updateDownloadSettings } from "@/lib/download-setting
 import { packageFormatSettings, updatePackageFormatSettings } from "@/lib/package-format-settings";
 import { uploadSizeSettings, updateUploadSizeSettings } from "@/lib/upload-size-settings";
 import { revokeCredentials } from "@/lib/credential-revocation";
+import { executionSettings, updateExecutionSettings } from "@/lib/execution-settings";
+import { executionInstances } from "@/lib/execution-management";
 
 type Context = { params: Promise<{ path: string[] }> };
 async function handle(request: Request, context: Context) {
@@ -27,6 +29,8 @@ async function handle(request: Request, context: Context) {
     const result = await authorized(token, write, async (db, actor) => {
       const [kind, id, action, accountId, grant, sid] = path;
       if (request.method === "GET") {
+        if (path.length === 1 && kind === "execution-settings") return executionSettings(db, actor);
+        if (path.length === 1 && kind === "execution-instances") return executionInstances(db, actor);
         if (path.length === 1 && kind === "upload-size-settings") return uploadSizeSettings(db, actor);
         if (path.length === 1 && kind === "package-format-settings") return packageFormatSettings(db, actor);
         if (path.length === 1 && kind === "download-settings") return downloadSettings(db, actor);
@@ -51,6 +55,7 @@ async function handle(request: Request, context: Context) {
       if (request.method === "PATCH" && path.length === 1 && kind === "download-settings") return updateDownloadSettings(db, actor, raw);
       if (request.method === "PATCH" && path.length === 1 && kind === "package-format-settings") return updatePackageFormatSettings(db, actor, raw);
       if (request.method === "PATCH" && path.length === 1 && kind === "upload-size-settings") return updateUploadSizeSettings(db, actor, raw);
+      if (request.method === "PATCH" && path.length === 1 && kind === "execution-settings") return updateExecutionSettings(db, actor, raw);
       if (request.method === "PATCH" && path.length === 2) {
         if (kind === "organizations") return management.updateOrganization(db, actor, uuid(id), raw);
         if (kind === "servers") return management.updateServer(db, actor, serverId(id), raw);

@@ -41,7 +41,7 @@ test("both locale documents expose only Launcher authentication and member resou
 
 test("all operations are documented while only Launcher operations are public; ordinary members see the API menu", () => {
   assert.equal(new Set(apiInventory.map(item => `${item.method} ${item.path}`)).size, apiInventory.length);
-  assert.equal(apiInventory.filter(item => item.documented).length, 90);
+  assert.equal(apiInventory.filter(item => item.documented).length, 93);
   const described = Object.entries(publicOpenApi().paths ?? {}).flatMap(([path,item]) => ["get","post"].filter(method=>item?.[method as "get"]).map(method=>`${method.toUpperCase()} ${path}`)).sort();
   assert.equal(described.length, PUBLIC_OPERATION_IDS.length);
   assert(described.includes("POST /api/auth/launcher/yggdrasil/exchange"));
@@ -62,7 +62,7 @@ test("full documents validate in both languages and document session/Bearer boun
       if (path.startsWith("/api/v1/clients")) assert.deepEqual(operation.security, [{ SessionCookie: [] }, { ApiToken: [] }]);
       if (path.startsWith("/api/admin")) assert.deepEqual(operation.security, [{ SessionCookie: [] }]);
     }
-    assert.equal(ids.length, 90); assert.equal(new Set(ids).size, 90);
+    assert.equal(ids.length, 93); assert.equal(new Set(ids).size, 93);
     if (locale === "en-US") assert(!/[\u3400-\u9fff]/.test(JSON.stringify(document)));
     const settings = document.paths!["/api/admin/upload-size-settings"]!;
     assert.equal(settings.get?.["x-superadmin-only"], true); assert.equal(settings.patch?.["x-superadmin-only"], true);
@@ -77,7 +77,7 @@ test("full documents validate in both languages and document session/Bearer boun
 });
 
 test("coverage reads actual catch-all branches, expands alternatives and detects missing operations", async () => {
-  assert.equal(await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]), 90);
+  assert.equal(await verifyCoverage([...apiInventory.filter(item => item.group === "Launcher"), ...privateOperations]), 93);
   await assert.rejects(verifyCoverage(apiInventory.slice(1)), /coverage mismatch/);
   await assert.rejects(verifyCoverage([...apiInventory, { method: "GET", path: "/api/not-real" }]), /coverage mismatch/);
   const source = `const handler = (request, path) => { const [kind, id, action] = path;

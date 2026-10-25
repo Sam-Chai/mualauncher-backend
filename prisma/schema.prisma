@@ -255,6 +255,8 @@ model PlatformSettings {
   javaImageType String @default("jre")
   enabledPackageFormats Int[] @default([1, 2])
   maxUploadSizeMb Int @default(1024)
+  executionMode String @default("DOCKER_GVISOR")
+  executionRevision Int @default(0)
   updatedAt            DateTime @updatedAt @db.Timestamptz(6)
 }
 
@@ -461,6 +463,29 @@ model WorkerHeartbeat {
   id        String   @id
   startedAt DateTime @default(now()) @db.Timestamptz(6)
   lastSeen  DateTime @default(now()) @db.Timestamptz(6)
+  executionStatus Json?
+}
+
+model ExecutionRun {
+  id String @id @db.Uuid
+  workerId String
+  daemonId String?
+  buildId String? @db.Uuid
+  mode String
+  adapter String
+  state String
+  planSha256 String @db.Char(64)
+  image String
+  architecture String
+  limits Json
+  containers Json @default("[]")
+  error String?
+  startedAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  finishedAt DateTime? @db.Timestamptz(6)
+
+  @@index([startedAt, id])
+  @@index([workerId, state])
 }
 
 model ServerPublication {

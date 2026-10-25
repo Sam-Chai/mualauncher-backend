@@ -32,6 +32,7 @@ async function main() {
   sourceFiles.push("src/lib/i18n.ts", "src/lib/locales/zh-CN.json", "src/lib/locales/en-US.json", "src/lib/openapi/document.ts", "src/lib/openapi/private-document.ts", "src/lib/openapi/union-document.ts");
   sourceFiles.push("src/lib/diagnostics.ts", "src/lib/errors.ts", "prisma/migrations/202610220004_english_diagnostic_default/migration.sql");
   sourceFiles.push("src/lib/credential-revocation.ts", "src/lib/credential-revocation-contract.ts", "src/lib/pack-file-policy.ts", "prisma/migrations/202610230001_account_credential_revocation/migration.sql");
+  sourceFiles.push("src/lib/execution-management-contract.ts", "src/lib/execution-settings.ts", "src/lib/execution-management.ts", "prisma/migrations/202610250001_execution_management/migration.sql");
   sourceFiles.sort();
   outputs.set("docs/openapi/source-manifest.json", JSON.stringify(Object.fromEntries(await Promise.all(sourceFiles.map(async path => [path, createHash("sha256").update((await readFile(path, "utf8")).replace(/\r\n/g, "\n")).digest("hex")]))), null, 2) + "\n");
   outputs.set("docs/api-inventory.md", ["# Union Link API 接口清单", "",

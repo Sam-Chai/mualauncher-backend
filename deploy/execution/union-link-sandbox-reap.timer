@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically reap expired execution resources
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+Persistent=true
+Unit=union-link-sandbox-reap.service
+
+[Install]
+WantedBy=timers.target

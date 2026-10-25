@@ -3,9 +3,8 @@ import "server-only";
 import { z } from "zod";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readFile, lstat } from "node:fs/promises";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { spawn } from "node:child_process";
+import { copyFile, mkdir, readFile, lstat, rm } from "node:fs/promises";
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import yauzl from "yauzl";
 import crc32 from "crc-32";
 import { unpackEnvironment } from "./environment-archive";
@@ -13,6 +12,9 @@ import { safePackPath } from "./pack-path";
 import { invariant } from "./errors";
 import type { EnvironmentExpected, createEnvironmentDownloader } from "./environment-download";
 import type { MuaFile } from "./muapack-contract";
+import { executionInputs } from "./execution-archive";
+import { executeIsolated } from "./execution-docker";
+import { executionPlanDigest, executionPlanSchema, type ExecutionBackend, type ExecutionPlan, type ExecutionOutput } from "./execution-contract";
 
 const artifactSchema = z.object({ path: z.string(), url: z.string(), sha1: z.string().regex(/^[a-f0-9]{40}$/), size: z.number().int().nonnegative().max(2 * 1024 ** 3) });
 const librarySchema = z.object({ name: z.string(), downloads: z.object({ artifact: artifactSchema }) });
@@ -41,8 +43,8 @@ function contained(root: string, path: string) {
   const part = relative(resolve(root), resolve(path));
   invariant(part !== "" && !isAbsolute(part) && part !== ".." && !part.startsWith(`..${sep}`), 422, diagnosticText("diagnostics.forgeInstaller.theForgeProcessorPathEscapesItsRoot")); return resolve(path);
 }
-export function forgeToken(value: string, data: Record<string, string>, root: string) {
-  if (value.startsWith("[") && value.endsWith("]")) return join(root, "libraries", forgeArtifactPath(value.slice(1, -1)));
+export function forgeToken(value: string, data: Record<string, string>, root: string, pathJoin = join) {
+  if (value.startsWith("[") && value.endsWith("]")) return pathJoin(root, "libraries", forgeArtifactPath(value.slice(1, -1)));
   return value.replace(/\{([A-Z_]+)\}/g, (_, key: string) => { invariant(Object.hasOwn(data, key), 422, diagnosticText("diagnostics.forgeInstaller.unknownForgeProcessorVariable0", { arg0: key })); return data[key]; });
 }
 async function hashFile(file: string, algorithm: "sha1" | "sha256", signal: AbortSignal) {
@@ -81,29 +83,11 @@ export function forgeProcessorAllowed(coordinate: string, args: string[]) {
     const task = args[args.indexOf("--task") + 1]; invariant(["MCP_DATA", "DOWNLOAD_MOJMAPS", "MERGE_MAPPING"].includes(task), 422, diagnosticText("diagnostics.forgeInstaller.thisForgeInstallationTaskIsNotSupported"));
   }
 }
-export async function runForgeProcessor(java: string, classpath: string[], main: string, args: string[], directory: string, signal: AbortSignal) {
-  signal.throwIfAborted();
-  const env: NodeJS.ProcessEnv = { NODE_ENV: "production" };
-  for (const key of ["PATH", "Path", "SystemRoot", "WINDIR", "LANG", "LC_ALL"]) if (process.env[key]) env[key] = process.env[key];
-  env.TEMP = directory; env.TMP = directory;
-  const timeout = AbortSignal.any([signal, AbortSignal.timeout(10 * 60 * 1000)]);
-  await new Promise<void>((yes, no) => {
-    const child = spawn(java, ["-Xmx2G", `-Djava.io.tmpdir=${directory}`, "-Djava.awt.headless=true", "-cp", classpath.join(delimiter), main, ...args],
-      { cwd: directory, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    let log = "", settled = false;
-    const finish = (error?: Error) => { if (settled) return; settled = true; timeout.removeEventListener("abort", abort); if (error) no(error); else yes(); };
-    const abort = () => child.kill(); timeout.addEventListener("abort", abort, { once: true });
-    for (const stream of [child.stdout, child.stderr]) stream.on("data", (bytes: Buffer) => { log = (log + bytes.toString()).slice(-8192); });
-    child.on("error", error => finish(new Error(diagnosticText("diagnostics.forgeInstaller.unableToExecuteJavaForTheForgeProcessorConfigureForge", { arg0: error.message }))));
-    child.on("close", code => finish(timeout.aborted ? new Error(diagnosticText("diagnostics.forgeInstaller.theForgeProcessorWasCancelledOrExceededTenMinutes")) : code === 0 ? undefined : new Error(diagnosticText("diagnostics.forgeInstaller.forgeProcessorFailed01", { arg0: code, arg1: log.slice(-2000) }))));
-    if (timeout.aborted) abort();
-  }); signal.throwIfAborted();
-}
-
 type Dependencies = {
   downloader: ReturnType<typeof createEnvironmentDownloader>;
   remote: (path: string, url: string, expected: EnvironmentExpected) => Promise<{ file: MuaFile; local: string }>;
   store: (path: string, local: string) => Promise<MuaFile>;
+  execute?: ExecutionBackend;
 };
 export async function prepareForgeInstaller(type: "forge" | "neoforge", minecraft: string, version: string, directory: string, signal: AbortSignal, deps: Dependencies) {
   const source = forgeInstallerSource(type, minecraft, version);
@@ -142,8 +126,9 @@ export async function installForgeClient(prepared: Awaited<ReturnType<typeof pre
     locals.set(path, { path: target, sha1: checked.hash });
     if (++count % 10 === 0) await progress(diagnosticText("diagnostics.forgeInstaller.downloadingForgeInstallationDependencies01", { arg0: count, arg1: all.size }));
   }
+  const installerCopy = join(work, "installer.jar"); await copyFile(installer.local, installerCopy);
   const data: Record<string, string> = { SIDE: "client", MINECRAFT_JAR: base, MINECRAFT_VERSION: install.minecraft,
-    ROOT: root, INSTALLER: installer.local, LIBRARY_DIR: lib };
+    ROOT: root, INSTALLER: installerCopy, LIBRARY_DIR: lib };
   for (const [key, value] of Object.entries(install.data)) {
     invariant(!Object.hasOwn(data, key) && /^[A-Z_]+$/.test(key), 422, diagnosticText("diagnostics.forgeInstaller.invalidForgeInstallationVariable"));
     if (value.client.startsWith("[") && value.client.endsWith("]")) { data[key] = forgeToken(value.client, {}, root); await mkdir(dirname(data[key]), { recursive: true }); }
@@ -153,11 +138,15 @@ export async function installForgeClient(prepared: Awaited<ReturnType<typeof pre
     else { const entry = entries.get(safePackPath(value.client.replace(/^\//, ""))); invariant(entry, 422, diagnosticText("diagnostics.forgeInstaller.forgeInstallationDataDoesNotExist")); data[key] = entry.local; }
   }
   const processors = install.processors.filter(proc => !proc.sides || proc.sides.includes("client"));
+  const steps: ExecutionPlan["steps"] = [], outputs = new Map<string, ExecutionOutput>();
+  const portable = (path: string) => safePackPath(relative(work, contained(work, path)).split(sep).join("/"));
+  const virtualData = Object.fromEntries(Object.entries(data).map(([key, value]) => [key, isAbsolute(value) ? `/workspace/${portable(value)}` : value]));
   for (const [index, proc] of processors.entries()) {
-    signal.throwIfAborted(); await progress(diagnosticText("diagnostics.forgeInstaller.processing0123", { arg0: profile.id, arg1: index + 1, arg2: processors.length, arg3: proc.jar.split(":")[1] }));
-    const args = proc.args.map(arg => forgeToken(arg, data, root));
+    signal.throwIfAborted();
     for (const [key, value] of Object.entries(proc.outputs)) {
-      contained(root, forgeToken(key, data, root)); invariant(/^[a-f0-9]{40}$/.test(forgeToken(value, data, root)), 422, diagnosticText("diagnostics.forgeInstaller.invalidForgeOutputDigest"));
+      const target = contained(root, forgeToken(key, data, root)), hash = forgeToken(value, data, root);
+      invariant(/^[a-f0-9]{40}$/.test(hash), 422, diagnosticText("diagnostics.forgeInstaller.invalidForgeOutputDigest"));
+      const path = portable(target); outputs.set(path, { path, expected: { algorithm: "sha1", hash } });
     }
     if (proc.jar.split(":")[1] === "installertools" && proc.args[proc.args.indexOf("--task") + 1] === "DOWNLOAD_MOJMAPS") {
       invariant(mappings && data.MOJMAPS, 422, diagnosticText("diagnostics.forgeInstaller.officialMinecraftClientMappingsAreMissing"));
@@ -167,11 +156,39 @@ export async function installForgeClient(prepared: Awaited<ReturnType<typeof pre
       const paths = [...new Set([proc.jar, ...proc.classpath])].map(coordinate => {
         const item = locals.get(forgeArtifactPath(coordinate)); invariant(item, 422, diagnosticText("diagnostics.forgeInstaller.aForgeProcessorDependencyHasNotBeenVerified")); return item.path;
       });
-      const jar = paths[0]; const main = await mainClass(jar);
-      await runForgeProcessor(process.env.FORGE_PROCESSOR_JAVA || (process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin", process.platform === "win32" ? "java.exe" : "java") : "java"), paths, main, args, work, signal);
+      const main = await mainClass(paths[0]);
+      steps.push({ id: `processor-${index + 1}`, kind: "java", classpath: paths.map(portable), mainClass: main,
+        args: proc.args.map(arg => forgeToken(arg, virtualData, "/workspace/instance", posix.join)) });
     }
-    for (const [key, value] of Object.entries(proc.outputs)) invariant((await hashFile(forgeToken(key, data, root), "sha1", signal)).hash === forgeToken(value, data, root), 422, diagnosticText("diagnostics.forgeInstaller.theForgeProcessorOutputHashDoesNotMatch"));
   }
+  for (const key of ["MC_EXTRA", "PATCHED"]) if (data[key]) {
+    const path = portable(contained(root, data[key]));
+    const hash = data[key + "_SHA"];
+    outputs.set(path, { path, ...(hash ? { expected: { algorithm: "sha1" as const, hash } } : {}) });
+  }
+  let execution: { protocolVersion: 1; executionId: string; planSha256: string; image: string; architecture: string } | undefined;
+  if (steps.length) {
+    const input = await executionInputs(work, signal);
+    const plan = executionPlanSchema.parse({ protocolVersion: 1, adapter: "forge-client", revision: 1, inputs: input.inputs, directories: input.directories, steps, outputs: [...outputs.values()] });
+    const destination = join(work, `execution-${randomUUID()}`);
+    try {
+      const result = await (deps.execute ?? executeIsolated)(plan, input.bindings, destination, signal, async step => {
+        await progress(step === "collecting" ? diagnosticText("diagnostics.execution.collecting") : diagnosticText("diagnostics.execution.step", { step }));
+      });
+      invariant(result.protocolVersion === 1 && result.planSha256 === executionPlanDigest(plan) && result.artifacts.length === outputs.size,
+        422, diagnosticText("diagnostics.execution.integrity", { operation: "execution-result" }));
+      const seen = new Set<string>();
+      for (const artifact of result.artifacts) {
+        invariant(outputs.has(artifact.path) && !seen.has(artifact.path), 422, diagnosticText("diagnostics.execution.integrity", { operation: "artifact-path" })); seen.add(artifact.path);
+        contained(destination, artifact.local);
+        const checked = await hashFile(artifact.local, "sha256", signal);
+        invariant(checked.hash === artifact.sha256 && checked.size === artifact.size, 422, diagnosticText("diagnostics.execution.integrity", { operation: "artifact-digest" }));
+        const target = contained(work, join(work, artifact.path)); await mkdir(dirname(target), { recursive: true }); await copyFile(artifact.local, target);
+      }
+      execution = { protocolVersion: 1, executionId: result.executionId, planSha256: result.planSha256, image: result.image, architecture: result.architecture };
+    } finally { contained(work, destination); await rm(destination, { recursive: true, force: true }); }
+  }
+  for (const output of outputs.values()) if (output.expected) invariant((await hashFile(join(work, output.path), output.expected.algorithm, signal)).hash === output.expected.hash, 422, diagnosticText("diagnostics.forgeInstaller.theForgeProcessorOutputHashDoesNotMatch"));
   for (const item of locals.values()) invariant((await hashFile(item.path, "sha1", signal)).hash === item.sha1, 422, diagnosticText("diagnostics.forgeInstaller.theForgeProcessorModifiedAVerifiedDependency"));
   const files: MuaFile[] = []; let total = 0;
   for (const path of runtime) {
@@ -181,8 +198,10 @@ export async function installForgeClient(prepared: Awaited<ReturnType<typeof pre
   }
   // Loader payload embedded in the signed-by-digest installer and generated game jars
   // may be absent from version.json; FML resolves them from the library directory.
+  const tools = new Set(processors.flatMap(proc => [proc.jar, ...proc.classpath]).map(forgeArtifactPath));
   for (const [path, entry] of entries) if (path.startsWith("maven/") && path.endsWith(".jar")) {
-    const name = safePackPath(path.slice(6)); if (!files.some(file => file.path === `libraries/${name}`)) {
+    const name = safePackPath(path.slice(6)); if (tools.has(name) && !runtime.has(name)) continue;
+    if (!files.some(file => file.path === `libraries/${name}`)) {
       files.push(await deps.store(`libraries/${name}`, entry.local)); runtime.add(name);
     }
   }
@@ -192,5 +211,5 @@ export async function installForgeClient(prepared: Awaited<ReturnType<typeof pre
     if (!files.some(file => file.path === path)) files.push(await deps.store(path, target));
     if (key === "MC_EXTRA") runtime.add(path.slice("libraries/".length));
   }
-  return { files, classpath: [...runtime].map(path => `libraries/${path}`) };
+  return { files, classpath: [...runtime].map(path => `libraries/${path}`), execution };
 }

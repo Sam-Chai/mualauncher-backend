@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "5.1.0",
+    "version": "5.2.0",
     "description": "The complete panel reference includes Launcher, client automation, administration and authentication. Documentation access grants no business permissions. Each request still checks scope, RBAC, revisions and lifecycle. Follow upload, review, build and publication stages using actual progress."
   },
   "servers": [
@@ -25347,6 +25347,1287 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Infrastructure"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/execution-settings": {
+      "get": {
+        "operationId": "getExecutionSettings",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "api.operations.getExecutionSettings.summary",
+        "description": "api.operations.getExecutionSettings.description",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "responses": {
+          "200": {
+            "description": "Success; field visibility remains subject to current RBAC and resource state.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "DOCKER_GVISOR",
+                        "BARE"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "dockerAvailable": {
+                      "type": "boolean"
+                    },
+                    "bareAvailable": {
+                      "type": "boolean"
+                    },
+                    "workers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "lastSeen": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "fresh": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "sampledAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "platform": {
+                                "type": "string"
+                              },
+                              "architecture": {
+                                "type": "string"
+                              },
+                              "docker": {
+                                "type": "object",
+                                "properties": {
+                                  "installed": {
+                                    "type": "boolean"
+                                  },
+                                  "connected": {
+                                    "type": "boolean"
+                                  },
+                                  "version": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "linux": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "installed",
+                                  "connected",
+                                  "version",
+                                  "linux"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "gvisor": {
+                                "type": "object",
+                                "properties": {
+                                  "registered": {
+                                    "type": "boolean"
+                                  },
+                                  "verified": {
+                                    "type": "boolean"
+                                  },
+                                  "imageConfigured": {
+                                    "type": "boolean"
+                                  },
+                                  "ready": {
+                                    "type": "boolean"
+                                  },
+                                  "reason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "registered",
+                                  "verified",
+                                  "imageConfigured",
+                                  "ready",
+                                  "reason"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "bare": {
+                                "type": "object",
+                                "properties": {
+                                  "ready": {
+                                    "type": "boolean"
+                                  },
+                                  "version": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "ready",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "sampledAt",
+                              "platform",
+                              "architecture",
+                              "docker",
+                              "gvisor",
+                              "bare"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "lastSeen",
+                          "fresh",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "revision",
+                    "dockerAvailable",
+                    "bareAvailable",
+                    "workers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "setExecutionSettings",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "api.operations.setExecutionSettings.summary",
+        "description": "api.operations.setExecutionSettings.description",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "x-request-body-max-bytes": 32768,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "The current site's complete origin, sent automatically by browsers."
+            },
+            "required": true,
+            "name": "Origin",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "DOCKER_GVISOR",
+                      "BARE"
+                    ]
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "mode",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success; field visibility remains subject to current RBAC and resource state.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "DOCKER_GVISOR",
+                        "BARE"
+                      ]
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "dockerAvailable": {
+                      "type": "boolean"
+                    },
+                    "bareAvailable": {
+                      "type": "boolean"
+                    },
+                    "workers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "lastSeen": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "fresh": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "sampledAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "platform": {
+                                "type": "string"
+                              },
+                              "architecture": {
+                                "type": "string"
+                              },
+                              "docker": {
+                                "type": "object",
+                                "properties": {
+                                  "installed": {
+                                    "type": "boolean"
+                                  },
+                                  "connected": {
+                                    "type": "boolean"
+                                  },
+                                  "version": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "linux": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "installed",
+                                  "connected",
+                                  "version",
+                                  "linux"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "gvisor": {
+                                "type": "object",
+                                "properties": {
+                                  "registered": {
+                                    "type": "boolean"
+                                  },
+                                  "verified": {
+                                    "type": "boolean"
+                                  },
+                                  "imageConfigured": {
+                                    "type": "boolean"
+                                  },
+                                  "ready": {
+                                    "type": "boolean"
+                                  },
+                                  "reason": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "registered",
+                                  "verified",
+                                  "imageConfigured",
+                                  "ready",
+                                  "reason"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "bare": {
+                                "type": "object",
+                                "properties": {
+                                  "ready": {
+                                    "type": "boolean"
+                                  },
+                                  "version": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "ready",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "sampledAt",
+                              "platform",
+                              "architecture",
+                              "docker",
+                              "gvisor",
+                              "bare"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "lastSeen",
+                          "fresh",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "revision",
+                    "dockerAvailable",
+                    "bareAvailable",
+                    "workers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "HTTP 400: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "HTTP 401: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "HTTP 403: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "HTTP 404: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "HTTP 413: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "HTTP 415: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HTTP 422: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "HTTP 429: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "HTTP 500: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "HTTP 503: parameter, session, permission, resource-state or infrastructure error.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/execution-instances": {
+      "get": {
+        "operationId": "getExecutionInstances",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "api.operations.getExecutionInstances.summary",
+        "description": "api.operations.getExecutionInstances.description",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-permissions": [],
+        "x-superadmin-only": true,
+        "responses": {
+          "200": {
+            "description": "Success; field visibility remains subject to current RBAC and resource state.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "workerId": {
+                            "type": "string"
+                          },
+                          "daemonId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "buildId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "uuid"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "DOCKER_GVISOR",
+                              "BARE"
+                            ]
+                          },
+                          "adapter": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "PREPARING",
+                              "RUNNING",
+                              "SUCCEEDED",
+                              "FAILED",
+                              "CANCELLED",
+                              "INTERRUPTED",
+                              "CLEANUP_FAILED"
+                            ]
+                          },
+                          "planSha256": {
+                            "type": "string"
+                          },
+                          "image": {
+                            "type": "string"
+                          },
+                          "architecture": {
+                            "type": "string"
+                          },
+                          "limits": {
+                            "type": "object",
+                            "properties": {
+                              "cpus": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "memoryMiB": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "heapMiB": {
+                                "type": "number"
+                              },
+                              "workspaceMiB": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "tmpMiB": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "pids": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "deadlineSeconds": {
+                                "type": "number"
+                              },
+                              "network": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "host"
+                                ]
+                              },
+                              "readOnlyRoot": {
+                                "type": "boolean"
+                              },
+                              "runtime": {
+                                "type": "string",
+                                "enum": [
+                                  "runsc",
+                                  "host"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "cpus",
+                              "memoryMiB",
+                              "heapMiB",
+                              "workspaceMiB",
+                              "tmpMiB",
+                              "pids",
+                              "deadlineSeconds",
+                              "network",
+                              "readOnlyRoot",
+                              "runtime"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "containers": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "role": {
+                                  "type": "string",
+                                  "enum": [
+                                    "executor",
+                                    "input"
+                                  ]
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "CREATED",
+                                    "RUNNING",
+                                    "EXITED",
+                                    "REMOVED",
+                                    "UNKNOWN"
+                                  ]
+                                },
+                                "createdAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "role",
+                                "state",
+                                "createdAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "error": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "startedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "finishedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "workerId",
+                          "daemonId",
+                          "buildId",
+                          "mode",
+                          "adapter",
+                          "state",
+                          "planSha256",
+                          "image",
+                          "architecture",
+                          "limits",
+                          "containers",
+                          "error",
+                          "startedAt",
+                          "updatedAt",
+                          "finishedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "limit": {
+                      "type": "number",
+                      "enum": [
+                        100
+                      ]
+                    }
+                  },
+                  "required": [
+                    "runs",
+                    "limit"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

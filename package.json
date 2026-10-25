@@ -19,7 +19,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "auth:bootstrap": "node --conditions=react-server --import tsx scripts/bootstrap-admin.ts",
-    "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/rls.test.ts tests/prisma-cache.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:storage && npm run test:storage-telemetry && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui && npm run test:api-diagnostics && npm run test:openapi && npm run openapi:check && npm run test:union && npm run test:security",
+    "test": "node --conditions=react-server --import tsx --test tests/core.test.ts tests/rls.test.ts tests/prisma-cache.test.ts tests/client-version.test.ts tests/client-download.test.ts tests/uploads.test.ts tests/inspection.test.ts tests/muapack.test.ts tests/muapack-v2.test.ts tests/environment.test.ts tests/modrinth.test.ts tests/forge.test.ts tests/server-probe.test.ts && npm run test:storage && npm run test:storage-telemetry && npm run test:server-motto && npm run test:package-format && npm run test:admin-ui && npm run test:api-diagnostics && npm run test:openapi && npm run openapi:check && npm run test:union && npm run test:security && npm run test:execution",
     "test:package-format": "node --import tsx --test tests/package-format.test.ts",
     "test:admin-ui": "node --import tsx --test tests/server-management.test.tsx tests/preferences.test.tsx tests/i18n.test.tsx tests/recipe-distribution.test.tsx",
     "test:server-motto": "node --conditions=react-server --import tsx --test tests/server-motto.test.ts",
@@ -48,7 +48,13 @@
     "test:union": "node --conditions=react-server --import tsx --test tests/union-access.test.ts tests/launcher-game.test.ts",
     "test:launcher-auth": "node --conditions=react-server --import tsx --test tests/launcher-game.test.ts",
     "test:security": "node --conditions=react-server --import tsx --test tests/login-policy.test.ts tests/password-login.test.ts tests/upload-signatures.test.ts tests/pack-file-policy.test.ts",
-    "test:api-diagnostics": "node --conditions=react-server --import tsx --test tests/api-diagnostics.test.ts"
+    "test:api-diagnostics": "node --conditions=react-server --import tsx --test tests/api-diagnostics.test.ts",
+    "test:execution": "node --conditions=react-server --import tsx --test tests/execution.test.ts tests/forge.test.ts tests/execution-bare.test.ts",
+    "sandbox:check": "node --conditions=react-server --import tsx scripts/execution-admin.ts check",
+    "sandbox:reap": "node --conditions=react-server --import tsx scripts/execution-admin.ts reap",
+    "sandbox:image": "node --conditions=react-server --import tsx scripts/execution-admin.ts image",
+    "sandbox:verify": "node --conditions=react-server --import tsx scripts/execution-admin.ts verify",
+    "test:execution:browser": "playwright test --config playwright.execution.config.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "7.3.4",

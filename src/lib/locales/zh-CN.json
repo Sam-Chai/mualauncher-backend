@@ -1,4 +1,16 @@
 {
+  "executionSettings": {
+    "exited": "已退出",
+    "title": "安装器运行环境", "description": "选择后续 Forge 等安装器任务的运行方式。状态由实际执行任务的 Worker 上报。",
+    "loading": "正在读取运行状态…", "mode": "运行方式", "docker": "Docker + gVisor（默认）", "bare": "裸机运行", "save": "保存运行方式", "saved": "运行方式已保存",
+    "dockerUnavailable": "Docker + gVisor 暂不可用：没有 Worker 上报有效的运行时及镜像验收结果。该选项已禁用，系统不会自动切换到裸机运行。",
+    "bareWarning": "裸机运行共享 Worker 账号的文件权限和网络，不具备 Docker 的 CPU、内存、磁盘及 PID 隔离。请仅在可信的专用主机上启用。",
+    "workerStatus": "执行 Worker 状态", "noWorkers": "最近一天没有 Worker 上报状态。", "fresh": "状态有效", "stale": "状态过期／离线", "notReported": "该 Worker 尚未上报执行环境状态。",
+    "connected": "已连接", "disconnected": "已安装，未连接", "notInstalled": "未安装／不可用", "verified": "沙箱验证通过", "notReady": "已注册，尚未通过验证", "notRegistered": "未注册", "unavailable": "不可用",
+    "instancesTitle": "执行实例", "instancesDescription": "显示最近 100 次执行，保留清理后的容器 ID 和生命周期记录。未确认的清理状态不会显示为已删除。",
+    "startedAt": "创建时间", "state": "任务状态", "instances": "容器实例", "parameters": "基本参数", "details": "查看参数", "worker": "Worker", "task": "组包任务", "image": "镜像／Java 标识", "architecture": "架构", "memory": "内存", "heap": "Java 堆", "workspace": "工作区", "network": "网络", "deadline": "执行时限", "hostShared": "与宿主共享", "offline": "已禁用",
+    "preparing": "准备中", "running": "运行中", "succeeded": "成功", "failed": "失败", "cancelled": "已取消", "interrupted": "已中断", "cleanupFailed": "清理失败", "created": "已创建", "removed": "已删除", "unknown": "未知", "notCreated": "尚未创建容器"
+  },
   "credentials": {
     "revoke": "撤销全部凭据",
     "confirm": "撤销 {name} 的全部凭据？",
@@ -1414,6 +1426,19 @@
     "checkedAt": "检查时间：{time}"
   },
   "diagnostics": {
+    "execution": {
+      "invalidSettings": "运行方式设置无效", "settingsChanged": "运行方式已被修改，请刷新后重试", "backendUnavailable": "没有可用 Worker 支持所选运行方式",
+      "configuration": "隔离执行配置无效（{operation}）",
+      "unavailable": "隔离执行服务暂时不可用（{operation}）",
+      "integrity": "隔离执行的输入或产物校验失败（{operation}）",
+      "timeout": "隔离执行超时（{operation}）",
+      "failed": "隔离环境中的程序执行失败（{operation}）",
+      "cleanup": "须完成隔离执行清理后才能接受产物（{operation}）",
+      "step": "隔离执行：{step}",
+      "collecting": "正在校验隔离执行产物",
+      "retrying": "等待隔离执行服务恢复，即将重试",
+      "stopping": "Worker 正在停止，任务将由可用 Worker 继续处理"
+    },
     "credentials": { "cookieOwnerOrSuperadminRequired": "需要账号本人的浏览器会话或 MUA 超管浏览器会话" },
     "packPolicy": {
       "sensitiveFilesBlocked": "敏感文件阻止发布，请清理源包后重新导入",

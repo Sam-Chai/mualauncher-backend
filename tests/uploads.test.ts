@@ -20,6 +20,7 @@ import * as m from "../src/lib/management";
 import * as c from "../src/lib/client-service";
 import { runUploadWorker, claimUpload } from "../src/lib/client-worker";
 import { runPackageWorker } from "../src/lib/package-worker";
+import { ExecutionError } from "../src/lib/execution-policy";
 import { fixtureEnvironment } from "./fixtures/environment";
 import { configurePackages, retryPackages, managementFullPackage } from "../src/lib/package-build-service";
 import { packageArtifactsSchema } from "../src/lib/package-contract";
@@ -340,6 +341,20 @@ test("persistent package jobs require review, retry expired leases, invalidate c
   const cancelled = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } }); assert.equal(cancelled.status, "FAILED"); assert.equal(cancelled.leaseToken, null, "cancelling an active platform invalidates its old Worker lease");
   await work(db => configurePackages(db, admin, identity.clientId, draftId, { platforms: ["linux-amd64"] }));
   assert.equal((await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } })).status, "QUEUED");
+  await runPackageWorker(workerClient, async () => { throw new ExecutionError("unavailable", true, "docker-offline"); });
+  const deferred = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } });
+  assert.equal(deferred.status, "QUEUED"); assert.equal(deferred.attempts, 0); assert.ok(deferred.leaseUntil && deferred.leaseUntil > new Date());
+  assert.equal(deferred.artifacts, null); assert.equal(deferred.leaseToken, null);
+  assert.equal(await runPackageWorker(workerClient, fixtureEnvironment), false, "deferred task must not spin and immediately reclaim its lease");
+  await client.packageBuild.update({ where: { id: build.id }, data: { leaseUntil: new Date(0) } });
+  await runPackageWorker(workerClient, async () => { throw new ExecutionError("configuration", false, "runtime-missing"); });
+  const unready = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } });
+  assert.equal(unready.status, "QUEUED"); assert.equal(unready.attempts, 0); assert.equal(unready.artifacts, null);
+  await client.packageBuild.update({ where: { id: build.id }, data: { leaseUntil: new Date(0) } });
+  const shutdown = new AbortController();
+  await runPackageWorker(workerClient, async (_request, _directory, signal) => { shutdown.abort(); signal.throwIfAborted(); throw new Error("unreachable"); }, shutdown.signal);
+  const stopped = await client.packageBuild.findUniqueOrThrow({ where: { id: build.id } });
+  assert.equal(stopped.status, "QUEUED"); assert.equal(stopped.attempts, 0); assert.equal(stopped.leaseToken, null); assert.equal(stopped.artifacts, null);
   // A process exit leaves the durable row reclaimable after its lease expires.
   await client.packageBuild.update({ where: { id: build.id }, data: { status: "PROCESSING", attempts: 1, leaseToken: randomBytes(16).toString("hex").replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5"), leaseUntil: new Date(0) } });
   for (let i = 0; i < 100; i++) {

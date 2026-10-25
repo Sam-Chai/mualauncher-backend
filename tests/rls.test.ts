@@ -20,6 +20,8 @@ import { storageTelemetry, collectStorageTelemetry } from "../src/lib/storage-te
 import { telemetryConfiguration } from "../src/lib/object-storage/telemetry";
 import { revokeCredentials } from "../src/lib/credential-revocation";
 import { apiActor } from "../src/lib/api-auth";
+import { executionSettings, updateExecutionSettings } from "../src/lib/execution-settings";
+import { executionInstances } from "../src/lib/execution-management";
 
 const schema = `mua_rls_${randomBytes(8).toString("hex")}`;
 process.env.DATABASE_SCHEMA = schema;
@@ -30,6 +32,34 @@ function runtime(key: string) { return new PrismaClient({ adapter: new PrismaPg(
 const web = runtime("DATABASE_URL"), auth = runtime("DATABASE_AUTH_URL"), worker = runtime("DATABASE_WORKER_URL"), pub = runtime("DATABASE_PUBLIC_URL");
 let f: Awaited<ReturnType<typeof fixture>>;
 let created = false;
+test("execution settings use fresh Worker reports, enforce revisions and keep execution history superadmin-only", async () => {
+  const initial = await as(f.root, db => executionSettings(db, f.root));
+  assert.equal(initial.mode, "DOCKER_GVISOR"); assert.equal(initial.dockerAvailable, false);
+  const workerId = "execution-capability-test", status = { sampledAt: new Date().toISOString(), platform: "linux", architecture: "amd64",
+    docker: { installed: true, connected: true, version: "fixture", linux: true },
+    gvisor: { registered: false, verified: false, imageConfigured: true, ready: false, reason: null }, bare: { ready: true, version: 'openjdk version "21"' } };
+  await worker.workerHeartbeat.create({ data: { id: workerId, executionStatus: status } });
+  await assert.rejects(as(f.admin, db => updateExecutionSettings(db, f.admin, { mode: "BARE", revision: initial.revision })));
+  const changed = await as(f.root, db => updateExecutionSettings(db, f.root, { mode: "BARE", revision: initial.revision }));
+  assert.equal(changed.mode, "BARE"); assert.equal(changed.revision, initial.revision + 1);
+  await assert.rejects(as(f.root, db => updateExecutionSettings(db, f.root, { mode: "DOCKER_GVISOR", revision: changed.revision })));
+  await assert.rejects(as(f.root, db => updateExecutionSettings(db, f.root, { mode: "BARE", revision: initial.revision })));
+  const privilegedApi = { ...f.root, apiScope: { tokenId: "00000000-0000-4000-8000-000000000001", permissions: [], serverIds: [] } };
+  await assert.rejects(as(privilegedApi, db => executionSettings(db, privilegedApi)));
+  await worker.executionRun.create({ data: { id: "00000000-0000-4000-8000-000000000010", workerId, mode: "BARE", adapter: "test", state: "RUNNING", planSha256: "a".repeat(64), image: "bare:fixture", architecture: "amd64",
+    limits: { cpus: null, memoryMiB: null, heapMiB: 256, workspaceMiB: null, tmpMiB: null, pids: null, deadlineSeconds: 60, network: "host", readOnlyRoot: false, runtime: "host" } } });
+  assert.equal((await as(f.root, db => executionInstances(db, f.root))).runs.length, 1);
+  assert.equal(await as(f.admin, db => db.executionRun.count()), 0); assert.equal(await web.executionRun.count(), 0);
+  await assert.rejects(auth.executionRun.count()); await assert.rejects(pub.executionRun.count());
+  await assert.rejects(as(f.root, db => db.executionRun.update({ where: { id: "00000000-0000-4000-8000-000000000010" }, data: { state: "SUCCEEDED" } })));
+  await assert.rejects(worker.platformSettings.update({ where: { id: "platform" }, data: { executionMode: "DOCKER_GVISOR" } }));
+  status.gvisor = { ...status.gvisor, registered: true, verified: true, ready: true };
+  await worker.workerHeartbeat.update({ where: { id: workerId }, data: { executionStatus: status } });
+  const isolated = await as(f.root, db => updateExecutionSettings(db, f.root, { mode: "DOCKER_GVISOR", revision: changed.revision }));
+  assert.equal(isolated.mode, "DOCKER_GVISOR"); assert.equal((await worker.executionRun.findFirstOrThrow()).mode, "BARE", "switches must not rewrite in-flight execution identity");
+  await worker.workerHeartbeat.update({ where: { id: workerId }, data: { lastSeen: new Date(0) } });
+  assert.equal((await as(f.root, db => executionSettings(db, f.root))).dockerAvailable, false, "old capability reports cannot enable an unavailable backend");
+});
 async function fixture() {
   return owner.$transaction(async db => {
     const root = await db.account.create({ data: { displayName: "root", isSuperAdmin: true } });

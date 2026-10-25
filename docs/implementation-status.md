@@ -1,5 +1,11 @@
 # 实施进度
 
+2026-10-25 执行管理：超管 Settings 新增 Docker + gVisor／裸机选择，默认 Docker + gVisor，根据新鲜 Worker 心跳及实际探测结果禁用不可用选项，绝不自动降级。后台任务新增执行实例历史和容器 ID／名称／状态、镜像、架构及资源参数；状态探测与容器核对由 Worker 执行。裸机明确共享宿主权限、资源和网络，仅保留 Java 堆、超时、日志及产物校验。迁移 `202610250001_execution_management` 已应用本地数据库，新增 ExecutionRun，34 张业务表 FORCE RLS；仅超管 Cookie 可读写设置及读取历史，Worker 只写运行遥测，模式变更不影响已固定的执行任务。OpenAPI 5.2.0 完整 93／公开 11。详见 [执行管理](execution-management.md)。
+
+本增量全量回归各组共 332 项通过，两个真实导入样本因未提供而跳过；包含生产 HTTP、25 项执行／Forge 专项（含本机 Java 真实执行）、权限／修订／状态过期及容器遥测测试。中英文设置页浏览器检查、类型、Lint、生产构建、OpenAPI 93/93 和数据库四类受限连接检查通过。本机 Docker 可连接但未注册 runsc 且未配置执行镜像，Docker + gVisor 保持默认并置灰；原生 Linux/macOS 隔离验收边界沿用下条。
+
+2026-10-25：统一内部 execution protocol v1、Docker/gVisor 后端、Forge/NeoForge Java 处理器迁移及现有 Worker 的延迟重排／退出取消／过期回收已接入，无新增迁移或 HTTP 接口，不接 Argo。Linux runsc 完整包安装器、macOS 专用 Colima 配置、systemd/launchd 模板和真实验收 CLI 已提供。已完成离线专项、数据库流程、真实 HTTP 契约、固定摘要镜像构建及 Docker 传输／后代清理验证；本机没有 runsc，真实隔离检查明确失败，Linux/macOS 原生隔离、真实 Forge/NeoForge 新执行链和故障注入尚未验收，不能宣称生产高可用已验证。详见 [部署与验收边界](isolated-execution.md)。
+
 2026-10-23 安全增量：敏感路径过滤已统一到全部已支持导入，在远程下载与 CAS 前过滤，提交/批准/组包/发布重复保护；历史签名不改写。本人及超管可撤销全部会话、API Token 与待领取 Launcher 授权，改密/重置/停用/超管标志变更同步撤销。迁移 `202610230001_account_credential_revocation` 无新增表，OpenAPI 5.1.0 完整 90／公开 11；Forge 隔离待后续实施。见 [边界和验收](credential-revocation-and-pack-privacy.md)。
 
 该增量完整测试（启用本地生产 HTTP 契约）305 通过、0 失败、2 外部真实样本跳过；额外隔离 HTTP 27 项、登录浏览器 8 项、OpenAPI 浏览器 2 项及成员双语撤销流程通过。类型、Lint、生产构建与 OpenAPI 90/90 通过。迁移尚未应用到当前应用数据库，真实上游与真实云端验收边界保持不变。

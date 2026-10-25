@@ -12,6 +12,7 @@ import * as r from "./requests.generated";
 import { recipeDistributionSchema } from "../recipe-distribution-contract";
 import { storageTelemetrySchema } from "../storage-telemetry-contract";
 import { credentialRevocationSchema } from "../credential-revocation-contract";
+import { executionSettingsSchema, executionSettingsInput, executionInstancesSchema } from "../execution-management-contract";
 
 type Operation = { method: "get" | "post" | "patch" | "put" | "delete"; path: string; id: string; tag: string;
   response: z.ZodTypeAny; body?: z.ZodTypeAny; query?: z.AnyZodObject;
@@ -58,6 +59,9 @@ client("post", "/{clientId}/delete", "deleteClient", s.ok, ["CLIENT_DELETE"], s.
 
 admin("get", "/state", "getAdminState", s.state);
 admin("get", "/pipeline", "getPipeline", s.infrastructure, undefined, [], true);
+admin("get", "/execution-settings", "getExecutionSettings", executionSettingsSchema, undefined, [], true);
+admin("patch", "/execution-settings", "setExecutionSettings", executionSettingsSchema, executionSettingsInput, [], true);
+admin("get", "/execution-instances", "getExecutionInstances", executionInstancesSchema, undefined, [], true);
 admin("get", "/storage-telemetry", "getStorageTelemetry", storageTelemetrySchema, undefined, [], true);
 admin("get", "/organizations/{organizationId}/account-search", "searchOrganizationAccounts", z.array(s.account), undefined, ["ORG_MEMBERS_READ"], false, 200, z.object({ q: z.string().min(3).max(64) }));
 admin("get", "/tokens", "listApiTokens", z.array(s.token));

@@ -15,11 +15,13 @@ import { muaEnvironmentManifestSchema, muaLaunchSchema, type MuaPlatform, type M
 import { safePackPath } from "./pack-path";
 import { invariant } from "./errors";
 import { createReadStream } from "node:fs";
-import { prisma } from "./prisma";
+import { workerPrisma as prisma } from "./prisma";
 import { prepareForgeInstaller, installForgeClient, forgeArtifactPath } from "./forge-installer";
+import { executionProfileIdentity } from "./execution-policy";
+import { managedExecution, type ExecutionContext } from "./execution-management";
 
 const VERSION = "mirrors-jre-2";
-const resolverVersion = (request: EnvironmentRequest) => request.loader && ["forge", "neoforge"].includes(request.loader.type) ? "forge-installers-3" : VERSION;
+const resolverVersion = (request: EnvironmentRequest) => request.loader && ["forge", "neoforge"].includes(request.loader.type) ? `forge-execution-2-${request.execution?.mode ?? "DOCKER_GVISOR"}-${request.execution?.profile ?? executionProfileIdentity()}` : VERSION;
 const ruleSchema = z.object({ action: z.enum(["allow", "disallow"]), os: z.object({ name: z.string().optional(), arch: z.string().optional(), version: z.string().optional() }).optional(), features: z.record(z.boolean()).optional() });
 type Rule = z.infer<typeof ruleSchema>;
 export function environmentRules(rules: Rule[] | undefined, platform: MuaPlatform) {
@@ -47,7 +49,7 @@ const resolvedSchema = z.object({ minecraft: z.string(), loader: z.object({ type
   java: z.object({ major: z.number().int(), vendor: z.string(), version: z.string(), build: z.string(), imageType: z.enum(["jre", "jdk"]), executable: z.string(), manifestSha256: z.string() }),
   environments: z.array(z.object({ kind: z.enum(["minecraft", "loader", "java"]), sha256: z.string() })), files: z.array(z.object({ root: z.enum(["instance", "java"]), path: z.string(), sha256: z.string(), size: z.number().int(), policy: z.enum(["managed", "preserve"]), executable: z.boolean() })), launch: muaLaunchSchema });
 export type ResolvedEnvironment = z.infer<typeof resolvedSchema>;
-export type EnvironmentRequest = { minecraft: string; javaMajor: number; loader: ResolvedEnvironment["loader"]; platform: MuaPlatform };
+export type EnvironmentRequest = { minecraft: string; javaMajor: number; loader: ResolvedEnvironment["loader"]; platform: MuaPlatform; execution?: ExecutionContext };
 export type EnvironmentResolver = (request: EnvironmentRequest, directory: string, signal: AbortSignal, progress: (phase: string) => Promise<void>) => Promise<ResolvedEnvironment>;
 async function storeFile(sha256: string, path: string, size: number) {
   const bucket = environmentsBucket(), key = casKey(sha256); const found = await storedHead(bucket, key);
@@ -72,7 +74,7 @@ export const resolveEnvironment: EnvironmentResolver = async (request, directory
   }, { maxWait: 10000, timeout: 2 * 60 * 60 * 1000 });
 };
 export function environmentCacheIdentity(request: EnvironmentRequest, imageType: "jre" | "jdk") {
-  return muaDigest(encodeMuaJson({ resolver: resolverVersion(request), imageType, ...request }));
+  return muaDigest(encodeMuaJson({ resolver: resolverVersion(request), imageType, minecraft: request.minecraft, javaMajor: request.javaMajor, loader: request.loader, platform: request.platform }));
 }
 async function resolveOfficialEnvironment(request: EnvironmentRequest, directory: string, signal: AbortSignal, progress: (phase: string) => Promise<void>, settings: DownloadSettings) {
   const cacheKey = `cache/${environmentCacheIdentity(request, settings.javaImageType)}.json`;
@@ -211,11 +213,13 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
   if (request.loader) {
     await progress(diagnosticText("diagnostics.environmentResolver.downloading01", { arg0: request.loader.type, arg1: request.loader.version }));
     if (request.loader.type === "forge" || request.loader.type === "neoforge") {
-      const prepared = await prepareForgeInstaller(request.loader.type, request.minecraft, request.loader.version, directory, signal, { downloader, remote, store: storeLocal });
+      const prepared = await prepareForgeInstaller(request.loader.type, request.minecraft, request.loader.version, directory, signal, { downloader, remote, store: storeLocal,
+        ...(request.execution ? { execute: managedExecution(request.execution) } : {}) });
       // Forge validates and installs its own libraries, including embedded jars
       // with an empty download URL. Only coordinates are needed for overrides.
       loaderProfile = profileSchema.parse({ ...prepared.profile, libraries: prepared.profile.libraries.map(library => ({ name: library.name })) });
       const installed = await installForgeClient(prepared, gameJar.local, game.downloads.client_mappings, signal, progress);
+      if (installed.execution) await putImmutableBytes(environmentsBucket(), `executions/${installed.execution.executionId}.json`, encodeMuaJson(installed.execution));
       const overrides = new Set(loaderProfile.libraries.map(library => library.name.split(":").filter((_, index) => index !== 2).join(":")));
       const removed = new Set(game.libraries.filter(library => overrides.has(library.name.split(":").filter((_, index) => index !== 2).join(":")))
         .map(library => `libraries/${library.downloads?.artifact?.path ?? forgeArtifactPath(library.name)}`));

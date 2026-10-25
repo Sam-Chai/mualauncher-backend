@@ -10,6 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-10-25 运行环境管理：Settings 超管 Cookie 可选择 DOCKER_GVISOR／BARE，默认 Docker，不可用置灰且不自动降级。Worker 上报 Docker/gVisor/Java 状态，30 秒心跳／90 秒采样超时不作为可用；Worker 必须能在隔离不可用时继续上报。显式裸机共用协议、清理凭据环境变量，但共享宿主权限／网络且没有容器硬限额。运行中任务固定模式，缓存按模式／执行指纹分隔。后台任务查看最近 100 次实例及容器 ID、生命周期与资源参数，只展示本工作流资源；无任意 Docker 操作 API。迁移 `202610250001_execution_management`，34 张 FORCE RLS 表，OpenAPI 5.2.0 完整 93／公开 11。此条替代下方仅限 Docker 和启动失败退出的旧约定；仍禁止自动回退裸机。见 [执行环境](docs/execution-management.md)。
+
+- 2026-10-25 隔离执行：Forge/NeoForge Java 处理器统一通过内部 execution protocol v1 + Docker/runsc，禁止宿主 Java/runc 回退；输入只读命名卷、工作区受限 tmpfs、UID 65532 零 capabilities、断网，输出在停止后代后重新校验。可信生命周期辅助进程 UID 0 仅 KILL。Docker context 与镜像摘要固定；macOS 使用专用 Colima 原生 Linux VM，不能将 Darwin 或 runc 测试当作 gVisor 验收。沿用 PackageBuild 租约／延迟重排／过期回收；不接 Argo，不新增迁移，不改历史签名。新缓存包含执行策略，旧未签名 Forge PREPARED 需重建。部署和真实验收边界见 [隔离执行](docs/isolated-execution.md)，目标机验收未完成前不能宣称生产可用性已验收。
+
 - 2026-10-23 安全：所有已支持导入共用敏感路径过滤，在下载/CAS 前排除账号、凭据及启动器私有目录；提交、批准、组包和发布再次拒绝敏感路径，历史签名不重写。本人（含 PLAYER）及超管可通过 Cookie+同源接口撤销账号全部 WEB/LAUNCHER 会话、API Token 和待领取 Launcher 授权；改密、重置、停用和超管标志变化同步撤销，重新启用不恢复 Token。上游游戏 Token/密码须另行撤销或修改。迁移 `202610230001_account_credential_revocation`，无新增表，OpenAPI 5.1.0 完整 90／公开 11。见 [过滤与撤销](docs/credential-revocation-and-pack-privacy.md)。Forge 隔离另行实施。
 
 - 2026-10-23 登录与上传安全修复：密码登录按可信代理客户端 IP／无代理时的独立 HttpOnly 浏览器标识隔离配额，不使用全站共享尝试次数；AUTH_CLIENT_IP_HEADER 仅允许强制代理覆盖的单 IP 头，无代理退路需入口抗机器人限流。昂贵校验最多进程内并发两次。上传 PUT 签入由保存记录计算的精确 Content-Length，四类 SDK 均覆盖，OBS 仅上传 URL 显式使用 V4；已有旧 URL 最长十分钟过渡，云端需 storage:verify。Next.js／eslint-config-next 为 16.4.1；本阶段无需迁移，后续敏感文件和撤销功能的迁移与规范版本见上一条。Forge 隔离尚未实施。见 [登录安全](docs/login-form-security.md)、[上传限制](docs/upload-size-settings.md)。

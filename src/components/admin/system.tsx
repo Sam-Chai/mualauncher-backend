@@ -19,6 +19,7 @@ import { MINECRAFT_SOURCES, JAVA_SOURCES } from "@/lib/download-sources";
 import { PackageFormatSettingsCard } from "./package-format-settings";
 import { UploadSizeSettingsCard } from "./upload-size-settings";
 import { UnionSyncSettings } from "./union-sync-settings";
+import { ExecutionSettingsCard } from "./execution-settings";
 export function AuditPage() {
   const { t, formatDate } = useI18n();
   const { state } = useAdmin();
@@ -45,6 +46,7 @@ export function SettingsPage() {
     {state.actor.isSuperAdmin && <RecycleSettings />}
   </div>
     {state.actor.isSuperAdmin && <DownloadSettingsCards />}
+    {state.actor.isSuperAdmin && <ExecutionSettingsCard />}
     {state.actor.isSuperAdmin && <UnionSyncSettings />}
   </div></>;
 }

@@ -1,5 +1,11 @@
 # OpenAPI 兼容性记录
 
+## 5.2.0 · 2026-10-25 运行方式设置与执行实例
+
+新增超管 Cookie 专用 `GET/PATCH /api/admin/execution-settings` 与 `GET /api/admin/execution-instances`，完整 93／公开 11。PATCH 必须包含 mode 和 revision；同源、实际会话、超管与新鲜 Worker 能力共同校验。只新增操作，不更改已有 HTTP 响应或 Launcher 协议；5.1.0 基线继续保留。
+
+默认 DOCKER_GVISOR，不可用时禁用选择并继续等待，不自动降级。显式 BARE 由统一协议在宿主 Java 21+ 执行，只保证 JVM 堆、时间／日志及产物校验，不能提供容器权限和资源隔离。运行中任务绑定原模式；历史签名不改写。新增迁移 `202610250001_execution_management`，34 张业务表 FORCE RLS；执行实例由 Worker 写入，仅超管浏览器可读。
+
 ## 5.1.0 · 2026-10-23 敏感文件与账号凭据撤销
 
 新增 `POST /api/auth/revoke-credentials`（本人浏览器，包含 PLAYER）及 `POST /api/admin/accounts/{accountId}/revoke-credentials`（超管浏览器），严格空 JSON、同源校验，返回受影响会话、API Token 和启动器授权数量。完整 90／公开 11；相对 5.0.0 无既有操作删除或请求响应结构变化，新增 5.1.0 基线并保留旧基线。

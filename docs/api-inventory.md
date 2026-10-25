@@ -2,7 +2,7 @@
 
 由 `npm run openapi:generate` 生成。以下为实际业务路径，catch-all 已展开；HEAD／OPTIONS 框架隐式方法不作为独立业务操作。
 
-90 个业务操作均已纳入受保护的后台完整 OpenAPI；对外规范包含 11 个 Launcher 认证及成员读取操作。文档不授予业务权限。
+93 个业务操作均已纳入受保护的后台完整 OpenAPI；对外规范包含 11 个 Launcher 认证及成员读取操作。文档不授予业务权限。
 
 Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，并继续检查实时 RBAC。Auth 登录／退出要求同源，改密还要求有效会话。
 
@@ -72,6 +72,8 @@ Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，�
 | GET | `/api/admin/download-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | GET | `/api/admin/package-format-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | GET | `/api/admin/upload-size-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
+| GET | `/api/admin/execution-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
+| GET | `/api/admin/execution-instances` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | GET | `/api/admin/organizations/{organizationId}/account-search` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | POST | `/api/admin/tokens` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | POST | `/api/admin/tokens/{tokenId}/revoke` | Admin | session | 仅后台规范 | `src/app/api/admin` |
@@ -90,6 +92,7 @@ Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，�
 | PATCH | `/api/admin/download-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | PATCH | `/api/admin/package-format-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | PATCH | `/api/admin/upload-size-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
+| PATCH | `/api/admin/execution-settings` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | GET | `/api/admin/servers/{serverId}/probe` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | GET | `/api/admin/servers/{serverId}/motto-image` | Admin | session | 仅后台规范 | `src/app/api/admin` |
 | POST | `/api/admin/servers/{serverId}/motto-image` | Admin | session | 仅后台规范 | `src/app/api/admin` |
@@ -99,7 +102,7 @@ Cookie 写操作要求同源 Origin；Bearer 仅适用于客户端标准 API，�
 | POST | `/api/auth/password` | Auth | session + same-origin | 仅后台规范 | `src/app/api/auth/[action]/route.ts` |
 | POST | `/api/auth/revoke-credentials` | Auth | session + same-origin | 仅后台规范 | `src/app/api/auth/[action]/route.ts` |
 
-合计 90 个业务操作，均已描述。客户端身份统一为 UUID；上传与生命周期操作仅提供独立客户端标准 API。
+合计 93 个业务操作，均已描述。客户端身份统一为 UUID；上传与生命周期操作仅提供独立客户端标准 API。
 
 文档基础设施：`GET /openapi.json?locale=zh-CN|en-US` 为公开 Launcher 规范；`GET /api/admin/openapi?locale=zh-CN|en-US` 逐请求检查后台 Cookie 会话并返回完整规范。`/admin/api` 内嵌 Scalar 默认完整规范，可切换公开规范。内部契约不得加入公开输出。
 

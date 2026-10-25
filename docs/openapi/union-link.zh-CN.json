@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "5.1.0",
+    "version": "5.2.0",
     "description": "公开规范包含启动器认证、成员自查及四个分发读取操作；后台与自动化操作仍仅在受保护完整规范中。路由、包格式与文档版本相互独立。"
   },
   "servers": [
