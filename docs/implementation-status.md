@@ -1,5 +1,7 @@
 # 实施进度
 
+2026-10-25 首发依赖整改：升级 Zod／OpenAPI 生成器、Prisma 稳定补丁与 Scalar，更新 fast-uri 传递依赖；全部及生产 npm audit 均为 0。完成 Zod 4 校验器／表单适配、正则序列化与共享 schema 注册修复，重新生成 OpenAPI 产物，93/93 源码／兼容性检查通过；保留既有基线、共享登录配额、数据库结构及历史签名。详情见 [依赖安全](dependency-security.md)。
+
 2026-10-25 WSL2 验收：独立 Ubuntu-24.04 开发副本、Linux Node 24、JDK 21、独立 Docker Engine / runsc 20261019.0 及固定镜像已部署；PostgreSQL 16、MinIO、签名与凭据和 Windows 原环境分离。真实十项隔离探针及每次容器/卷清理通过，网站已读取 Worker 的真实沙箱就绪状态。首次部署工具和裸机 Linux 路径重复替换问题已修复，裸机缓存修订为 bare-java-2。WSL 结果不替代原生生产 Linux/macOS、真实 Forge 完整链或故障恢复验收，见 [WSL 环境](wsl-isolation-development.md)。
 
 2026-10-25 执行管理：超管 Settings 新增 Docker + gVisor／裸机选择，默认 Docker + gVisor，根据新鲜 Worker 心跳及实际探测结果禁用不可用选项，绝不自动降级。后台任务新增执行实例历史和容器 ID／名称／状态、镜像、架构及资源参数；状态探测与容器核对由 Worker 执行。裸机明确共享宿主权限、资源和网络，仅保留 Java 堆、超时、日志及产物校验。迁移 `202610250001_execution_management` 已应用本地数据库，新增 ExecutionRun，34 张业务表 FORCE RLS；仅超管 Cookie 可读写设置及读取历史，Worker 只写运行遥测，模式变更不影响已固定的执行任务。OpenAPI 5.2.0 完整 93／公开 11。详见 [执行管理](execution-management.md)。

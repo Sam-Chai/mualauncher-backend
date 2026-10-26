@@ -51,6 +51,8 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Audit production and development dependencies
+        run: npm audit --audit-level=low
       - name: Provision isolated database roles
         run: npm run db:provision
         env:

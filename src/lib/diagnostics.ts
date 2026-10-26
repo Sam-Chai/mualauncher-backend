@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { hasMessage, translator, type MessageKey, type Translate } from "./i18n";
 
-export const diagnosticSchema = z.object({ code: z.string(), message: z.string(), params: z.record(z.union([z.string(), z.number()])) }).strict();
+export const diagnosticSchema = z.object({ code: z.string(), message: z.string(), params: z.record(z.string(), z.union([z.string(), z.number()])) }).strict();
 export type Diagnostic = z.infer<typeof diagnosticSchema>;
 export type DisplayMessage = string | Diagnostic;
 type DiagnosticFields = "error" | "phase" | "message" | "minecraftSource" | "javaSource";

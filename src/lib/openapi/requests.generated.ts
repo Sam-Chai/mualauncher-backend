@@ -13,7 +13,7 @@ import { enabledPackageFormatsSchema } from "../package-format-policy";
 import { DEFAULT_ENVIRONMENT_DOWNLOAD_SETTINGS } from "../download-sources";
 
 // src/lib/client-service.ts:uploadInput
-export const CreateUpload = z.object({ clientId: z.string().uuid(), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
+export const CreateUpload = z.object({ clientId: z.string().uuid(), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i).meta({ pattern: "\\.(zip|mrpack)$" }),
   size: z.number().int().positive().max(MAX_UPLOAD_SIZE_MB * UPLOAD_MB), baseReleaseId: z.string().uuid().nullable(), basePublicationRevision: z.number().int().nonnegative(),
   comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema }).strict();
 

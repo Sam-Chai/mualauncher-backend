@@ -27,7 +27,7 @@ export function decodeVarInt(buffer: Buffer, offset = 0): { value: number; bytes
 export const statusPacket = (payload: Buffer) => Buffer.concat([encodeVarInt(payload.length), payload]);
 const responseSchema = z.object({
   version: z.object({ name: z.string().max(1024), protocol: z.number().int() }),
-  description: z.union([z.string(), z.record(z.unknown()), z.array(z.unknown())]),
+  description: z.union([z.string(), z.record(z.string(), z.unknown()), z.array(z.unknown())]),
   players: z.object({ online: z.number().int().min(0), max: z.number().int().min(0) }).nullish(),
 });
 export type MinecraftStatus = { latencyMs: number; latencyKind: "PONG" | "STATUS"; version: string; playersOnline: number | null };

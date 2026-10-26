@@ -120,6 +120,14 @@ test("compatibility checks flag removed routes, auth changes and required fields
   assert.equal(compatibilityReport(baseline, added).requiresReview, false);
 });
 
+test("compatibility ignores redundant anyOf branches but preserves oneOf and real nullable changes", () => {
+  const document = (schema: object) => ({ paths: { "/example": { get: { responses: { 200: { content: { "application/json": { schema } } } } } } } });
+  const nullable = [{ type: "string" }, { type: "null" }];
+  assert.equal(compatibilityReport(document({ anyOf: [...nullable, { type: "null" }] }), document({ anyOf: nullable })).requiresReview, false);
+  assert.equal(compatibilityReport(document({ anyOf: nullable }), document({ anyOf: [{ type: "string" }] })).requiresReview, true);
+  assert.equal(compatibilityReport(document({ oneOf: [...nullable, { type: "null" }] }), document({ oneOf: nullable })).requiresReview, true);
+});
+
 test("key wire contracts reject request/response drift, revision types, missing fields and invalid statuses", () => {
   const id = "f70c7f37-29aa-4e3e-97d6-bc6d54da77c7";
   assertApiRequest("POST", "/api/v1/clients", { organizationId: id, name: "Example" });

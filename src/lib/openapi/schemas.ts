@@ -47,8 +47,8 @@ const selection = [
   z.object({ packageType: z.literal("full"), baseReleaseId: z.null(), baseManifestSha256: z.null() }),
   z.object({ packageType: z.literal("update"), baseReleaseId: id, baseManifestSha256: sha256Schema }),
 ] as const;
-const v1Mod = muaPlatformManifestSchema.innerType().shape.mods.element.extend({ optional: z.boolean() });
-const recipeShape = recipeManifestSchema.innerType().shape;
+const v1Mod = muaPlatformManifestSchema.shape.mods.element.extend({ optional: z.boolean() });
+const recipeShape = recipeManifestSchema.shape;
 const v2Mods = z.array(z.union([
   z.object({ path: z.string(), name: z.null(), version: z.null(), optional: z.boolean(), source: z.literal("local"),
     hashes: z.object({ sha256: sha256Schema }).strict() }).strict(),

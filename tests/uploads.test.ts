@@ -433,7 +433,9 @@ test("deflate, ZIP64 and Unicode paths are parsed; a crashed Worker lease can be
   const chunks: Buffer[] = []; for await (const chunk of zip.outputStream) chunks.push(Buffer.from(chunk));
   const upload = await prepare(Buffer.concat(chunks), root, "OTH", false);
   const claimed = await claimUpload(client); assert.equal(claimed?.id, upload.id);
-  await client.clientUpload.update({ where: { id: upload.id }, data: { leaseUntil: new Date(Date.now() - 1000) } });
+  // Claiming uses PostgreSQL's clock; host/VM clock skew must not keep this
+  // deliberately expired test lease alive and contaminate subsequent cases.
+  await client.$executeRaw`UPDATE "ClientUpload" SET "leaseUntil"=now()-interval '1 second' WHERE id=${upload.id}::uuid`;
   assert.equal(await runUploadWorker(workerClient), true);
   const complete = await client.clientUpload.findUniqueOrThrow({ where: { id: upload.id } }); assert.equal(complete.status, "READY"); assert.equal(complete.attempts, 2);
   const inventory = await c.readInventory(complete.filesObjectKey!, complete.filesSha256!);

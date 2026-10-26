@@ -13,7 +13,15 @@ function canonical(value: unknown, root: ObjectValue, depth = 0): unknown {
     if (!resolved) throw new Error(`Unresolved compatibility reference: ${record.$ref}`);
     return canonical(resolved, root, depth + 1);
   }
-  return Object.fromEntries(Object.entries(record).filter(([key]) => !["description", "summary", "example", "examples", "title", "deprecated"].includes(key) && (!key.startsWith("x-") || ["x-permissions", "x-superadmin-only", "x-request-body-max-bytes"].includes(key))).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, canonical(child, root, depth + 1)]));
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !["description", "summary", "example", "examples", "title", "deprecated"].includes(key) && (!key.startsWith("x-") || ["x-permissions", "x-superadmin-only", "x-request-body-max-bytes"].includes(key))).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => {
+    const normalized = canonical(child, root, depth + 1);
+    // Repeating an anyOf alternative does not change its accepted values. Zod 4
+    // removes redundant null branches; oneOf must retain duplicates because it
+    // requires exactly one matching alternative.
+    return [key, key === "anyOf" && Array.isArray(normalized)
+      ? [...new Map(normalized.map(value => [JSON.stringify(value), value])).values()]
+      : normalized];
+  }));
 }
 export function compatibilityReport(before: unknown, after: unknown) {
   const base = object(before), target = object(after), oldPaths = object(base.paths), newPaths = object(target.paths);

@@ -10,7 +10,7 @@ const text = z.string().trim().min(1).max(200);
 const side = z.enum(["required", "optional", "unsupported"]);
 const indexSchema = z.object({ formatVersion: z.literal(1), game: z.literal("minecraft"), name: text,
   versionId: text.max(100), summary: z.string().max(20000).optional(),
-  dependencies: z.record(z.string().min(1).max(100)), files: z.array(z.object({ path: z.string().min(1).max(1000),
+  dependencies: z.record(z.string(), z.string().min(1).max(100)), files: z.array(z.object({ path: z.string().min(1).max(1000),
     hashes: z.object({ sha1: z.string().regex(/^[0-9a-fA-F]{40}$/).transform(value => value.toLowerCase()),
       sha512: z.string().regex(/^[0-9a-fA-F]{128}$/).transform(value => value.toLowerCase()),
       sha256: z.string().regex(/^[0-9a-fA-F]{64}$/).transform(value => value.toLowerCase()).optional() }).strict(),

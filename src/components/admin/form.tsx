@@ -23,7 +23,7 @@ export const passwordSchema = z.string().min(12, "form.passwordMustHaveAtLeast12
 const subscribe = () => () => {};
 const clientReady = () => true;
 const serverReady = () => false;
-export function SchemaForm({ schema, fields, defaults, onSubmit, action, disabled = false, label = "common.actions.save" }: { schema: z.ZodType<Values>; fields: Field[]; defaults: Values; onSubmit: (values: Values) => Promise<boolean>; action?: string; disabled?: boolean; label?: string }) {
+export function SchemaForm({ schema, fields, defaults, onSubmit, action, disabled = false, label = "common.actions.save" }: { schema: z.core.$ZodType<Values, Values>; fields: Field[]; defaults: Values; onSubmit: (values: Values) => Promise<boolean>; action?: string; disabled?: boolean; label?: string }) {
   const { t } = useI18n();
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: defaults });

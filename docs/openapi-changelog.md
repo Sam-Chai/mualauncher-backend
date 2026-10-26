@@ -1,5 +1,9 @@
 # OpenAPI 兼容性记录
 
+## 5.2.0 依赖升级兼容 · 2026-10-25
+
+Zod 4 和新版生成器替换原依赖，修复注册时的扩展加载顺序及 RegExp 标志序列化问题；更新源码摘要和中英文产物。仅生成结构去除了重复的 anyOf null 分支，兼容性工具按等价语义归一化完全相同的 anyOf 分支；oneOf 及真实字段／nullable／认证／权限变化仍受检查。保留 5.2.0 和所有历史基线，完整 93／公开 11，无新增迁移或业务字段。现有共享配额不变，见 [整改与验收](dependency-security.md)。
+
 ## 5.2.0 · 2026-10-25 运行方式设置与执行实例
 
 新增超管 Cookie 专用 `GET/PATCH /api/admin/execution-settings` 与 `GET /api/admin/execution-instances`，完整 93／公开 11。PATCH 必须包含 mode 和 revision；同源、实际会话、超管与新鲜 Worker 能力共同校验。只新增操作，不更改已有 HTTP 响应或 Launcher 协议；5.1.0 基线继续保留。

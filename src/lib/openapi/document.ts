@@ -12,12 +12,14 @@ export const PUBLIC_OPERATION_IDS = ["listServers", "getServerManifest", "getSer
 
 export function publicOpenApi(locale: Locale = "zh-CN") {
   const t = translator(locale), registry = new OpenAPIRegistry();
-  const error = registry.register("Error", errorSchema);
-  const directory = registry.register("ServerDirectory", directorySchema);
-  const clientManifest = registry.register("ClientManifest", clientManifestSchema);
-  const recipe = registry.register("RecipeManifest", recipeManifestSchema);
+  // Zod 4 copies extensions at construction. Shared schemas may predate the
+  // OpenAPI extension, so clone them here to make import order irrelevant.
+  const error = registry.register("Error", errorSchema.clone());
+  const directory = registry.register("ServerDirectory", directorySchema.clone());
+  const clientManifest = registry.register("ClientManifest", clientManifestSchema.clone());
+  const recipe = registry.register("RecipeManifest", recipeManifestSchema.clone());
   const manifest = registry.register("PublicManifest", z.union([clientManifest, recipe]));
-  const packages = registry.register("PackageDownload", packageResponseSchema);
+  const packages = registry.register("PackageDownload", packageResponseSchema.clone());
   const memberSecurity: Record<string, string[]>[] = [{ SessionCookie: [] }, { LauncherToken: [] }];
   registry.registerComponent("securitySchemes", "LauncherToken", { type: "http", scheme: "bearer", bearerFormat: "mul_<64 lowercase hex characters>" });
   registry.registerComponent("securitySchemes", "SessionCookie", { type: "apiKey", in: "cookie", name: "mua_session",

@@ -3561,9 +3561,6 @@
                     },
                     {
                       "type": "null"
-                    },
-                    {
-                      "type": "null"
                     }
                   ]
                 },
@@ -3888,9 +3885,6 @@
                               "enum": [
                                 "pcl"
                               ]
-                            },
-                            {
-                              "type": "null"
                             },
                             {
                               "type": "null"
@@ -4447,9 +4441,6 @@
               },
               {
                 "type": "null"
-              },
-              {
-                "type": "null"
               }
             ]
           },
@@ -4774,9 +4765,6 @@
                         "enum": [
                           "pcl"
                         ]
-                      },
-                      {
-                        "type": "null"
                       },
                       {
                         "type": "null"
@@ -5839,9 +5827,6 @@
                   "PONG",
                   "STATUS"
                 ]
-              },
-              {
-                "type": "null"
               },
               {
                 "type": "null"
@@ -15320,9 +15305,6 @@
                                 },
                                 {
                                   "type": "null"
-                                },
-                                {
-                                  "type": "null"
                                 }
                               ]
                             },
@@ -15647,9 +15629,6 @@
                                           "enum": [
                                             "pcl"
                                           ]
-                                        },
-                                        {
-                                          "type": "null"
                                         },
                                         {
                                           "type": "null"
@@ -16110,6 +16089,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -16686,6 +16666,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -17017,6 +16998,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -17316,6 +17298,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -17868,6 +17851,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -18150,6 +18134,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -18485,6 +18470,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -18754,6 +18740,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -21561,6 +21548,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -21882,6 +21870,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -22197,6 +22186,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -22487,6 +22477,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -22793,6 +22784,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -23095,6 +23087,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -23929,6 +23922,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -24243,6 +24237,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -24546,6 +24541,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -24838,6 +24834,7 @@
               "description": "Required for Cookie writes only. Browsers send their actual Origin automatically."
             },
             "required": false,
+            "description": "Required for Cookie writes only. Browsers send their actual Origin automatically.",
             "name": "Origin",
             "in": "header"
           }
@@ -25964,6 +25961,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -26900,9 +26898,6 @@
                             "COLLECTION_FAILED",
                             "METRICS_UNAVAILABLE"
                           ]
-                        },
-                        {
-                          "type": "null"
                         },
                         {
                           "type": "null"
@@ -27919,6 +27914,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -28221,6 +28217,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -28488,6 +28485,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -28782,6 +28780,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -29066,6 +29065,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -29107,9 +29107,6 @@
                         "enum": [
                           ""
                         ]
-                      },
-                      {
-                        "type": "null"
                       },
                       {
                         "type": "null"
@@ -29412,6 +29409,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -29448,9 +29446,6 @@
                       },
                       {
                         "type": "null"
-                      },
-                      {
-                        "type": "null"
                       }
                     ]
                   },
@@ -29470,9 +29465,6 @@
                         "enum": [
                           ""
                         ]
-                      },
-                      {
-                        "type": "null"
                       },
                       {
                         "type": "null"
@@ -29773,6 +29765,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -30060,6 +30053,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -30358,6 +30352,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -30688,6 +30683,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -30978,6 +30974,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -31283,6 +31280,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -31586,6 +31584,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -31872,6 +31871,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -32408,6 +32408,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -32931,6 +32932,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -33470,6 +33472,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -34078,6 +34081,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -34993,6 +34997,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -35299,6 +35304,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -35584,6 +35590,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -35875,6 +35882,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
@@ -36152,6 +36160,7 @@
               "description": "The current site's complete origin, sent automatically by browsers."
             },
             "required": true,
+            "description": "The current site's complete origin, sent automatically by browsers.",
             "name": "Origin",
             "in": "header"
           }
