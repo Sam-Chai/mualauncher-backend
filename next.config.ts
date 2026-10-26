@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   serverExternalPackages: ["ali-oss", "cos-nodejs-sdk-v5", "esdk-obs-nodejs"],
-  allowedDevOrigins: ["link.mualliance.cn"]
+  turbopack: { root: process.cwd() }
 };
 
 export default createNextIntlPlugin()(nextConfig);

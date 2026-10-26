@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>org.unionlink.sandbox-reap</string>
+<key>UserName</key><string>unionlink</string><key>SessionCreate</key><true/>
+<key>ProgramArguments</key><array><string>/opt/homebrew/bin/node</string><string>scripts/service.mjs</string><string>reap</string><string>/Users/unionlink/.config/union-link/common.env</string><string>/Users/unionlink/.config/union-link/sandbox.env</string></array>
+<key>WorkingDirectory</key><string>/Users/unionlink/union-link</string>
+<key>EnvironmentVariables</key><dict><key>HOME</key><string>/Users/unionlink</string><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+<key>RunAtLoad</key><true/>
+<key>StartInterval</key><integer>30</integer>
+<key>Umask</key><integer>63</integer><key>ExitTimeOut</key><integer>120</integer>
+<key>StandardOutPath</key><string>/Users/unionlink/Library/Logs/unionlink-sandbox-reap.log</string>
+<key>StandardErrorPath</key><string>/Users/unionlink/Library/Logs/unionlink-sandbox-reap-error.log</string>
+</dict></plist>

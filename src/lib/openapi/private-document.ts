@@ -15,13 +15,13 @@ import { credentialRevocationSchema } from "../credential-revocation-contract";
 import { executionSettingsSchema, executionSettingsInput, executionInstancesSchema } from "../execution-management-contract";
 
 type Operation = { method: "get" | "post" | "patch" | "put" | "delete"; path: string; id: string; tag: string;
-  response: z.ZodTypeAny; body?: z.ZodTypeAny; query?: z.AnyZodObject;
+  response: z.ZodTypeAny; body?: z.ZodTypeAny; query?: z.ZodObject;
   status?: number; permissions?: string[]; superadmin?: boolean; deprecated?: boolean; auth?: "public" | "session" | "either"; multipart?: boolean };
 const clientPath = "/api/v1/clients", adminPath = "/api/admin";
 const ops: Operation[] = [];
-const client = (method: Operation["method"], path: string, id: string, response: z.ZodTypeAny, permissions: string[], body?: z.ZodTypeAny, query?: z.AnyZodObject, status = 200, tag = "Clients") =>
+const client = (method: Operation["method"], path: string, id: string, response: z.ZodTypeAny, permissions: string[], body?: z.ZodTypeAny, query?: z.ZodObject, status = 200, tag = "Clients") =>
   ops.push({ method, path: clientPath + path, id, response, permissions, body, query, status, tag, auth: "either" });
-const admin = (method: Operation["method"], path: string, id: string, response: z.ZodTypeAny, body?: z.ZodTypeAny, permissions: string[] = [], superadmin = false, status = 200, query?: z.AnyZodObject) =>
+const admin = (method: Operation["method"], path: string, id: string, response: z.ZodTypeAny, body?: z.ZodTypeAny, permissions: string[] = [], superadmin = false, status = 200, query?: z.ZodObject) =>
   ops.push({ method, path: adminPath + path, id, response, body, permissions, superadmin, status, query, tag: "Administration", auth: "session" });
 
 for (const [path, id, permission] of [
@@ -87,7 +87,7 @@ for (const [kind, id, schema] of [
   admin("get", `/${kind}`, `get${id}Settings`, schema, undefined, [], true);
   admin("patch", `/${kind}`, `set${id}Settings`, schema, schema, [], true);
 }
-const downloadObject = r.DownloadSettings.innerType();
+const downloadObject = r.DownloadSettings;
 const downloadOutput = z.object(Object.fromEntries(Object.entries(downloadObject.shape).map(([key, value]) => [key, value instanceof z.ZodDefault ? value.removeDefault() : value]))).strict();
 const downloadInput = z.object(Object.fromEntries(Object.entries(downloadObject.shape).map(([key, value]) => [key, value instanceof z.ZodDefault ? value.removeDefault().optional() : value]))).strict();
 admin("get", "/download-settings", "getDownloadSettings", downloadOutput, undefined, [], true);
@@ -106,16 +106,16 @@ export const privateOperations = [...ops, ...unionOperations];
 
 export function adminOpenApi(locale: Locale = "zh-CN") {
   const base = publicOpenApi(locale), t = translator(locale), registry = new OpenAPIRegistry();
-  const error = registry.register("Error", errorSchema);
+  const error = registry.register("Error", errorSchema.clone());
   const cacheHeaders = { "Cache-Control": { schema: { type: "string" as const, example: "no-store" } } };
   const schemas = new Map<z.ZodTypeAny, z.ZodTypeAny>();
   for (const [name, schema] of Object.entries({ Client: s.client, Upload: s.upload, AdminState: s.state, ApiToken: s.token, CreatedApiToken: s.createdToken,
-    Infrastructure: s.infrastructure, ServerProbe: s.probe, MottoMetadata: s.motto, ManagementFullPackage: s.fullPackage, PublishResult: s.published })) schemas.set(schema, registry.register(name, schema));
+    Infrastructure: s.infrastructure, ServerProbe: s.probe, MottoMetadata: s.motto, ManagementFullPackage: s.fullPackage, PublishResult: s.published })) schemas.set(schema, registry.register(name, schema.clone()));
   for (const op of ops) {
     const isWrite = op.method !== "get", isClient = op.auth === "either";
     const params = Object.fromEntries([...op.path.matchAll(/\{([^}]+)\}/g)].map(([, name]) => [name, name === "serverId" ? s.serverId : name === "clientId" ? s.clientId : s.uuid]));
     let body = op.body;
-    if (body instanceof z.ZodObject) body = body.extend(Object.fromEntries(Object.entries(body.shape).filter(([name]) => /^(password|currentPassword|newPassword)$/.test(name)).map(([name, value]) => [name, (value as z.ZodTypeAny).openapi({ format: "password", writeOnly: true })])));
+    if (body instanceof z.ZodObject) body = body.extend(Object.fromEntries(Object.entries(body.shape).filter(([name]) => /^(password|currentPassword|newPassword)$/.test(name)).map(([name, value]) => [name, (value as z.ZodTypeAny).meta({ format: "password", writeOnly: true })])));
     if (op.multipart) body = z.object({ source: z.string().openapi({ format: "binary" }).optional(),
       crop: z.string().openapi({ description: t("api.jsonEncodedCropTextLeftTopWidthAndHeight"), example: '{"left":0,"top":0,"width":1,"height":0.648936170212766}' }),
       expectedIconObjectKey: z.string().openapi({ description: t("api.jsonEncodedCurrentObjectKeyForAFirstUpload"), example: "null" }) }).strict();

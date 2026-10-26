@@ -31,7 +31,9 @@ import { maxUploadSizeMb } from "./upload-size-settings";
 import { UPLOAD_MB, MAX_UPLOAD_SIZE_MB } from "./upload-size-policy";
 
 export const PART_SIZE = 64 * 1024 * 1024;
-const uploadInput = z.object({ clientId: z.string().uuid(), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i),
+// Preserve the published JSON Schema pattern: the generator otherwise appends
+// RegExp's /i flag as literal pattern text. Runtime matching remains insensitive.
+const uploadInput = z.object({ clientId: z.string().uuid(), fileName: z.string().min(1).max(255).regex(/\.(zip|mrpack)$/i).meta({ pattern: "\\.(zip|mrpack)$" }),
   size: z.number().int().positive().max(MAX_UPLOAD_SIZE_MB * UPLOAD_MB), baseReleaseId: z.string().uuid().nullable(), basePublicationRevision: z.number().int().nonnegative(),
   comparisonDraftId: z.string().uuid().nullable().optional(), packageFormatVersion: packageFormatVersionSchema }).strict();
 function parse<T>(schema: z.ZodType<T>, raw: unknown): T {

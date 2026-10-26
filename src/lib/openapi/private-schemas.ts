@@ -92,17 +92,19 @@ export const motto = mottoMetadataSchema;
 export const mottoSaved = ok.extend({ iconObjectKey: nullableText }).strict();
 const text = (max = 200, minimum = 1) => z.string().trim().min(minimum).max(max);
 const nullableInput = (max = 500) => z.union([text(max), z.literal(""), z.null()]);
+// Explicit source patterns keep RegExp flags out of JSON Schema and preserve
+// the existing documentation contract while runtime regexes keep their flags.
 export const organizationCreate = z.object({ displayName: text(), description: text(5000, 0).optional() }).strict();
 export const organizationUpdate = organizationCreate.partial();
 export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),
   displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: date.nullable().optional(), displayEndsAt: date.nullable().optional() }).strict();
 export const serverUpdate = z.object({ displayName: text().optional(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),
-  sortOrder: z.number().int().min(-2147483647).max(2147483647).optional(), themeColor: z.union([z.string().regex(/^#[0-9a-f]{6}$/i), z.literal(""), z.null()]).optional(),
+  sortOrder: z.number().int().min(-2147483647).max(2147483647).optional(), themeColor: z.union([z.string().regex(/^#[0-9a-f]{6}$/i).meta({ pattern: "^#[0-9a-f]{6}$" }), z.literal(""), z.null()]).optional(),
   isListed: z.boolean().optional(), displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: nullableDate.optional(), displayEndsAt: nullableDate.optional() }).strict();
 export const member = z.object({ roles: z.array(role), status: z.nativeEnum(AccountStatus) }).strict();
 export const grant = z.object({ roles: z.array(z.enum(Object.values(Role).filter(role => role !== "ORG_ADMIN" && role !== "PLAYER") as [Role, ...Role[]])) }).strict();
-export const accountCreate = z.object({ displayName: text(), username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i), password: z.string().min(12).max(128), isSuperAdmin: z.boolean().optional() }).strict();
+export const accountCreate = z.object({ displayName: text(), username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i).meta({ pattern: "^[a-z0-9_.-]{3,64}$" }), password: z.string().min(12).max(128), isSuperAdmin: z.boolean().optional() }).strict();
 export const accountUpdate = z.object({ displayName: text().optional(), status: z.nativeEnum(AccountStatus).optional(), isSuperAdmin: z.boolean().optional(), password: z.string().min(12).max(128).optional() }).strict();
-export const login = z.object({ username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i), password: z.string().min(1).max(128) }).strict();
+export const login = z.object({ username: text(64, 3).regex(/^[a-z0-9_.-]{3,64}$/i).meta({ pattern: "^[a-z0-9_.-]{3,64}$" }), password: z.string().min(1).max(128) }).strict();
 export const passwordChange = z.object({ currentPassword: z.string().max(128), newPassword: z.string().min(12).max(128) }).strict();
 export const clientMetadata = clientMetadataSchema;

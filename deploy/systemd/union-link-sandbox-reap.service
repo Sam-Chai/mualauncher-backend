@@ -1,0 +1,16 @@
+[Unit]
+Description=Reap only expired Union Link execution resources
+After=docker.service
+Requires=docker.service
+[Service]
+Type=oneshot
+User=union-link-worker
+Group=union-link-worker
+SupplementaryGroups=docker
+WorkingDirectory=/opt/union-link/app
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/var/lib/union-link/worker-home
+ExecStart=/usr/bin/node scripts/service.mjs reap /etc/union-link/common-worker.env /etc/union-link/sandbox.env
+UMask=0077
+TimeoutStartSec=120
+NoNewPrivileges=true

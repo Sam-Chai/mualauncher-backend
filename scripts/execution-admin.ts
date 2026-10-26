@@ -12,7 +12,7 @@ import { executionInputs } from "../src/lib/execution-archive";
 import type { ExecutionPlan } from "../src/lib/execution-contract";
 
 const run = promisify(execFile);
-config({ path: process.env.SANDBOX_ENV_FILE ?? ".env", quiet: true });
+config({ path: process.env.SANDBOX_ENV_FILE ?? process.env.DOTENV_CONFIG_PATH ?? ".env", quiet: true });
 async function main() {
   const command = process.argv[2] ?? "check";
   if (command === "image") {
@@ -46,7 +46,7 @@ async function main() {
     const jar = process.env.SANDBOX_JAR_BIN || (javac.includes(sep) ? join(dirname(javac), process.platform === "win32" ? "jar.exe" : "jar") : "jar");
     const env = { NODE_ENV: process.env.NODE_ENV, PATH: process.env.PATH, Path: process.env.Path, SystemRoot: process.env.SystemRoot, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
     // Only this checked-in, trusted source is compiled on the host. Installers never use host Java.
-    await run(javac, ["--release", "21", "-d", folder, resolve("tests/fixtures/execution/IsolationProbe.java")], { env, timeout: 30000, windowsHide: true });
+    await run(javac, ["--release", "21", "-d", folder, resolve("deploy/execution/probes/IsolationProbe.java")], { env, timeout: 30000, windowsHide: true });
     const input = join(folder, "input");
     const { mkdir } = await import("node:fs/promises"); await mkdir(input);
     await run(jar, ["--create", "--file", join(input, "probe.jar"), "-C", folder, "IsolationProbe.class"], { env, timeout: 30000, windowsHide: true });

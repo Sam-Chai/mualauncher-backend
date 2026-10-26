@@ -1,0 +1,29 @@
+[Unit]
+Description=Union Link worker
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=union-link-worker
+Group=union-link-worker
+SupplementaryGroups=docker
+WorkingDirectory=/opt/union-link/app
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/var/lib/union-link/worker-home
+ExecStart=/usr/bin/node scripts/service.mjs worker /etc/union-link/common-worker.env /etc/union-link/worker.env /etc/union-link/sandbox.env
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=150
+TimeoutStopSec=120
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/union-link/worker-tmp
+
+[Install]
+WantedBy=multi-user.target

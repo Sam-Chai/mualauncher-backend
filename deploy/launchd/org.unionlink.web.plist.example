@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>org.unionlink.web</string>
+<key>UserName</key><string>unionlinkweb</string><key>SessionCreate</key><true/>
+<key>ProgramArguments</key><array><string>/opt/homebrew/bin/node</string><string>scripts/service.mjs</string><string>web</string><string>/Users/unionlinkweb/.config/union-link/common.env</string><string>/Users/unionlinkweb/.config/union-link/web.env</string></array>
+<key>WorkingDirectory</key><string>/Users/unionlinkweb/union-link</string>
+<key>EnvironmentVariables</key><dict><key>HOME</key><string>/Users/unionlinkweb</string><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+<key>RunAtLoad</key><true/>
+<key>KeepAlive</key><true/><key>ThrottleInterval</key><integer>10</integer>
+<key>Umask</key><integer>63</integer><key>ExitTimeOut</key><integer>120</integer>
+<key>StandardOutPath</key><string>/Users/unionlinkweb/Library/Logs/unionlink-web.log</string>
+<key>StandardErrorPath</key><string>/Users/unionlinkweb/Library/Logs/unionlink-web-error.log</string>
+</dict></plist>

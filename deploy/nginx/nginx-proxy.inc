@@ -1,0 +1,11 @@
+proxy_pass http://127.0.0.1:3001;
+proxy_http_version 1.1;
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For $remote_addr;
+proxy_set_header X-UnionLink-Client-IP $remote_addr;
+proxy_set_header Connection "";
+proxy_read_timeout 60s;
+proxy_buffering off;
+proxy_cache off;

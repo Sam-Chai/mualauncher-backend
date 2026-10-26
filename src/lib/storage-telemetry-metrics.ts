@@ -2,8 +2,8 @@ import { z } from "zod";
 
 export type Metric = { name: string; labels: Record<string, string>; value: number };
 export const counterSnapshotSchema = z.object({
-  at: z.string().datetime(), generations: z.record(z.string()),
-  values: z.record(z.object({ bucket: z.string(), direction: z.enum(["sent", "received"]), value: z.string().regex(/^\d+$/) })),
+  at: z.string().datetime(), generations: z.record(z.string(), z.string()),
+  values: z.record(z.string(), z.object({ bucket: z.string(), direction: z.enum(["sent", "received"]), value: z.string().regex(/^\d+$/) })),
 });
 export type CounterSnapshot = z.infer<typeof counterSnapshotSchema>;
 

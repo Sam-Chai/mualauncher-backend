@@ -1,17 +1,20 @@
 import "dotenv/config";
-import { randomBytes } from "node:crypto";
-import { readFile, writeFile, copyFile } from "node:fs/promises";
 import pg from "pg";
 
 const roleNames = ["mua_owner", "mua_migrator", "mua_web", "mua_auth", "mua_public", "mua_worker", "mua_lookup"];
 async function main() {
+  if (process.argv.includes("--write-env")) throw new Error("Checkout environment writes are disabled; use external configuration");
+  for (const key of ["DATABASE_URL", "DATABASE_AUTH_URL", "DATABASE_PUBLIC_URL", "DATABASE_WORKER_URL", "DATABASE_MIGRATION_URL"]) {
+    const value = process.env[key];
+    const expected = { DATABASE_URL: "mua_web", DATABASE_AUTH_URL: "mua_auth", DATABASE_PUBLIC_URL: "mua_public", DATABASE_WORKER_URL: "mua_worker", DATABASE_MIGRATION_URL: "mua_migrator" }[key];
+    if (!value || decodeURIComponent(new URL(value).username) !== expected || !new URL(value).password || value.includes("CHANGE_ME")) throw new Error(`${key} must be explicitly configured before provisioning`);
+  }
   const adminUrl = process.env.DATABASE_ADMIN_URL;
   if (!adminUrl) throw new Error("DATABASE_ADMIN_URL is required; no implicit privileged fallback");
-  const source = new URL(adminUrl);
   const schema = process.env.DATABASE_SCHEMA ?? "public";
   if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error("Invalid database schema");
   const pool = new pg.Pool({ connectionString: adminUrl });
-  const db = await pool.connect(); const settings = new Map<string, string>();
+  const db = await pool.connect();
   const keys = { mua_web: "DATABASE_URL", mua_auth: "DATABASE_AUTH_URL", mua_public: "DATABASE_PUBLIC_URL", mua_worker: "DATABASE_WORKER_URL", mua_migrator: "DATABASE_MIGRATION_URL" };
   try {
     await db.query("BEGIN");
@@ -20,12 +23,7 @@ async function main() {
       let password: string | undefined;
       if (key) {
         const existingUrl = process.env[key];
-        const existing = existingUrl ? new URL(existingUrl) : null;
-        password = existing?.username === name ? decodeURIComponent(existing.password) : randomBytes(32).toString("hex");
-        const url = new URL(source); url.username = name; url.password = password;
-        if (name === "mua_migrator") url.searchParams.set("options", "-c role=mua_owner");
-        else url.searchParams.delete("options");
-        settings.set(key, url.toString());
+        password = decodeURIComponent(new URL(existingUrl!).password);
       }
       const found = await db.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [name]);
       const literal = password ? " PASSWORD '" + password.replaceAll("'", "''") + "'" : "";
@@ -49,12 +47,6 @@ async function main() {
       const functions = await db.query("SELECT p.oid::regprocedure::text AS name FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND pg_get_userbyid(p.proowner)<>'mua_lookup'", [schema]);
       for (const row of functions.rows) await db.query(`ALTER FUNCTION ${row.name} OWNER TO mua_owner`);
       await db.query("COMMIT");
-    }
-    if (process.argv.includes("--write-env")) {
-      const path = ".env"; let content = await readFile(path, "utf8");
-      const backup = `.local/env-before-rls-${Date.now()}.backup`; await copyFile(path, backup);
-      for (const [key, value] of settings) { const line = `${key}=${JSON.stringify(value)}`; const regex = new RegExp(`^${key}=.*$`, "m"); content = regex.test(content) ? content.replace(regex, line) : content.trimEnd() + "\n" + line + "\n"; }
-      await writeFile(path, content); console.log("Database connection settings saved; backup:", backup);
     }
     console.log("Database roles provisioned. Passwords and connection strings are not printed.");
   } catch (error) { await db.query("ROLLBACK"); throw error; }

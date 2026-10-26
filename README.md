@@ -1,108 +1,166 @@
-# Union Link
+# Union Link 0.1.0
 
-对象存储现支持 `.env` 的 `OSS_PROVIDER=minio|aws|s3|ali|tencent|huawei`，三家云服务使用原生 SDK；配置、私有桶／CORS 和部署自检见 [对象存储配置](docs/object-storage.md)。现有 MinIO 的 `S3_*` 配置继续可用。
+生产发布源码。应用版本 **0.1.0**；内嵌 OpenAPI 规范 **5.2.0**（完整 93 个操作，公开 11 个操作），两者独立版本化。
 
-后台左侧 `API` 打开内嵌 Scalar，OpenAPI 3.1 中英文完整覆盖 66 个操作，可切换 5 个 Launcher 公开接口。[接入与 CI 校验](docs/openapi.md)、[客户端完整流程](docs/api-workflows.md)、[兼容性记录](docs/openapi-changelog.md)；`/openapi.json` 只公开 Launcher，完整 JSON 逐请求检查后台 Cookie。
+本分支保留网站、独立 Worker、全部数据库迁移、构建配置和生产部署/运维文件，不包含 docs、测试套件、本地启动脚本、账号、密钥或构建产物。公开 API 文档在 `/openapi.json`；后台 API 页面继承 Cookie 权限，规范由应用代码动态生成。
 
-Union Link 是 MUA 高校联盟启动器后端，使用 Next.js 16、Prisma 7 与 PostgreSQL。后台采用 shadcn/ui dashboard-01、Tailwind CSS、Lucide、TanStack Table、React Hook Form + Zod；图表仅使用 Tremor Raw。
+## 硬性要求
 
-已实现白名单登录、组织／单服 RBAC、PostgreSQL RLS、组织和服务器管理、成员授权、归档、审计，以及 .minecraft ZIP／Modrinth mrpack／PCL 封装上传、MinIO、Worker、SHA-256 CAS、版本差异统计、审核和 Ed25519 签名发布。Modrinth 远程下载、optional 全量打包与超管来源／代理设置见 [导入说明](docs/modrinth-import.md)。Launcher 增量安装／optional 选择尚未接入。RLS 角色、连接、部署与恢复见[数据库行级保护](docs/postgresql-rls.md)。
+| 项目 | Linux | macOS |
+| --- | --- | --- |
+| 系统 | 推荐 Ubuntu 24.04，原生 x86_64/aarch64，内核至少 5.6 | macOS 13+，原生 Intel/Apple Silicon，禁止 Rosetta |
+| 执行环境 | **Docker Engine + gVisor/runsc** | **专用 Colima Linux VM + Docker + gVisor/runsc** |
+| Node.js | 已安装安全更新的 Node.js 24.x | 同左，模板需填写真实绝对路径 |
+| 数据 | PostgreSQL 16+，三类私有对象存储桶，Ed25519 签名密钥 | 同左，可使用远程服务 |
+| 托管 | systemd + Nginx HTTPS | launchd + Nginx HTTPS |
 
-环境下载默认优先 BMCLAPI／中科大／南大和清华 Adoptium，失败回退官方；默认集成 JRE。超管在 Settings 管理下载源、JRE／JDK 与镜像代理开关（默认关闭）；官方环境和 mrpack 使用总代理设置，MinIO 不走代理。镜像覆盖范围、缓存兼容与验收记录见[环境下载源](docs/environment-download-sources.md)。
+Web/Worker 运行于宿主 Node.js；不可信 Java 处理器必须通过 runsc 执行。本发布分支禁用 BARE，也不回退宿主 Java/runc。既有 BARE 设置须在可用 Worker 上报后由超管显式改为 Docker；历史 BARE 任务须取消并重建，不静默更换模式、缓存或签名。
 
-Forge／NeoForge 已接入官方客户端安装处理器、运行环境缓存与 muapack 组包，支持范围见 [Forge 环境](docs/forge-environments.md)。Worker 宿主需要 Java，推荐配置 FORGE_PROCESSOR_JAVA；目标客户端仍默认 JRE。可选 DOWNLOAD_DNS_OVER_HTTPS 默认关闭，本机因确认 DNS 异常而启用；加密 DNS 查询与镜像文件的代理选择分别遵循既有开关。
+单槽 Worker 建议至少 4 核/12 GB 宿主内存，磁盘按实际包规模规划。默认每任务 6 GB 内存、2 CPU、2 GB 工作区、256 MB tmp、256 PID。macOS 模板给 VM 4 核/10 GB/60 GB，宿主还须留出网站和系统资源。
 
-[产品需求](docs/mua-backend-requirements.md)、[数据库模型](docs/minimal-data-model.md)、[权限矩阵](docs/permission-matrix.md)、[实施进度](docs/implementation-status.md)、[管理界面](docs/admin-ui.md)。上传流程与标准 API 见[客户端上传文档](docs/client-upload-api.md)。
+Docker 控制权等同于高权限能力，只给 Worker/回收器；不要给 Web 用户 Docker 访问权，不开放未认证 TCP daemon。Web/Worker 使用不同宿主用户；模板中分别为 `union-link-web`、`union-link-worker`，macOS 分别为 `unionlinkweb`、`unionlink`。
 
-[muapack v1 协议](docs/muapack-v1.md)已提供整包／更新包模型、六平台环境引用、差异生成、独立签名和只读 ZIP 校验。运行 `npm run test:muapack` 验证协议，或 `npm run muapack:validate -- client.muapack trusted-public-key.pem` 校验实际文件。Worker 环境下载／缓存、六平台后台组包、发布门槛和表格进度已接入，见[后台组包](docs/muapack-worker.md)。Launcher 安装尚未接入。默认选择除 Linux aarch64 外的五个平台，Linux ARM 选项灰色禁用并显示提示；缺少官方 Java／原生库的平台会明确失败，需要调整平台后重新审核。
+## 安装与外部配置
 
-[muapack v2 协议基线](docs/muapack-v2.md)已冻结，并提供带签名的[完整／更新离线样例](docs/examples/muapack-v2/README.md)。已接入上传选择、共享识别、本地 CAS、完整组包及同一套审核／签名／发布；远程模组与环境只保存声明，由 Launcher 下载。单一跨平台 full 包经过 ZIP／内容／签名校验后才可发布，管理下载与显式能力协商的公开下载已接入。v2 自动增量组包与基准匹配分发已接入，Launcher 安装尚未完成；v1 继续完整运行。后续顺序见[v2 设计记录](docs/muapack-v2-design.md)。
+Linux 代码目录 `/opt/union-link/app`，外部配置 `/etc/union-link`，数据 `/var/lib/union-link`。macOS Worker 代码目录 `/Users/unionlink/union-link`，配置 `/Users/unionlink/.config/union-link`；Web 用另一个账号及其独立代码副本/配置目录。下面命令用 Linux 路径示例，macOS 必须替换为实际绝对路径。环境文件中 `~` 和 `$HOME` 不会展开。
 
-## 启动本地环境
+在目标系统检出本分支后安装依赖：
 
-本机使用 Docker 容器 mualauncher-psql（127.0.0.1:15432，映射容器 5432）和 mualauncher-minio（127.0.0.1:9000）。连接、存储凭据和签名私钥路径保存在不提交 Git 的 .env 中；新环境从 .env.example 复制并填写，以实际容器映射为准。
+```sh
+DATABASE_MIGRATION_URL='postgresql://build_only:build_only@127.0.0.1:1/build_only' npm ci --include=dev
+```
 
-~~~powershell
-npm ci
-# 首次配置：临时提供 DATABASE_ADMIN_URL；已有数据库追加 --adopt。
-npm run db:provision -- --write-env
-npm run db:deploy
-npm run db:check
-npm run auth:bootstrap
-npm run storage:init
-$env:APP_ORIGIN = 'http://localhost:3001'
-npm run dev -- -p 3001 -H 127.0.0.1
-~~~
+Prisma CLI、tsx、TypeScript 为构建/迁移/Worker 所需，不能 omit dev。不要跨系统复制 node_modules、.next 或 Prisma 生成物。构建也需要 Prisma 配置中的 DATABASE_MIGRATION_URL 字段；准备外部**构建专用**文件，使用上述不能连接真实数据库的占位 URL，不向构建过程提供生产管理员密码。
 
-另开终端启动独立 Worker：
+复制 `deploy/*.env.example` 到代码目录外，改名去掉 `.example` 并编辑。全部 `CHANGE_ME` 必须替换。外部文件不可为符号链接，权限 0600/0640，父目录不可让其他用户写入，组中只能包含获准读取者。
 
-~~~powershell
-npm run worker
-~~~
+| 文件 | 使用者与内容 |
+| --- | --- |
+| common.env | 每个服务各有一份；生产模式、公开 HTTPS origin、私有存储、密钥/临时绝对路径，不含 DB URL |
+| web.env | 仅 mua_web、mua_auth、mua_public 三个受限连接及可信代理头 |
+| worker.env | 仅 mua_worker 连接 |
+| sandbox.env | Worker/回收器专用，固定 Docker context、镜像摘要、资源限制 |
+| deploy.env | 一次性 mua_migrator 连接；初始化时临时加入数据库管理员连接、bootstrap 密码 |
 
-打开 http://localhost:3001/admin/clients。停止 Worker 不会丢失已经完成上传的任务；重新启动后继续处理。系统页面显示实际 Worker 心跳、存储和签名公钥状态。
+Web 不可读取 worker/sandbox/deploy 配置。Linux 用 root:union-link-web 与 root:union-link-worker 的分别 0640 文件；从 common.env 制作 common-web.env/common-worker.env，TMPDIR 分别为 /var/lib/union-link/web-tmp 和 /var/lib/union-link/worker-tmp，与 systemd 模板一致。初始化命令用的 common.env 可以保留为管理员专用 0600。macOS 同理分开目录与用户。创建现有 TMPDIR 并授予对应服务写权限，私钥目录由部署管理员控制、服务只读，可用单独签名读取组向两个服务授权。
 
-已配置好 `.env`、依赖及本地服务后，也可在项目根目录运行以下两个脚本。每个脚本都会打开独立的 PowerShell 窗口，保留运行输出；按 Ctrl+C 停止对应服务。
+皮肤站网页登录须在 Union 上游登记 `${APP_ORIGIN}/api/auth/union/callback`，在 web.env 填入 UNION_OAUTH_CLIENT_ID/SECRET，可选 CLIENT_AUTH=post/basic 与 SCOPE（同样以 UNION_OAUTH_ 为前缀）。未登记时保留本地登录。Launcher 直接换票的来源默认不启用，需超管在设置中核准后单独完成真实上游验收；不通过 UUID/昵称合并身份。
 
-~~~powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-frontend.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-backend.ps1
-~~~
+`npm run with-env -- /absolute/common.env /absolute/role.env -- <script>` 清除继承的数据库连接，再依次加载指定文件；后面的同名值优先。禁止 checkout `.env*`。运行连接必须为 NO BYPASSRLS 的独立角色，不得替换成 postgres/mua_owner/mua_migrator。迁移使用 mua_migrator，通过 `options=-c role=mua_owner` 切换所有者；URL 中密码特殊字符必须编码。
 
-`start-frontend.ps1` 运行 Next.js 开发服务，同时提供网页和 HTTP API，默认地址为 http://localhost:3001/admin（可用 `-Port` 指定端口）；`start-backend.ps1` 运行独立 Worker。脚本按自身位置定位项目，日志分别追加到 `.local/next-visible.log` 和 `.local/worker-visible.log`。PostgreSQL、MinIO 等依赖须提前启动。
+## 数据库、存储和管理员
 
-APP_ORIGIN 必须匹配页面的协议、主机和端口，末尾不加斜杠。本地允许同协议、同端口的 localhost、127.0.0.1 和 IPv6 回环别名；其他来源精确匹配，跨站请求拒绝。HTTPS origin 自动启用 Secure Cookie。
+数据库管理员先创建独立空数据库 union_link，填写所有专用账号的确定密码。db:provision 会设置/重置这些固定角色的密码，只能用于此应用独立数据库和角色。所有迁移均须保留，禁止 db push 或重新生成历史迁移。
 
-首次 auth:bootstrap 创建超管 mua-admin，随机密码写入被 Git 忽略的 .local/initial-admin-*.txt。已有启用超管时不会重置账号。登录后在“系统 → Settings → 账号安全”修改密码并删除初始凭据文件。可通过进程环境 BOOTSTRAP_USERNAME、BOOTSTRAP_PASSWORD 提供初始凭据，不能把密码写进命令参数或提交内容。面板没有公开注册，普通账号由超管在“联盟管理 → 成员 → 白名单账号”创建。
+```sh
+# 仅首次 provision 临时加载 DATABASE_ADMIN_URL。
+npm run with-env -- /etc/union-link/common.env /etc/union-link/web.env /etc/union-link/worker.env /etc/union-link/deploy.env -- db:provision
+# 立即从 deploy.env 移除 DATABASE_ADMIN_URL。
+npm run with-env -- /etc/union-link/common.env /etc/union-link/deploy.env -- db:deploy
+npm run with-env -- /etc/union-link/common.env -- storage:init
+npm run with-env -- /etc/union-link/common.env -- storage:verify
+# 临时加入 BOOTSTRAP_PASSWORD，可选 BOOTSTRAP_USERNAME；不会输出明文密码。
+npm run with-env -- /etc/union-link/common.env /etc/union-link/deploy.env -- auth:bootstrap
+# 删除 bootstrap 密码并收回迁移文件的运行用户读取权限。
+npm run with-env -- /etc/union-link/common.env /etc/union-link/web.env /etc/union-link/worker.env -- db:check
+```
 
-服务器登记使用既有 MUA ID，不自动分配新 ID。组织可上传多个独立客户端，每服同时只绑定一个客户端；同组织同名使用更新，绑定替换需确认，解绑保留版本历史。上传与更新都进入审核；当前版本在批准并发布切换前继续使用。组织管理员可以管理本组织的客户端，审核、发布、切换分别授予权限。[服务器箴言图片](docs/server-motto-images.md)已支持真实上传、61:23 网格裁剪、原图重裁剪和受权限保护的后台预览；组织头像和玩家公开图片分发尚未接入。
+初始化管理员只在没有活动超管时创建。发布分支要求显式外部密码，不向 checkout 保存初始凭据。db:provision 禁用 `--write-env`；`--adopt` 会变更数据库对象所有权，只在明确接管旧库时使用。
 
-## 本机生产预览
+storage:init 只在缺失时创建桶与 Ed25519 私钥，不覆盖已有密钥。初始化后将密钥改为部署管理员所有、服务组只读（如 0640）。恢复必须使用原密钥；记录公钥指纹，在 Launcher 建立公钥信任并保管离线备份。
 
-当前预览使用 .next/mua-v2-delta 独立构建目录，监听 http://localhost:3001，仅绑定 127.0.0.1。客户端管理提供上传前 v1／v2 选择，以及已生成完整 muapack 的版本／平台选择和下载。重新构建前停止此预览实例，再运行：
+存储选项 `OSS_PROVIDER=minio/aws/s3/ali/tencent/huawei`，设置 REGION、ACCESS_KEY_ID、SECRET_ACCESS_KEY（统一 OSS_ 前缀）和 PACKAGES/CAS/ENVIRONMENTS 三个独立私有桶。MinIO/S3 必填 HTTPS OSS_ENDPOINT，默认 path style；原生云使用区域配置，默认 virtual host style，不填兼容 S3 端点。腾讯桶名包含 APPID；临时凭据用 OSS_SESSION_TOKEN。阿里/华为自定义域名可设 OSS_CUSTOM_DOMAIN=true 与含 `{bucket}` 的 endpoint。原生云桶禁用版本控制，正式发布须通过不可变写入能力验证。
 
-~~~powershell
-$env:APP_ORIGIN = 'http://localhost:3001'
-$env:NEXT_DIST_DIR = '.next/mua-v2-delta'
-npm run build
-npm run start -- -p 3001 -H 127.0.0.1
-~~~
+真实网站 origin 的 CORS 应支持 GET/HEAD/PUT、Content-Type、Content-Length、Range、If-Match 和供应商签名所需头，暴露 ETag/Content-Length/Content-Range。storage:verify 会写入/复制/删除临时对象；成功不代表浏览器 CORS、真实云和 Launcher 下载已验收。
 
-构建与启动必须使用相同 NEXT_DIST_DIR。Worker 仍须单独运行。本机进程没有注册为 Windows 自动启动服务。生产需配置 HTTPS、独立最小权限数据库／存储账号和持久受保护的签名密钥。
+## Linux：安装 Docker 与 gVisor
 
-## 验证
+安装 Docker Engine、curl、python3、bzip2、CA 证书，确认 cgroup 可用。按 [gVisor 官方安装说明](https://gvisor.dev/docs/user_guide/install/) 选择经审核的固定 YYYYMMDD.N 版本和**当前架构完整 bundle** 的 SHA-512；不要只复制单个 runsc 二进制。
 
-~~~powershell
-npm run db:validate
-npm run db:check
-npm run test:rls
-npm run typecheck
-npm run lint
-npm test
-~~~
+```sh
+# 预先 export RUNSC_VERSION=... RUNSC_SHA512=...，固定值，不用 latest。
+sudo env RUNSC_VERSION="$RUNSC_VERSION" RUNSC_SHA512="$RUNSC_SHA512" sh deploy/execution/install-runsc.sh
+# 安排维护窗口，重启 Docker 可能影响已有容器。
+sudo systemctl restart docker
+docker --context default info
+```
 
-测试使用真实 PostgreSQL 的随机临时 schema 和专用随机 MinIO bucket，应用本仓库迁移，验证 RBAC、RLS、不可变版本、并发、ZIP 安全、分片、CAS、签名及发布，最后只清理测试资源，不修改 public 业务记录。DATABASE_MIGRATION_URL 用于创建和清理测试 schema；四种受限运行连接用于 RLS 与 HTTP 验证。
+脚本校验摘要、安装版本目录、备份并合并 daemon.json，不自动重启 daemon。只给 union-link-worker 用户 Docker 访问权；保持 sandbox.env 中 context 为 default 和正确 Docker CLI 绝对路径。其他 context 须先核实 daemon 归属。参见 [gVisor Docker 指南](https://gvisor.dev/docs/user_guide/quick_start/docker/)。
 
-完整 HTTP／自动化脚本测试需要先完成独立生产构建：
+## macOS：专用 Linux VM
 
-~~~powershell
-$env:MUA_HTTP_TEST_DIST = '.next/mua-v2-delta'
-npm test
-~~~
+原生终端安装 Node 24、Docker CLI、Colima、python3、Nginx。Apple Silicon 的 Homebrew 路径通常是 /opt/homebrew/bin，Intel 通常 /usr/local/bin，以实际路径为准。Docker Desktop 默认 runc 与直接在 Darwin 执行 runsc 均不满足要求。
 
-该测试在临时数据库 schema 上启动隔离的 Next 实例，以标准 API Token 运行 client:upload 脚本，检查提交、审核、发布、签名和公开 CAS 下载。未设置 MUA_HTTP_TEST_DIST 时跳过这一项。
+以 Worker 专用普通账号设置当前架构 RUNSC_VERSION/RUNSC_SHA512 后：
 
-检查已经运行的本机实例：
+```sh
+sh deploy/execution/configure-macos.sh
+colima start --profile union-link --foreground
+# 另一终端，同一用户：
+docker --context colima-union-link info
+```
 
-~~~powershell
-$env:SMOKE_ORIGIN = 'http://localhost:3001'
-npm run check:http
-~~~
+脚本只创建新的 union-link profile，已有则拒绝覆盖。原生 VZ，关闭 Rosetta/binfmt/agent 转发，只共享只读 provision 目录，不共享可写 home。VM 首次启动需联网安装基础工具、下载固定 gVisor；任务容器仍断网。sandbox.env 必须设 SANDBOX_DOCKER_CONTEXT=colima-union-link 和实际 Docker CLI 路径；common.env 中密钥/TMPDIR 改成 macOS 路径。
 
-HTTP 检查默认读取初始超管凭据文件；改密后通过当前进程 SMOKE_USERNAME、SMOKE_PASSWORD 提供凭据。检查会产生真实登录审计，结束时撤销测试会话。
+初次检查后 Ctrl+C 正常停止前台 Colima，再安装 launchd 托管，避免两个 supervisor。真实机器必须验证 FileVault 解锁、无登录会话与重启后 VM 冷启动行为；plist 模板不代表无人值守启动已验收。
 
-npm ci、npm run dev 与 npm run build 自动生成 Prisma 客户端。数据库工具包括 db:generate、db:studio 和 db:migrate -- --name your_change。部署已有迁移使用 db:deploy；迁移包含 Prisma 无法表达的检查、索引和触发器，不能用 reset 丢弃业务数据。
+## 执行镜像和隔离验收（两个系统必做）
 
-数据库入口为 src/lib/prisma.ts；认证／RBAC 为 auth.ts、api-auth.ts、rbac.ts；客户端业务为 client-service.ts、client-worker.ts、pack-parser.ts、storage.ts 和 signing.ts。Client Component 不得导入服务端数据库或认证实现。
+审核原生架构 Node 24 Debian/glibc 镜像与 Temurin 21 JRE 镜像，以 repository@sha256:... 填入 SANDBOX_NODE_BASE/SANDBOX_JAVA_BASE。不要用浮动 tag、Alpine Node 或跨架构模拟。
 
-构建使用系统字体，不依赖 Google Fonts。npm 默认缓存不可写时可使用 npm ci --cache "$env:TEMP/mualauncher-npm-cache"。
+```sh
+npm run with-env -- /etc/union-link/common.env /etc/union-link/sandbox.env -- sandbox:image
+# 将输出的 SANDBOX_JAVA_IMAGE=sha256:... 写回 sandbox.env，固定本 daemon 的身份。
+npm run with-env -- /etc/union-link/common.env /etc/union-link/sandbox.env -- sandbox:check
+npm run with-env -- /etc/union-link/common.env /etc/union-link/sandbox.env -- sandbox:verify
+```
+
+sandbox:check 实际启动隔离容器，检查 Linux daemon、runsc、镜像、非 root、零 capabilities、断网、只读根和资源限制，缺失即失败。sandbox:verify 额外需要宿主 JDK 21+ 的 javac/jar，**仅编译受控运维探针** deploy/execution/probes/IsolationProbe.java，验证目录边界、后代清理、磁盘/PID/内存、符号链接、输入篡改、超时、日志、取消及资源回收。宿主 JDK 不执行上传的处理器，也不作为降级路径。探针属于部署验收工具，不是携带本地业务测试套件。
+
+## 构建和托管
+
+```sh
+# build.env 为外部非特权构建配置，含 Prisma 所需的占位迁移 URL。
+npm run with-env -- /absolute/build.env -- build
+npm run with-env -- /etc/union-link/common.env /etc/union-link/web.env -- deployment:check --role web
+npm run with-env -- /etc/union-link/common.env /etc/union-link/worker.env /etc/union-link/sandbox.env -- deployment:check --role worker
+```
+
+预检验证生产配置、密钥、数据库身份/FORCE RLS、存储桶、Web 构建及 Worker 真实隔离能力。服务每次启动先预检；运行中隔离故障仍继续报告 Worker 心跳，不自动降级。用服务入口启动，不绕过预检直接调用 Worker。
+
+Linux：创建两个无交互账号和各自私有 tmp、只读源码及配置目录；仅将 Worker 加入 docker 组。检查 deploy/systemd 中 Node 的真实绝对路径、HOME（使用命名 Docker context 时设为 Worker 自己的 home）和各用户可读配置。Web 只能写其 .next 与自己的 tmp；Worker 有自己的 tmp，密钥只读。修改 ReadWritePaths 与对应 common 配置保持一致。
+
+Worker/回收器模板的 HOME 为 /var/lib/union-link/worker-home；创建该目录并由 Worker 所有，将所需 Docker context 配置放在那里。systemd 的 ProtectHome 禁止访问 /home，因此不要把 Docker context 或密钥留在被屏蔽的 home 中。
+
+```sh
+sudo install -m 0644 deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now union-link-web.service union-link-worker.service union-link-sandbox-reap.timer
+sudo systemctl status union-link-web union-link-worker union-link-sandbox-reap.timer
+sudo journalctl -u union-link-worker -n 100 --no-pager
+```
+
+macOS：编辑 deploy/launchd/*.plist.example 的账号、HOME、Node/Colima、代码、配置及日志路径。创建日志目录，复制为 /Library/LaunchDaemons/org.unionlink.*.plist，root:wheel、0644，先 plutil -lint。plist 不含秘密；运行账号必须为普通用户。Web 账号使用单独源码副本并在同架构系统重新 npm ci/build，不得访问 Worker 用户 home、Docker context 或凭据。
+
+```sh
+sudo launchctl bootstrap system /Library/LaunchDaemons/org.unionlink.colima.plist
+# VM 与 sandbox:check 成功后，再启动其余三个服务。
+sudo launchctl bootstrap system /Library/LaunchDaemons/org.unionlink.web.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/org.unionlink.worker.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/org.unionlink.sandbox-reap.plist
+sudo launchctl print system/org.unionlink.worker
+```
+
+更新服务先 launchctl bootout 对应 plist，再 bootstrap。launchd 不保证 VM/Worker 顺序，Worker 预检失败后重启并等待实际可用的执行环境。回收器每 30 秒只清理本应用 namespace 的过期受管资源，不用无范围 docker prune 代替。
+
+## HTTPS 与对外验收
+
+使用实际域名和有效证书。将 deploy/nginx/nginx-proxy.inc 安装到 /etc/union-link/nginx-proxy.inc，在 Nginx http{} 中 include union-link.conf 安装副本；修改 server_name、固定 HTTPS 重定向域名、证书和 include 路径。macOS 可改为专用配置目录。先 nginx -t 再重载服务。
+
+Next 仅监听 127.0.0.1:3001，公网不开放 DB/Docker/Node。模板覆盖单 IP X-UnionLink-Client-IP，与 web.env 对应；不信任任意 X-Forwarded-For。若前方有 CDN，须按官方地址段配置 Nginx real_ip 并阻断绕过入口，验证客户端真实 IP。入口按 IP 限流，应用配额制度保持原有行为。
+
+正式公开前须在目标机完成：登录/权限/停用/凭据撤销、真实 Union OAuth/skin-site 换票、上传→导入→审核→隔离组包→签名→发布→Launcher 下载/验签/安装、v1/v2 更新包、真实云 CORS 与大小签名、Range/If-Match 续传及下载刷新、VM/Web/Worker 冷启动/恢复/资源回收、备份恢复和负载/日志/告警验收。
+
+记录发布 commit、Node/Docker/runsc 版本、VM 架构、镜像摘要和公钥指纹。本地构建/静态检查不替代 Linux/macOS、真实云与 Launcher 验收；源分支保留回归测试。
+
+升级须在新版本目录安装、构建、预检，备份后 db:deploy，停止接收新任务并安全停止 Worker，再切换服务路径。保留旧代码和原密钥；数据库迁移可能不可逆，不能假定只切代码即可回滚。禁止重签已有发布或批量删除共享 CAS。第三方组件许可见 deploy/licenses，其余许可证随 npm 包提供。

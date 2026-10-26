@@ -1,0 +1,26 @@
+[Unit]
+Description=Union Link web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=union-link-web
+Group=union-link-web
+WorkingDirectory=/opt/union-link/app
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node scripts/service.mjs web /etc/union-link/common-web.env /etc/union-link/web.env
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=150
+TimeoutStopSec=120
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/union-link/app/.next /var/lib/union-link/web-tmp
+
+[Install]
+WantedBy=multi-user.target

@@ -22,7 +22,7 @@ import { managedExecution, type ExecutionContext } from "./execution-management"
 
 const VERSION = "mirrors-jre-2";
 const resolverVersion = (request: EnvironmentRequest) => request.loader && ["forge", "neoforge"].includes(request.loader.type) ? `forge-execution-2-${request.execution?.mode ?? "DOCKER_GVISOR"}-${request.execution?.profile ?? executionProfileIdentity()}` : VERSION;
-const ruleSchema = z.object({ action: z.enum(["allow", "disallow"]), os: z.object({ name: z.string().optional(), arch: z.string().optional(), version: z.string().optional() }).optional(), features: z.record(z.boolean()).optional() });
+const ruleSchema = z.object({ action: z.enum(["allow", "disallow"]), os: z.object({ name: z.string().optional(), arch: z.string().optional(), version: z.string().optional() }).optional(), features: z.record(z.string(), z.boolean()).optional() });
 type Rule = z.infer<typeof ruleSchema>;
 export function environmentRules(rules: Rule[] | undefined, platform: MuaPlatform) {
   if (!rules) return true; let allowed = false;
@@ -39,7 +39,7 @@ export function environmentRules(rules: Rule[] | undefined, platform: MuaPlatfor
 }
 const downloadSchema = z.object({ url: z.string().url(), sha1: z.string().regex(/^[a-f0-9]{40}$/), size: z.number().int().nonnegative(), path: z.string().optional() });
 const librarySchema = z.object({ name: z.string(), url: z.string().optional(), rules: z.array(ruleSchema).optional(),
-  downloads: z.object({ artifact: downloadSchema.optional(), classifiers: z.record(downloadSchema).optional() }).optional(), natives: z.record(z.string()).optional() });
+  downloads: z.object({ artifact: downloadSchema.optional(), classifiers: z.record(z.string(), downloadSchema).optional() }).optional(), natives: z.record(z.string(), z.string()).optional() });
 const argumentSchema = z.union([z.string(), z.object({ rules: z.array(ruleSchema), value: z.union([z.string(), z.array(z.string())]) })]);
 const profileSchema = z.object({ id: z.string(), mainClass: z.string(), libraries: z.array(librarySchema),
   javaVersion: z.object({ majorVersion: z.number().int() }).optional(), minecraftArguments: z.string().optional(),
@@ -187,7 +187,7 @@ async function resolveOfficialEnvironment(request: EnvironmentRequest, directory
   await progress(diagnosticText("diagnostics.environmentResolver.downloadingAndCachingMinecraftAssets"));
   const assets = await remote(`assets/indexes/${game.assetIndex.id}.json`, game.assetIndex.url, { algorithm: "sha1", hash: game.assetIndex.sha1, size: game.assetIndex.size }); gameFiles.push(assets.file);
   const assetsBytes = await readObject(casKey(assets.file.sha256), environmentsBucket(), 16 * 1024 ** 2);
-  const assetIndex = z.object({ objects: z.record(z.object({ hash: z.string().regex(/^[a-f0-9]{40}$/), size: z.number().int().nonnegative().max(2 * 1024 ** 3) })), virtual: z.boolean().optional(), map_to_resources: z.boolean().optional() }).parse(JSON.parse(assetsBytes.toString("utf8")));
+  const assetIndex = z.object({ objects: z.record(z.string(), z.object({ hash: z.string().regex(/^[a-f0-9]{40}$/), size: z.number().int().nonnegative().max(2 * 1024 ** 3) })), virtual: z.boolean().optional(), map_to_resources: z.boolean().optional() }).parse(JSON.parse(assetsBytes.toString("utf8")));
   invariant(Object.keys(assetIndex.objects).length <= 60000, 422, diagnosticText("diagnostics.environmentResolver.tooManyGameAssets"));
   let done = 0; const assetsByHash = [...new Map(Object.values(assetIndex.objects).map(item => [item.hash, item])).values()];
   await mapConcurrent(assetsByHash, async asset => {

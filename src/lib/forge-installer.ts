@@ -19,9 +19,9 @@ import { executionPlanDigest, executionPlanSchema, type ExecutionBackend, type E
 const artifactSchema = z.object({ path: z.string(), url: z.string(), sha1: z.string().regex(/^[a-f0-9]{40}$/), size: z.number().int().nonnegative().max(2 * 1024 ** 3) });
 const librarySchema = z.object({ name: z.string(), downloads: z.object({ artifact: artifactSchema }) });
 const processorSchema = z.object({ sides: z.array(z.enum(["client", "server", "extract"])).optional(), jar: z.string(),
-  classpath: z.array(z.string()).max(100).default([]), args: z.array(z.string().max(4000)).max(100), outputs: z.record(z.string()).default({}) });
+  classpath: z.array(z.string()).max(100).default([]), args: z.array(z.string().max(4000)).max(100), outputs: z.record(z.string(), z.string()).default({}) });
 const installSchema = z.object({ spec: z.union([z.literal(0), z.literal(1)]), minecraft: z.string(), version: z.string(), json: z.string(),
-  data: z.record(z.object({ client: z.string().max(4000), server: z.string().optional() })).default({}),
+  data: z.record(z.string(), z.object({ client: z.string().max(4000), server: z.string().optional() })).default({}),
   libraries: z.array(librarySchema).max(500), processors: z.array(processorSchema).max(32).default([]) });
 export type ForgeInstallProfile = z.infer<typeof installSchema>;
 type RuntimeProfile = { id: string; inheritsFrom: string; mainClass: string; libraries: z.infer<typeof librarySchema>[]; arguments?: unknown; minecraftArguments?: string };

@@ -6,7 +6,9 @@ import { invariant } from "./errors";
 import { diagnosticText } from "./diagnostics";
 import { audit } from "./management";
 export async function workerExecutionMode(db: Db) {
-  return executionModeSchema.parse((await db.platformSettings.findUnique({ where: { id: "platform" } }))?.executionMode ?? "DOCKER_GVISOR");
+  const mode = executionModeSchema.parse((await db.platformSettings.findUnique({ where: { id: "platform" } }))?.executionMode ?? "DOCKER_GVISOR");
+  invariant(mode === "DOCKER_GVISOR", 409, diagnosticText("diagnostics.execution.backendUnavailable"));
+  return mode;
 }
 export async function executionSettings(db: Db, actor: Actor): Promise<ExecutionSettings> {
   superOnly(actor); const row = await db.platformSettings.findUnique({ where: { id: "platform" } });
@@ -18,13 +20,14 @@ export async function executionSettings(db: Db, actor: Actor): Promise<Execution
   });
   return { mode: executionModeSchema.parse(row?.executionMode ?? "DOCKER_GVISOR"), revision: row?.executionRevision ?? 0, workers,
     dockerAvailable: workers.some(({ fresh, status }) => fresh && status?.docker.installed && status.docker.connected && status.docker.linux && status.gvisor.registered && status.gvisor.verified && status.gvisor.imageConfigured && status.gvisor.ready),
-    bareAvailable: workers.some(worker => worker.fresh && worker.status?.bare.ready) };
+    bareAvailable: false };
 }
 export async function updateExecutionSettings(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor); const parsed = executionSettingsInput.safeParse(raw);
   invariant(parsed.success, 400, diagnosticText("diagnostics.execution.invalidSettings"));
   await db.$executeRaw`SELECT pg_advisory_xact_lock(731402,1)`;
   const previous = await executionSettings(db, actor), { mode, revision } = parsed.data;
+  invariant(mode === "DOCKER_GVISOR", 409, diagnosticText("diagnostics.execution.backendUnavailable"));
   invariant(previous.revision === revision, 409, diagnosticText("diagnostics.execution.settingsChanged"));
   invariant(mode === previous.mode || (mode === "DOCKER_GVISOR" ? previous.dockerAvailable : previous.bareAvailable), 409, diagnosticText("diagnostics.execution.backendUnavailable"));
   await db.platformSettings.upsert({ where: { id: "platform" }, create: { id: "platform", executionMode: mode, executionRevision: revision + 1 }, update: { executionMode: mode, executionRevision: revision + 1 } });
