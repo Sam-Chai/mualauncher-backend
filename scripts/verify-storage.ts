@@ -17,6 +17,13 @@ async function verifyBucket(Bucket: string) {
     const head = await client.headObject({ Bucket, Key: keys[0] });
     assert.equal(head.ContentLength, bytes.length); assert.equal(head.Metadata?.sha256, sha256); assert(head.ETag);
     assert.deepEqual(await readObject(keys[0], Bucket), bytes);
+    const filtered = await client.listObjects({ Bucket, Prefix: prefix });
+    assert(filtered.Contents?.some(row => row.Key === keys[0] && row.Size === bytes.length));
+    const inventory = await client.listObjects({ Bucket });
+    if (inventory.IsTruncated) {
+      assert(inventory.NextContinuationToken, "Truncated object list must supply a continuation token");
+      await client.listObjects({ Bucket, ContinuationToken: inventory.NextContinuationToken });
+    }
     const signed = await signedDownloadInfo(keys[0], Bucket, "storage-check.bin");
     const range = await fetch(signed.url, { headers: { Range: "bytes=1-", "If-Match": head.ETag }, redirect: "error" });
     assert.equal(range.status, 206); assert.equal(range.headers.get("etag"), head.ETag);

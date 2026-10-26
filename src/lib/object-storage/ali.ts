@@ -43,7 +43,10 @@ export function createAliStorage(config: StorageConfiguration): ObjectStorage {
     deleteObject: input => call(input.Bucket, "delete", input.Key),
     deleteObjects: input => call(input.Bucket, "deleteMulti", input.Delete.Objects.map(object => object.Key)),
     listObjects: async input => {
-      const result = await call<{ objects?: { name: string; size?: number }[]; nextContinuationToken?: string; isTruncated: boolean }>(input.Bucket, "listV2", { prefix: input.Prefix, "continuation-token": input.ContinuationToken });
+      // ali-oss V4 signs undefined query values differently from the wire request.
+      const query = { ...(input.Prefix !== undefined ? { prefix: input.Prefix } : {}),
+        ...(input.ContinuationToken !== undefined ? { "continuation-token": input.ContinuationToken } : {}) };
+      const result = await call<{ objects?: { name: string; size?: number }[]; nextContinuationToken?: string; isTruncated: boolean }>(input.Bucket, "listV2", query);
       return { Contents: result.objects?.map(object => ({ Key: object.name, Size: object.size })), KeyCount: result.objects?.length ?? 0, IsTruncated: truncated(result.isTruncated), NextContinuationToken: truncated(result.isTruncated) ? result.nextContinuationToken : undefined };
     },
     createMultipartUpload: (input, options) => createdUpload(async () => ({ UploadId: (await call<AliResult>(input.Bucket, "initMultipartUpload", input.Key, uploadOptions(input))).uploadId }), options,
