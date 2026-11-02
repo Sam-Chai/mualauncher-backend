@@ -3,7 +3,7 @@ import { OpenAPIRegistry, OpenApiGeneratorV31, extendZodWithOpenApi } from "@ast
 import { accessDecisionInput, accessRequestInput, accessRevokeInput, launcherClaimInput, launcherStartInput, unionSiteInput } from "../union-contract";
 import { directorySchema, errorSchema } from "./schemas";
 import { translator, type Locale } from "../i18n";
-import { unionSyncStatusSchema } from "../union-directory-contract";
+import { unionSyncStatusSchema, unionAuthorizationInput } from "../union-directory-contract";
 import { avatarMetadataSchema, avatarRevisionInput } from "../organization-avatar-contract";
 import { gameLoginErrorSchema, gameLoginExchangeInput, gameLoginExchangeResult, gameLoginStartInput, gameLoginStartResult, launcherProviderInput, launcherProviderPublic, launcherProviderRecord } from "../launcher-game-contract";
 extendZodWithOpenApi(z);
@@ -12,7 +12,7 @@ const id=z.string().uuid(), date=z.string().datetime({offset:true}), ok=z.object
 const org=z.object({id,displayName:z.string()}).strict();
 const request=z.object({id,sourceOrganizationId:id,targetOrganizationId:id,accountId:id,createdById:id,serverIds:z.array(z.string()),autoIncludeNewServers:z.boolean(),reason:z.string(),status:z.enum(["PENDING","APPROVED","REJECTED","CANCELLED"]),revision:z.number().int(),reviewedById:id.nullable(),reviewedAt:date.nullable(),note:z.string(),createdAt:date,sourceName:z.string(),targetName:z.string(),memberName:z.string()}).strict();
 const grant=z.object({id,requestId:id,sourceOrganizationId:id,targetOrganizationId:id,accountId:id,serverIds:z.array(z.string()),autoIncludeNewServers:z.boolean(),approvedAt:date,revokedAt:date.nullable(),revokedById:id.nullable(),revokeReason:z.string().nullable(),sourceName:z.string(),targetName:z.string(),memberName:z.string()}).strict();
-type ExtraOperation={method:"get"|"post"|"put"|"delete";path:string;id:string;summaryKey:string;auth:"session"|"member"|"launcher"|"public";body?:z.ZodTypeAny;query?:z.ZodObject;response?:z.ZodTypeAny;status?:number;redirect?:boolean;superadmin?:boolean;multipart?:boolean;binary?:boolean;game?:boolean;descriptionKey?:string};
+type ExtraOperation={method:"get"|"post"|"put"|"patch"|"delete";path:string;id:string;summaryKey:string;auth:"session"|"member"|"launcher"|"public";body?:z.ZodTypeAny;query?:z.ZodObject;response?:z.ZodTypeAny;status?:number;redirect?:boolean;superadmin?:boolean;multipart?:boolean;binary?:boolean;game?:boolean;descriptionKey?:string};
 export const PUBLIC_AUTH_OPERATION_IDS = ["startLauncherLogin", "claimLauncherLogin", "logoutLauncher", "getMemberDirectory", "listLauncherProviders", "startLauncherGameLogin", "exchangeLauncherGameLogin"] as const;
 export const unionOperations:ExtraOperation[]=[
   {method:"get",path:"/api/auth/launcher/providers",id:"listLauncherProviders",summaryKey:"api.operations.listLauncherProviders.summary",auth:"public",game:true,response:z.array(launcherProviderPublic),
@@ -26,6 +26,7 @@ export const unionOperations:ExtraOperation[]=[
     descriptionKey:"api.operations.saveLauncherProvider.description"},
   {method:"get",path:"/api/admin/union-sync",id:"getUnionSync",summaryKey:"api.operations.getUnionSync.summary",auth:"session",superadmin:true,response:unionSyncStatusSchema},
   {method:"post",path:"/api/admin/union-sync",id:"requestUnionSync",summaryKey:"api.operations.requestUnionSync.summary",auth:"session",superadmin:true,body:z.object({}).strict(),response:ok},
+  {method:"patch",path:"/api/admin/union-sync",id:"updateUnionAuthorization",summaryKey:"api.operations.updateUnionAuthorization.summary",descriptionKey:"api.operations.updateUnionAuthorization.description",auth:"session",superadmin:true,body:unionAuthorizationInput,response:unionSyncStatusSchema},
   {method:"get",path:"/api/admin/organizations/{organizationId}/avatar-image",id:"getOrganizationAvatar",summaryKey:"api.operations.getOrganizationAvatar.summary",auth:"session",query:z.object({variant:z.enum(["image","source","metadata"]).optional(),version:z.string().optional()}),response:avatarMetadataSchema,binary:true},
   {method:"post",path:"/api/admin/organizations/{organizationId}/avatar-image",id:"uploadOrganizationAvatar",summaryKey:"api.operations.uploadOrganizationAvatar.summary",auth:"session",multipart:true,body:z.object({source:z.string().openapi({format:"binary"}).optional(),crop:z.string(),expectedRevision:z.string().regex(/^\d+$/)}).strict(),response:z.object({ok:z.literal(true),revision:z.number().int()}).strict()},
   {method:"delete",path:"/api/admin/organizations/{organizationId}/avatar-image",id:"removeOrganizationAvatar",summaryKey:"api.operations.removeOrganizationAvatar.summary",auth:"session",body:avatarRevisionInput,response:z.object({ok:z.literal(true),revision:z.number().int()}).strict()},

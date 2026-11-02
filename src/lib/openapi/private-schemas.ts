@@ -1,3 +1,4 @@
+import { skinSiteAuthorizationsInput } from "../organization-launcher-contract";
 import { z } from "zod";
 import { AccountStatus, DraftStatus, Role, UploadStatus } from "../../generated/prisma/enums";
 import { rolePermissions } from "../roles";
@@ -72,7 +73,8 @@ export const server = z.object({ serverId, organizationId: uuid, displayName: z.
   boundClientId: uuid.nullable(), boundClientName: nullableText, permissions: z.array(permission) }).strict();
 export const state = z.object({ actor: z.object({ id: uuid, displayName: z.string(), isSuperAdmin: z.boolean(), username: nullableText.optional(), unionSubject: z.string().optional() }).strict(),
   organizations: z.array(z.object({ id: uuid, displayName: z.string(), description: z.string(), clientCount: integer, avatarObjectKey: nullableText,
-    skinSites: z.array(z.object({code:z.string(),url:z.string().url()}).strict()).optional(),
+    launcherLoginEnabled: z.boolean(), launcherLoginRevision: integer,
+    skinSites: z.array(z.object({code:z.string(),url:z.string().url(),launcherLoginEnabled:z.boolean()}).strict()).optional(),
     archivedAt: nullableDate, permissions: z.array(permission), servers: z.array(server),
     members: z.array(z.object({ account, status: z.nativeEnum(AccountStatus), roles: z.array(role), grants: z.array(z.object({ serverId, roles: z.array(role) }).strict()), protected: z.boolean() }).strict()) }).strict()),
   accounts: z.array(account), events: z.array(z.object({ id: uuid, action: z.string(), targetType: z.string(), targetId: z.string(), organizationId: uuid.nullable(),
@@ -95,7 +97,7 @@ const nullableInput = (max = 500) => z.union([text(max), z.literal(""), z.null()
 // Explicit source patterns keep RegExp flags out of JSON Schema and preserve
 // the existing documentation contract while runtime regexes keep their flags.
 export const organizationCreate = z.object({ displayName: text(), description: text(5000, 0).optional() }).strict();
-export const organizationUpdate = organizationCreate.partial();
+export const organizationUpdate = organizationCreate.partial().extend({ skinSiteAuthorizations: skinSiteAuthorizationsInput.optional(), launcherLoginEnabled: z.boolean().optional(), launcherLoginRevision: z.number().int().nonnegative().optional() });
 export const serverCreate = z.object({ organizationId: uuid, serverId, displayName: text(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),
   displayMode: z.enum(["PERMANENT", "RANGE"]).optional(), displayStartsAt: date.nullable().optional(), displayEndsAt: date.nullable().optional() }).strict();
 export const serverUpdate = z.object({ displayName: text().optional(), description: text(5000, 0).optional(), gameAddress: nullableInput(255).optional(),

@@ -5,7 +5,9 @@ import { locked, tokenDigest, type Db, type Actor } from "./auth";
 import { securityFunction } from "./database-security";
 import { gameLoginExchangeInput, gameLoginStartInput, launcherProviderInput } from "./launcher-game-contract";
 import { gameCheck, GameLoginError, verifyGameIdentity } from "./launcher-game-identity";
-import { type GameTransport } from "./launcher-game-network";
+import { gameTransport, type GameTransport } from "./launcher-game-network";
+import { resolveYggdrasilApi } from "./yggdrasil-api";
+import { organizationLauncherAllowed } from "./organization-launcher-policy";
 import { publicDownloadAddress } from "./remote-download";
 import { isIP } from "node:net";
 import { superOnly } from "./rbac";
@@ -124,19 +126,47 @@ export async function exchangeGameLogin(raw: unknown, transport?: GameTransport,
 export async function listGameProvidersAdmin(db: Db, actor: Actor) {
   superOnly(actor); return db.launcherAuthProvider.findMany({ orderBy: [{ siteCode: "asc" }, { displayName: "asc" }] });
 }
-export async function saveGameProvider(db: Db, actor: Actor, raw: unknown) {
+export async function prepareGameProvider(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
   const input = launcherProviderInput.safeParse(raw); gameCheck(input.success, 400, "INVALID_REQUEST"); const v = input.data;
   const hostname = new URL(v.bsRoot).hostname.replace(/^\[|\]$/g, "");
   gameCheck(!isIP(hostname) || publicDownloadAddress(hostname), 400, "INVALID_REQUEST");
   const site = await db.unionSkinSite.findUnique({ where: { code: v.siteCode }, include: { organization: true } });
   gameCheck(site && site.enabled && !site.organization.archivedAt && (!site.managedBySync || site.upstreamPresent) && [site.bsRoot, ...site.bsRootAliases].includes(v.bsRoot), 409, "PROVIDER_CHANGED");
+  gameCheck(!v.enabled || organizationLauncherAllowed(site.organization, v.siteCode, v.bsRoot), 409, "PROVIDER_DISABLED");
   const old = await db.launcherAuthProvider.findUnique({ where: { id: v.id } });
   gameCheck((old?.revision ?? 0) === v.revision, 409, "PROVIDER_CHANGED");
   gameCheck(!old || old.siteCode === v.siteCode && old.bsRoot === v.bsRoot, 409, "PROVIDER_CHANGED");
-  const data = { siteCode: v.siteCode, displayName: v.displayName, bsRoot: v.bsRoot, authApiRoot: `${v.bsRoot}/api/yggdrasil`, enabled: v.enabled,
-    adapter: v.adapter, verificationNote: v.verificationNote, siteRevision: site.revision, verifiedById: actor.id, verifiedAt: new Date() };
+  return { input: v, siteRevision: site.revision, oldAuthApiRoot: old?.authApiRoot };
+}
+type PreparedProvider = Awaited<ReturnType<typeof prepareGameProvider>>;
+
+export async function discoverGameProvider(prepared: PreparedProvider, transport: GameTransport = gameTransport) {
+  const v = prepared.input;
+  // An existing source can always be stopped even when its upstream is unavailable.
+  let authApiRoot = prepared.oldAuthApiRoot;
+  if (v.enabled || !authApiRoot) {
+    try {
+      authApiRoot = (await resolveYggdrasilApi(v.bsRoot, async (url, _limit, signal, discovery) => transport(new URL(url), undefined, signal, discovery?.followAli ? "ali" : "metadata"), AbortSignal.timeout(8_000))).apiRoot;
+    } catch { throw new GameLoginError(502, "UPSTREAM_UNAVAILABLE"); }
+  }
+  return authApiRoot;
+}
+
+export async function saveResolvedGameProvider(db: Db, actor: Actor, prepared: PreparedProvider, authApiRoot: string) {
+  // Recheck authorization, site state and both revisions after network discovery, inside the write lock.
+  const current = await prepareGameProvider(db, actor, prepared.input);
+  gameCheck(current.siteRevision === prepared.siteRevision, 409, "PROVIDER_CHANGED");
+  const v = current.input;
+  const data = { siteCode: v.siteCode, displayName: v.displayName, bsRoot: v.bsRoot, authApiRoot, enabled: v.enabled,
+    adapter: v.adapter, verificationNote: v.verificationNote, siteRevision: current.siteRevision, verifiedById: actor.id, verifiedAt: new Date(), managedByOrganization: false };
   const saved = await db.launcherAuthProvider.upsert({ where: { id: v.id }, create: { ...data, id: v.id }, update: { ...data, revision: { increment: 1 } } });
+  const site = await db.unionSkinSite.findUniqueOrThrow({ where: { code: v.siteCode } });
   await audit(db, actor, "LAUNCHER_PROVIDER_SET", "LauncherAuthProvider", v.id, site.organizationId, undefined, { enabled: saved.enabled, revision: saved.revision });
   return saved;
+}
+
+export async function saveGameProvider(db: Db, actor: Actor, raw: unknown, transport: GameTransport = gameTransport) {
+  const prepared = await prepareGameProvider(db, actor, raw);
+  return saveResolvedGameProvider(db, actor, prepared, await discoverGameProvider(prepared, transport));
 }

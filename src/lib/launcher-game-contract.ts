@@ -22,7 +22,7 @@ export const gameLoginExchangeInput = z.object({
 }).strict();
 export const launcherProviderPublic = z.object({ id, siteCode: z.string(), displayName: z.string(), bsRoot: z.string().url(), authApiRoot: z.string().url(), revision: z.number().int(), directExchange: z.literal(true), browserLogin: z.literal(true) }).strict();
 export const launcherProviderRecord = z.object({ id, siteCode: z.string(), displayName: z.string(), bsRoot: z.string().url(), authApiRoot: z.string().url(), revision: z.number().int(), siteRevision: z.number().int(),
-  enabled: z.boolean(), adapter: z.literal("MUA_YGGC_ONLINE_V1"), verificationNote: z.string(), verifiedById: id, verifiedAt: z.string().datetime(), updatedAt: z.string().datetime() }).strict();
+  enabled: z.boolean(), managedByOrganization: z.boolean(), adapter: z.literal("MUA_YGGC_ONLINE_V1"), verificationNote: z.string(), verifiedById: id.nullable(), verifiedAt: z.string().datetime(), updatedAt: z.string().datetime() }).strict();
 export const gameLoginStartResult = z.object({ attemptId: id, nonce: z.string(), expiresIn: z.literal(120), providerId: id, providerRevision: z.number().int() }).strict();
 export const gameLoginExchangeResult = z.object({ tokenType: z.literal("Bearer"), token: z.string().regex(/^mul_[a-f0-9]{64}$/), expiresAt: z.string().datetime(), expiresIn: z.number().int().positive().max(900),
   account: z.object({ id, unionSubject: z.string() }).strict(), gameProfile: z.object({ id: z.string().regex(/^[a-f0-9]{32}$/), name: profileName }).strict(), providerId: id }).strict();

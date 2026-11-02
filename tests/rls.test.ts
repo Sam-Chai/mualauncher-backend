@@ -146,11 +146,11 @@ test("organization skin-site addresses are projected only within the live organi
   assert.equal(await web.unionSkinSite.count(),0);
   for(const actor of [f.admin,f.single,f.reader]) await as(actor,async db=>{
     const state=await m.getState(db,actor);const org=state.organizations.find(org=>org.id===f.org.id);assert(org);
-    assert.deepEqual(org.skinSites,[{code:"ALPHA",url:"https://alpha.example"}]);
+    assert.deepEqual(org.skinSites,[{code:"ALPHA",url:"https://alpha.example",launcherLoginEnabled:false}]);
     const sites=await db.unionSkinSite.findMany();assert(sites.length);assert(sites.every(site=>site.organizationId===f.org.id));
     assert(!state.organizations.some(org=>org.id===f.other.id));
   });
-  const all=await as(f.root,db=>m.getState(db,f.root));assert.deepEqual(all.organizations.find(org=>org.id===f.other.id)?.skinSites,[{code:"BETA",url:"https://beta.example"}]);
+  const all=await as(f.root,db=>m.getState(db,f.root));assert.deepEqual(all.organizations.find(org=>org.id===f.other.id)?.skinSites,[{code:"BETA",url:"https://beta.example",launcherLoginEnabled:false}]);
 });
 
 test("concurrent storage collectors share a lease and publish an actual capacity snapshot", async () => {

@@ -9,11 +9,15 @@ import { remoteSourceUrl } from "./remote-download";
 import { fetchSiteIcon, siteReader, type SiteReader } from "./union-site-icons";
 import { prepareOrganizationAvatar, readOrganizationAvatar, storeOrganizationAvatar } from "./organization-avatar";
 import { isOrganizationAvatarKey } from "./organization-avatar-contract";
-import { parseUnionDirectory, UNION_DIRECTORY_URL, UNION_SYNC_MS, unionSyncStatusSchema, type UnionSyncStatus } from "./union-directory-contract";
+import { parseUnionDirectory, UNION_DIRECTORY_URL, UNION_SYNC_MS, unionSyncStatusSchema, unionAuthorizationInput, type UnionSyncStatus } from "./union-directory-contract";
+import { invariant } from "./errors";
+import { diagnosticText } from "./diagnostics";
+import { audit } from "./management";
+import { discoverOrganizationProviders } from "./organization-launcher-auth";
 import { fetchUnionSiteName } from "./union-site-metadata";
 
 type Applied = { created: number; synced: number; issues: { code: string; issue: string }[] };
-export async function syncUnionDirectory(db: PrismaClient, read?: SiteReader) {
+export async function syncUnionDirectory(db: PrismaClient, read?: SiteReader, authenticationRead?: SiteReader) {
   const now = new Date(), lease = randomUUID();
   await db.unionSyncState.upsert({ where: { id: "union" }, create: { id: "union", nextSyncAt: now }, update: {} });
   const claimed = await db.unionSyncState.updateMany({ where: { id: "union", nextSyncAt: { lte: now }, OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] },
@@ -36,8 +40,9 @@ export async function syncUnionDirectory(db: PrismaClient, read?: SiteReader) {
     // Bound the whole metadata pass as well as each site (including its aliases).
     // External requests finish before opening the database transaction.
     const budget = AbortSignal.timeout(60_000);
+    const launcherDiscovery = discoverOrganizationProviders(db, sites, budget, authenticationRead);
     let next = 0;
-    await Promise.all(Array.from({ length: Math.min(6, candidates.length) }, async () => {
+    await Promise.all([launcherDiscovery, ...Array.from({ length: Math.min(6, candidates.length) }, async () => {
       while (next < candidates.length) {
         const site = candidates[next++];
         try {
@@ -45,11 +50,14 @@ export async function syncUnionDirectory(db: PrismaClient, read?: SiteReader) {
           names.set(site.code, await fetchUnionSiteName([site.bsRoot, ...(site.bsRootAliases ?? [])], network, AbortSignal.any([budget, AbortSignal.timeout(16_000)])));
         } catch { nameIssues.add(site.code); }
       }
-    }));
+    })]);
     parsed.issues.push(...[...nameIssues].sort().map(code => ({ code, issue: "SITE_NAME_UNAVAILABLE" })));
+    const launcherSources = await launcherDiscovery;
+    parsed.issues.push(...launcherSources.issues);
     const payload = sites.map(site => ({ ...site, ...(names.has(site.code) ? { siteName: names.get(site.code) } : {}) }));
     const applied = await db.$transaction(async tx => {
       const rows = await tx.$queryRaw<{ value: Applied }[]>`SELECT ${securityFunction("union_apply_sites")}(${JSON.stringify(payload)}::jsonb,${lease}::uuid) AS value`;
+      await tx.$queryRaw`SELECT ${securityFunction("union_apply_launcher_providers")}(${JSON.stringify(launcherSources.providers)}::jsonb,${lease}::uuid)`;
       const issues = [...parsed.issues, ...rows[0].value.issues];
       await tx.unionSyncState.updateMany({ where: { id: "union", leaseToken: lease }, data: { syncedAt: new Date(), nextSyncAt: new Date(now.getTime() + UNION_SYNC_MS),
         leaseToken: null, leaseUntil: null, upstreamVersion: parsed.version, receivedCount: parsed.received, syncedCount: rows[0].value.synced,
@@ -98,11 +106,13 @@ export async function importUnionAvatars(db: PrismaClient, read?: SiteReader) {
 
 export async function unionDirectoryStatus(db: Db, actor: Actor): Promise<UnionSyncStatus> {
   superOnly(actor);
+  const settings = await db.platformSettings.findUnique({ where: { id: "platform" } });
   const state = await db.unionSyncState.findUnique({ where: { id: "union" } });
   const sites = await db.unionSkinSite.findMany({ where: { upstreamPresent: true, enabled: true }, include: { organization: true } });
   const unique = [...new Map(sites.map(s => [s.organizationId, s])).values()];
   const issues = Array.isArray(state?.issues) ? state.issues : [];
   return unionSyncStatusSchema.parse({ endpoint: UNION_DIRECTORY_URL, intervalSeconds: 60,
+    autoAuthorizeNewOrganizations: settings?.autoAuthorizeNewOrganizations ?? false, authorizationRevision: settings?.unionAuthorizationRevision ?? 0,
     status: state?.leaseUntil && state.leaseUntil > new Date() ? "RUNNING" : state?.error ? "ERROR" : !state?.syncedAt ? "WAITING" : Date.now() - state.syncedAt.getTime() > 180_000 ? "STALE" : issues.length ? "PARTIAL" : "SYNCED",
     attemptedAt: state?.attemptedAt?.toISOString() ?? null, syncedAt: state?.syncedAt?.toISOString() ?? null, nextSyncAt: state?.nextSyncAt.toISOString() ?? null,
     upstreamVersion: state?.upstreamVersion ?? null, receivedCount: state?.receivedCount ?? 0, syncedCount: state?.syncedCount ?? 0, createdCount: state?.createdCount ?? 0,
@@ -112,6 +122,17 @@ export async function unionDirectoryStatus(db: Db, actor: Actor): Promise<UnionS
       failed: unique.filter(s => s.organization.avatarMode === "AUTO" && !!s.avatarError).length,
       pending: unique.filter(s => s.organization.avatarMode === "AUTO" && !s.avatarCheckedAt).length,
     } });
+}
+export async function updateUnionAuthorization(db: Db, actor: Actor, raw: unknown) {
+  superOnly(actor);
+  const parsed = unionAuthorizationInput.safeParse(raw);
+  invariant(parsed.success, 400, diagnosticText("diagnostics.route.invalidRequestParameters"));
+  const current = await db.platformSettings.findUnique({ where: { id: "platform" } });
+  invariant((current?.unionAuthorizationRevision ?? 0) === parsed.data.revision, 409, diagnosticText("diagnostics.http.theResourceHasChangedRefreshAndRetry"));
+  await db.platformSettings.upsert({ where: { id: "platform" }, create: { id: "platform", autoAuthorizeNewOrganizations: parsed.data.autoAuthorizeNewOrganizations, unionAuthorizationRevision: parsed.data.revision + 1 },
+    update: { autoAuthorizeNewOrganizations: parsed.data.autoAuthorizeNewOrganizations, unionAuthorizationRevision: { increment: 1 } } });
+  await audit(db, actor, "UNION_LAUNCHER_AUTO_AUTHORIZATION_SET", "PlatformSettings", "platform", undefined, undefined, { enabled: parsed.data.autoAuthorizeNewOrganizations, revision: parsed.data.revision + 1 });
+  return unionDirectoryStatus(db, actor);
 }
 export async function requestUnionSync(db: Db, actor: Actor) {
   superOnly(actor);

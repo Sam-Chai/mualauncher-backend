@@ -27,7 +27,7 @@ test("motto fills the table cell in both themes, editor shows the whole image an
       isListed: false, displayMode: "PERMANENT", displayStartsAt: null, displayEndsAt: null, archivedAt: null, clientArchivedAt: null,
       currentReleaseId: null, currentReleaseActive: false, publicationRevision: 0, boundClientId: null, boundClientName: null, permissions: ["SERVER_READ", "SERVER_EDIT"],
     };
-    state.organizations = [{ id: server.organizationId, displayName: "Cinema", description: "", clientCount: 0, avatarObjectKey: null, archivedAt: null, permissions: [], servers: [server], members: [] }];
+    state.organizations = [{ id: server.organizationId, displayName: "Cinema", description: "", clientCount: 0, launcherLoginEnabled: false, launcherLoginRevision: 0, avatarObjectKey: null, archivedAt: null, permissions: [], servers: [server], members: [] }];
     // Read-only browser fixtures: no server/image business records are written.
     await page.route("**/api/admin/state", route => route.fulfill({ json: state }));
     const source = await sharp({ create: { width: 610, height: 400, channels: 3, background: "#c05020" } }).webp().toBuffer();

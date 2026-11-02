@@ -10,6 +10,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-11-02 地址级授权：按 CODE＋登记地址保存独立 Launcher 授权，YITUEM 两地址的状态在表格按地址顺序上下对齐，编辑页分别勾选；相同 ALI API 不合并授权。组织 PATCH 的 skinSiteAuthorizations 只修改给定地址，必须携带 launcherLoginRevision 并校验归属／地址；原组织开关写法显式设置全部地址。只撤销变化来源的会话，不影响另一地址，重开不恢复旧 Token。迁移 `202611020003_skin_site_launcher_authorization` 保留原授权作为默认，无新增表；OpenAPI 6.1.0，完整 94／公开 11。仅本地，见 [组织授权](docs/organization-launcher-authorization.md)。
+
+- 2026-11-02 组织启动器登录授权：组织表格显示 launcherLoginEnabled，组织管理员／超管在编辑页修改并提交 launcherLoginRevision；取消与重新授权均使旧来源会话失效，重开不恢复旧 Token。系统 Union 同步面板的 autoAuthorizeNewOrganizations 默认关闭，仅超管 Cookie＋同源＋修订可改，仅影响新建组织，不覆盖已有选择。Worker 在目录租约内按标准 ALI 为授权组织维护自动来源，保存前复核授权／站点修订；保留手动来源停用，不扩大游戏 Token 适配范围，不伪造 UID／日志验收。迁移 `202611020002_organization_launcher_authorization`，仍 34 张 FORCE RLS 表；OpenAPI 6.0.0，完整 94／公开 11。仅本地实施，见 [组织授权](docs/organization-launcher-authorization.md)。
+
 - 2026-10-25 运行环境管理：Settings 超管 Cookie 可选择 DOCKER_GVISOR／BARE，默认 Docker，不可用置灰且不自动降级。Worker 上报 Docker/gVisor/Java 状态，30 秒心跳／90 秒采样超时不作为可用；Worker 必须能在隔离不可用时继续上报。显式裸机共用协议、清理凭据环境变量，但共享宿主权限／网络且没有容器硬限额。运行中任务固定模式，缓存按模式／执行指纹分隔。后台任务查看最近 100 次实例及容器 ID、生命周期与资源参数，只展示本工作流资源；无任意 Docker 操作 API。迁移 `202610250001_execution_management`，34 张 FORCE RLS 表，OpenAPI 5.2.0 完整 93／公开 11。此条替代下方仅限 Docker 和启动失败退出的旧约定；仍禁止自动回退裸机。见 [执行环境](docs/execution-management.md)。
 
 - 2026-10-25 隔离执行：Forge/NeoForge Java 处理器统一通过内部 execution protocol v1 + Docker/runsc，禁止宿主 Java/runc 回退；输入只读命名卷、工作区受限 tmpfs、UID 65532 零 capabilities、断网，输出在停止后代后重新校验。可信生命周期辅助进程 UID 0 仅 KILL。Docker context 与镜像摘要固定；macOS 使用专用 Colima 原生 Linux VM，不能将 Darwin 或 runc 测试当作 gVisor 验收。沿用 PackageBuild 租约／延迟重排／过期回收；不接 Argo，不新增迁移，不改历史签名。新缓存包含执行策略，旧未签名 Forge PREPARED 需重建。部署和真实验收边界见 [隔离执行](docs/isolated-execution.md)，目标机验收未完成前不能宣称生产可用性已验收。

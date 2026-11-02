@@ -6,6 +6,7 @@ import { gameTransport, type GameTransport } from "./launcher-game-network";
 import { AppError } from "./errors";
 import { diagnosticText } from "./diagnostics";
 import { hasMessage } from "./i18n";
+import { yggdrasilEndpoint } from "./yggdrasil-api";
 
 export class GameLoginError extends AppError {
   constructor(status: number, public code: string) {
@@ -29,7 +30,7 @@ export async function verifyGameIdentity(provider: GameProvider, input: { gameAc
   gameCheck(provider.adapter === "MUA_YGGC_ONLINE_V1", 503, "IDENTITY_PROOF_UNSUPPORTED");
   const signal = AbortSignal.timeout(10_000);
   try {
-    const validation = await transport(new URL(`${provider.authApiRoot}/authserver/validate`), JSON.stringify({ accessToken: input.gameAccessToken,
+    const validation = await transport(yggdrasilEndpoint(provider.authApiRoot, "authserver/validate"), JSON.stringify({ accessToken: input.gameAccessToken,
       ...(input.gameClientToken ? { clientToken: input.gameClientToken } : {}) }), signal);
     gameCheck(validation.status !== 400 && validation.status !== 401 && validation.status !== 403, 401, "GAME_TOKEN_INVALID");
     gameCheck(validation.status === 204 && validation.bytes.length === 0, 502, "UPSTREAM_UNAVAILABLE");
@@ -44,7 +45,7 @@ export async function verifyGameIdentity(provider: GameProvider, input: { gameAc
     gameCheck(c.exp > now + 90, 401, "GAME_TOKEN_EXPIRING");
     gameCheck((c.nbf === undefined || c.nbf <= now + 30) && (c.iat === undefined || c.iat <= now + 30), 401, "GAME_TOKEN_INVALID");
     gameCheck(c.selectedProfile === input.gameProfile.id, 409, "PROFILE_MISMATCH");
-    const response = await transport(new URL(`${provider.authApiRoot}/sessionserver/session/minecraft/profile/${c.selectedProfile}`), undefined, signal);
+    const response = await transport(yggdrasilEndpoint(provider.authApiRoot, `sessionserver/session/minecraft/profile/${c.selectedProfile}`), undefined, signal);
     gameCheck(response.status === 200 && response.contentType.split(";")[0].trim() === "application/json" && response.bytes.length <= 65536, 502, "UPSTREAM_UNAVAILABLE");
     let raw: unknown;
     try { raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(response.bytes)); } catch { throw new GameLoginError(502, "UPSTREAM_UNAVAILABLE"); }

@@ -5,10 +5,12 @@ export const UNION_SYNC_MS = 60_000;
 export const YITUEM_ROOTS = ["https://skin.yitmc.cn", "https://skin.uemcraft.cn"] as const;
 export const unionCode = z.string().regex(/^[A-Z][A-Z0-9]{0,5}$/);
 export const unionSyncStatusSchema = z.object({ status: z.enum(["WAITING", "RUNNING", "SYNCED", "PARTIAL", "ERROR", "STALE"]),
+  autoAuthorizeNewOrganizations: z.boolean(), authorizationRevision: z.number().int().nonnegative(),
   endpoint: z.literal(UNION_DIRECTORY_URL), intervalSeconds: z.literal(60), attemptedAt: z.string().nullable(), syncedAt: z.string().nullable(), nextSyncAt: z.string().nullable(),
   upstreamVersion: z.string().nullable(), receivedCount: z.number().int(), syncedCount: z.number().int(), createdCount: z.number().int(), error: z.string().nullable(),
   issues: z.array(z.object({ code: z.string(), issue: z.string() }).strict()), avatars: z.object({ imported: z.number().int(), pending: z.number().int(), failed: z.number().int(), manual: z.number().int() }).strict() }).strict();
 export type UnionSyncStatus = z.infer<typeof unionSyncStatusSchema>;
+export const unionAuthorizationInput = z.object({ autoAuthorizeNewOrganizations: z.boolean(), revision: z.number().int().nonnegative() }).strict();
 export function parseUnionDirectory(raw: unknown) {
   const value = z.object({ servers: z.array(z.object({ code: z.string().max(100), bs_root: z.string().max(2000) })).min(1).max(1000), version: z.union([z.string().max(100), z.number().finite()]).optional() }).parse(raw);
   const groups = new Map<string, Set<string>>(), issues: { code: string; issue: string }[] = [];

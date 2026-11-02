@@ -648,7 +648,13 @@
     "internalId": "Organization ID",
     "accessibleServers": "Accessible servers",
     "organizationsOwnMembersServersAndDedicatedClientsInternalIds": "Manage organization details, members, servers and clients.",
-    "noOrganizationsCreateOneBeforeRegisteringServers": "No organizations yet. Create one to add servers."
+    "noOrganizationsCreateOneBeforeRegisteringServers": "No organizations yet. Create one to add servers.",
+    "authorization": "Authorization",
+    "authorized": "Authorized",
+    "notAuthorized": "Not authorized",
+    "allowLauncherLogin": "Allow launcher sign-in to Union Link with skin-site accounts",
+    "allowLauncherLoginForSite": "Allow launcher sign-in to Union Link with accounts from {site}",
+    "launcherAuthorizationHint": "Authorized sites are discovered automatically, usually within one minute. Unavailable sites or incompatible sign-in protocols still cannot sign in. Revoking authorization takes effect immediately."
   },
   "packageFormatChoice": {
     "selectMuapackFormat": "Select .muapack format",
@@ -960,7 +966,10 @@
     "noSyncLog": "No sync activity yet.",
     "noSyncIssues": "No issues found during this sync.",
     "siteNameUnavailable": "The skin-site name is unavailable. The current description was kept and will be retried on the next sync.",
-    "siteUpdateFailed": "This site couldn’t be updated. Try again later."
+    "siteUpdateFailed": "This site couldn’t be updated. Try again later.",
+    "autoAuthorizeNewOrganizations": "Automatically authorize newly added organizations",
+    "autoAuthorizationHint": "Off by default. Enables launcher sign-in only for organizations created later. Existing authorizations and organization administrators’ choices are preserved.",
+    "launcherApiUnavailable": "The authentication API could not be verified; launcher sign-in is not available for this site"
   },
   "uploadSizeSettings": {
     "muapackUploadSize": "Upload size limit",
@@ -1078,7 +1087,7 @@
       },
       "saveLauncherProvider": {
         "summary": "Approve or disable a Launcher authentication provider",
-        "description": "Super-administrator Cookie and same Origin only. Create with a random UUID and revision=0; updates require the current revision. The root must match the directory primary root or alias; CODE/root cannot change after creation. Authentication root is bsRoot + /api/yggdrasil. Confirm actual OAuth UID equivalence and upstream credential-log redaction; record version and verification evidence. Saving increments revision and invalidates old provider sessions. Directory changes require reapproval."
+        "description": "Superadmin Cookie and same origin only. Create with a random UUID and revision=0; updates require the current revision. The source must match a directory root or alias; its CODE/root cannot change. The backend discovers authApiRoot from bsRoot using ALI, following individually validated HTTPS redirects and relative or absolute X-Authlib-Injector-API-Location. Without ALI, the final response URL is the API root; paths are never guessed. Enabling or reapproving resolves and saves the endpoint; discovery failure returns 502 without saving changes. Disabling an existing source does not require upstream connectivity. Confirm the actual OAuth UID mapping and credential log redaction, and record version/acceptance evidence. Saving increments the revision and invalidates old source sessions; directory changes require reapproval."
       },
       "getUnionSync": {
         "summary": "Read Union directory synchronization status",
@@ -1411,6 +1420,10 @@
       "changePassword": {
         "summary": "Change this account''s password",
         "description": "Requires an active Cookie session and same-origin Origin. Validates the current password and a 12-128-character replacement. Revokes all account sessions and clears Cookie, requiring login again. Does not rewrite API token plaintext or permissions.\n\nWrites require same-origin Origin; Bearer cannot replace Cookie. Use application/json with a body except for image uploads."
+      },
+      "updateUnionAuthorization": {
+        "summary": "Set default launcher authorization for new organizations",
+        "description": "Superadmin Cookie and same origin only. Send autoAuthorizeNewOrganizations and the current revision; conflicts return 409. Applies only to future organizations and does not alter existing authorizations. Organization administrators may update launcherLoginEnabled in their own organization with launcherLoginRevision. The Worker discovers approved sources using ALI; unavailable or invalid metadata is not published. Revocation immediately blocks exchange and invalidates old provider sessions."
       }
     },
     "union": {

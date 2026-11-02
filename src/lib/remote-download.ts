@@ -105,7 +105,8 @@ async function requestHop(url: URL, settings: NetworkSettings, signal: AbortSign
   });
 }
 export async function remoteResponse(value: string, settings: NetworkSettings, signal: AbortSignal,
-  validate = (url: string) => remoteSourceUrl(url, settings), headersTimeout = 0): Promise<IncomingMessage> {
+  validate = (url: string) => remoteSourceUrl(url, settings), headersTimeout = 0,
+  acceptResponse: (response: IncomingMessage) => boolean = response => response.statusCode === 200): Promise<IncomingMessage & { resolvedUrl?: string }> {
   let url = validate(value);
   for (let redirects = 0; redirects <= 5; redirects++) {
     const result = await requestHop(url, settings, signal, headersTimeout);
@@ -113,8 +114,9 @@ export async function remoteResponse(value: string, settings: NetworkSettings, s
       const location = result.headers.location; result.destroy(); invariant(location && redirects < 5, 422, diagnosticText("diagnostics.remoteDownload.invalidOrExcessiveRemoteRedirects"));
       url = validate(new URL(location, url).href); continue;
     }
-    if (result.statusCode !== 200) result.destroy();
-    invariant(result.statusCode === 200, 422, diagnosticText("diagnostics.remoteDownload.downloadFailed0Http1", { arg0: url.hostname, arg1: result.statusCode })); return result;
+    const accepted = acceptResponse(result);
+    if (!accepted) result.destroy();
+    invariant(accepted, 422, diagnosticText("diagnostics.remoteDownload.downloadFailed0Http1", { arg0: url.hostname, arg1: result.statusCode })); return Object.assign(result, { resolvedUrl: url.href });
   }
   throw new AppError(422, diagnosticText("diagnostics.remoteDownload.tooManyRemoteRedirects"));
 }

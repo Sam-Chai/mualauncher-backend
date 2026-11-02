@@ -7,10 +7,11 @@ import { useI18n } from "@/components/preferences";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { api, useAdmin } from "./provider";
 import type { UnionSyncStatus } from "@/lib/union-directory-contract";
 const labels = { WAITING: "unionSyncSettings.waitingForFirstSynchronization", RUNNING: "unionSyncSettings.synchronizing", SYNCED: "unionSyncSettings.synchronized", PARTIAL: "unionSyncSettings.partiallySynchronized", ERROR: "unionSyncSettings.synchronizationFailed", STALE: "unionSyncSettings.synchronizationIsStale" };
-const problems: Record<string, string> = { DUPLICATE_CODE: "unionSyncSettings.thisCodeIdentifiesMultipleSitesAutomaticCreationWasSkipped", INVALID_CODE: "unionSyncSettings.invalidSiteCode", INVALID_URL: "unionSyncSettings.invalidSiteAddress", ORGANIZATION_CONFLICT: "unionSyncSettings.matchingOrganizationsConflictOrAreArchivedSkipped", MAPPING_URL_MISMATCH: "unionSyncSettings.theManualAddressDiffersFromUpstreamTheManualSetting", SITE_NAME_UNAVAILABLE: "unionSyncSettings.siteNameUnavailable" };
+const problems: Record<string, string> = { LAUNCHER_API_UNAVAILABLE: "unionSyncSettings.launcherApiUnavailable", DUPLICATE_CODE: "unionSyncSettings.thisCodeIdentifiesMultipleSitesAutomaticCreationWasSkipped", INVALID_CODE: "unionSyncSettings.invalidSiteCode", INVALID_URL: "unionSyncSettings.invalidSiteAddress", ORGANIZATION_CONFLICT: "unionSyncSettings.matchingOrganizationsConflictOrAreArchivedSkipped", MAPPING_URL_MISMATCH: "unionSyncSettings.theManualAddressDiffersFromUpstreamTheManualSetting", SITE_NAME_UNAVAILABLE: "unionSyncSettings.siteNameUnavailable" };
 export function UnionSyncSettings() {
   const { t, formatDate } = useI18n(), { run, busy, refresh } = useAdmin();
   const [status, setStatus] = useState<UnionSyncStatus | null>(null), [error, setError] = useState("");
@@ -25,7 +26,9 @@ export function UnionSyncSettings() {
   }, []);
   return <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>{t("unionSyncSettings.unionOrganizationDirectorySynchronization")}</CardTitle>{status && <Badge variant={status.status === "SYNCED" ? "secondary" : "outline"}>{t(labels[status.status])}</Badge>}</div><CardDescription>{t("unionSyncSettings.theWorkerSynchronizesTheUnionDirectoryEveryMinuteNew")}</CardDescription></CardHeader><CardContent className="space-y-4 text-sm">
     {error && <p role="alert" className="text-destructive">{formatMessage(t, error)}</p>}
-    {!status ? <p role="status">{t("unionSyncSettings.loadingSynchronizationStatus")}</p> : <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
+    {!status ? <p role="status">{t("unionSyncSettings.loadingSynchronizationStatus")}</p> : <><div className="space-y-2 rounded-lg border p-4"><label className="flex items-center gap-2 font-medium"><Checkbox checked={status.autoAuthorizeNewOrganizations} disabled={busy} onCheckedChange={checked => {
+      void run(async () => { const next = await api<UnionSyncStatus>("/api/admin/union-sync", "PATCH", { autoAuthorizeNewOrganizations: checked === true, revision: status.authorizationRevision }); setStatus(next); }, undefined, false);
+    }} />{t("unionSyncSettings.autoAuthorizeNewOrganizations")}</label><p className="text-xs text-muted-foreground">{t("unionSyncSettings.autoAuthorizationHint")}</p></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
       [t("unionSyncSettings.lastAttempt"), status.attemptedAt ? formatDate(status.attemptedAt) : t("unionSyncSettings.notSynchronizedYet")], [t("unionSyncSettings.latestSuccessfulSynchronization"), status.syncedAt ? formatDate(status.syncedAt) : t("unionSyncSettings.notSynchronizedYet")],
       [t("unionSyncSettings.nextScheduledAttempt"), status.nextSyncAt ? formatDate(status.nextSyncAt) : t("clients.waitingForWorker")], [t("unionSyncSettings.upstreamVersion"), status.upstreamVersion ?? "—"],
       [t("unionSyncSettings.upstreamRecordsSynchronized"), `${status.receivedCount} / ${status.syncedCount}`], [t("unionSyncSettings.organizationsCreatedInThisSynchronization"), String(status.createdCount)],

@@ -226,7 +226,7 @@ test("YITUEM accepts only its confirmed merged domains and preserves one CODE id
   const site=await owner.unionSkinSite.findUniqueOrThrow({where:{code:"YITUEM"}});assert.deepEqual([site.bsRoot,...site.bsRootAliases],YITUEM_ROOTS);
   assert.equal((await owner.organization.findUniqueOrThrow({where:{id:site.organizationId}})).description,"YIT & UEM 联合皮肤站");
   assert.equal(await owner.organizationMember.count({where:{organizationId:site.organizationId}}),0);
-  assert.deepEqual((await as(root,db=>getState(db,root))).organizations.find(o=>o.id===site.organizationId)?.skinSites,YITUEM_ROOTS.map(url=>({code:"YITUEM",url})));
+  assert.deepEqual((await as(root,db=>getState(db,root))).organizations.find(o=>o.id===site.organizationId)?.skinSites,YITUEM_ROOTS.map(url=>({code:"YITUEM",url,launcherLoginEnabled:false})));
   await as(root,db=>requestUnionSync(db,root));const second=await syncUnionDirectory(worker,read);assert(second);assert.equal(second.created,0);
   const repeated=await owner.unionSkinSite.findUniqueOrThrow({where:{code:"YITUEM"}});assert.equal(repeated.organizationId,site.organizationId);assert.equal(repeated.revision,site.revision);
   const token=randomBytes(32).toString("hex");await auth.$queryRaw`SELECT ${securityFunction("union_login")}('YITUEM:123','merged member',${tokenDigest(token)},${new Date(Date.now()+60_000)})`;
@@ -266,7 +266,7 @@ test("site names come only from bounded Yggdrasil metadata, with merged-domain f
     if(url.startsWith(YITUEM_ROOTS[0]))throw Error("unavailable");
     return{bytes:Buffer.from(JSON.stringify({meta:{serverName:"  YIT & UEM 联合皮肤站  "}})),contentType:"application/json; charset=utf-8"};
   },AbortSignal.timeout(1000));
-  assert.equal(name,"YIT & UEM 联合皮肤站");assert.deepEqual(attempted,YITUEM_ROOTS.map(root=>`${root}/api/yggdrasil`));
+  assert.equal(name,"YIT & UEM 联合皮肤站");assert.deepEqual(attempted,YITUEM_ROOTS.map(root=>new URL(root).href));
   for(const serverName of [null,""," ","x".repeat(201),"bad\u0000name","hidden\u202ename",{name:"wrong"}])
     await assert.rejects(fetchUnionSiteName(["https://name.example"],async()=>({bytes:Buffer.from(JSON.stringify({meta:{serverName}})),contentType:"application/json"}),AbortSignal.timeout(1000)));
   await assert.rejects(fetchUnionSiteName(["https://name.example"],async()=>({bytes:Buffer.from('<title>HTML is not metadata</title>'),contentType:"text/html"}),AbortSignal.timeout(1000)));

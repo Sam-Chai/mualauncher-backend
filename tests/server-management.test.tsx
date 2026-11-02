@@ -36,7 +36,7 @@ function fixture(permissions: Server["permissions"], superAdmin = false) {
   };
   const state: State = {
     actor: { id: "00000000-0000-4000-8000-000000000004", displayName: "Tester", isSuperAdmin: superAdmin },
-    organizations: [{ id: server.organizationId, displayName: "NPU", description: "", clientCount: 1, avatarObjectKey: null, archivedAt: null, permissions: [], servers: [server], members: [] }],
+    organizations: [{ id: server.organizationId, displayName: "NPU", description: "", clientCount: 1, launcherLoginEnabled: false, launcherLoginRevision: 0, avatarObjectKey: null, archivedAt: null, permissions: [], servers: [server], members: [] }],
     accounts: [], events: [], auditActivity: [], enabledPackageFormats: [1, 2], maxUploadSizeMb: 1024,
   };
   return { state, server };

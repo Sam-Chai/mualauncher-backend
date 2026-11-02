@@ -648,7 +648,13 @@
     "internalId": "组织 ID",
     "accessibleServers": "可访问服务器",
     "organizationsOwnMembersServersAndDedicatedClientsInternalIds": "管理组织资料，以及组织内的成员、服务器和客户端。",
-    "noOrganizationsCreateOneBeforeRegisteringServers": "还没有组织。创建组织后，即可添加服务器。"
+    "noOrganizationsCreateOneBeforeRegisteringServers": "还没有组织。创建组织后，即可添加服务器。",
+    "authorization": "授权",
+    "authorized": "已授权",
+    "notAuthorized": "未授权",
+    "allowLauncherLogin": "允许启动器通过皮肤站账号登录 Union Link",
+    "allowLauncherLoginForSite": "允许 {site} 的账号通过启动器登录 Union Link",
+    "launcherAuthorizationHint": "授权后自动发现本站认证接口，通常在一分钟内开放启动器登录。站点不可用或登录协议不兼容时仍无法登录；取消授权立即生效。"
   },
   "packageFormatChoice": {
     "selectMuapackFormat": "选择 .muapack 格式",
@@ -960,7 +966,10 @@
     "noSyncLog": "暂无同步记录。",
     "noSyncIssues": "本次同步未发现问题。",
     "siteNameUnavailable": "暂时无法获取皮肤站名称，已保留原简介，将在下次同步时重试。",
-    "siteUpdateFailed": "暂时无法更新此站点，请稍后重试。"
+    "siteUpdateFailed": "暂时无法更新此站点，请稍后重试。",
+    "autoAuthorizeNewOrganizations": "自动授权新添加的组织",
+    "autoAuthorizationHint": "默认关闭。仅为之后新建的组织开启启动器登录，不改变现有组织的授权，也不会覆盖组织管理员的选择。",
+    "launcherApiUnavailable": "认证接口未能验证，暂未开放该站的启动器登录"
   },
   "uploadSizeSettings": {
     "muapackUploadSize": "上传大小限制",
@@ -1078,7 +1087,7 @@
       },
       "saveLauncherProvider": {
         "summary": "超管核准或停用启动器认证来源",
-        "description": "仅超管 Cookie 且同源。新建使用随机 UUID 和 revision=0，修改携带当前 revision。来源必须对应目录主地址或别名，身份 CODE/地址创建后不能改写；认证根地址固定为 bsRoot + /api/yggdrasil。须确认实际 OAuth UID 对应关系和上游日志脱敏，并记录版本/验收说明。保存递增修订，使旧来源会话失效；目录变动须重新核准。"
+        "description": "仅超管 Cookie 且同源。新建使用随机 UUID 和 revision=0，修改携带当前 revision。来源必须对应目录主地址或别名，身份 CODE/地址创建后不能改写；后端从 bsRoot 按 ALI 标准发现 authApiRoot，跟随经逐跳安全校验的 HTTPS 重定向，支持相对或绝对 X-Authlib-Injector-API-Location；没有 ALI 时使用最终响应地址，不猜测路径。启用或重新核准时解析并保存地址，发现失败返回 502，不保存变更；已有来源停用不依赖上游连通。须确认实际 OAuth UID 对应关系和上游日志脱敏，并记录版本/验收说明。保存递增修订，使旧来源会话失效；目录变动须重新核准。"
       },
       "getUnionSync": {
         "summary": "读取联盟目录同步状态",
@@ -1411,6 +1420,10 @@
       "changePassword": {
         "summary": "修改当前账号密码",
         "description": "有效 Cookie 会话和同源 Origin 必需；校验当前密码，要求新密码 12–128 字符，修改后撤销该账号全部会话并清除 Cookie，须重新登录。不会修改 API Token 的明文或权限。\n\n写请求要求同源 Origin，Bearer 不能替代 Cookie。除图片上传外使用 application/json，必须包含正文。"
+      },
+      "updateUnionAuthorization": {
+        "summary": "设置新组织的默认启动器登录授权",
+        "description": "仅超管 Cookie、同源。提交 autoAuthorizeNewOrganizations 和当前 revision；冲突返回 409。仅影响之后新建的组织，不修改现有授权；组织管理员可修改自己组织的 launcherLoginEnabled，必须携带 launcherLoginRevision。授权来源由 Worker 按 ALI 发现，网络或元数据失败不开放来源；取消授权立即阻止换票并失效旧来源会话。"
       }
     },
     "union": {

@@ -4,16 +4,23 @@ import sharp from "sharp";
 import type { DownloadSettings } from "./download-settings";
 import { remoteResponse, remoteSourceUrl } from "./remote-download";
 import { invariant } from "./errors";
-export type SiteResource = { bytes: Buffer; contentType: string };
-export type SiteReader = (url: string, maxBytes: number, signal: AbortSignal) => Promise<SiteResource>;
+export type SiteResource = { bytes: Buffer; contentType: string; url?: string; apiLocation?: string; status?: number; location?: string };
+export type SiteReader = (url: string, maxBytes: number, signal: AbortSignal, discovery?: { validate: (url: string) => URL; followAli: boolean }) => Promise<SiteResource>;
 export function siteReader(settings: DownloadSettings): SiteReader {
   const network = { ...settings, remoteSourceWhitelistEnabled: false };
-  return async (url, limit, signal) => {
-    const response = await remoteResponse(url, network, signal, value => remoteSourceUrl(value, network), 6000);
+  return async (url, limit, signal, discovery) => {
+    const response = await remoteResponse(url, network, signal, value => remoteSourceUrl(discovery ? discovery.validate(value).href : value, network), 6000,
+      response => response.statusCode === 200 || !!discovery?.followAli && response.headers["x-authlib-injector-api-location"] !== undefined);
     const chunks: Buffer[] = []; let size = 0;
     try {
+      const apiLocation = response.headers["x-authlib-injector-api-location"] as string | undefined;
+      const resolvedUrl = response.resolvedUrl ?? url;
+      if (discovery?.followAli && apiLocation !== undefined && new URL(apiLocation, resolvedUrl).href !== resolvedUrl) {
+        return { bytes: Buffer.alloc(0), contentType: "", url: resolvedUrl, apiLocation, status: response.statusCode };
+      }
       for await (const chunk of response) { size += chunk.length; invariant(size <= limit, 422, diagnosticText("diagnostics.unionSiteIcons.theSiteResponseExceedsTheSizeLimit")); chunks.push(Buffer.from(chunk)); }
-      return { bytes: Buffer.concat(chunks), contentType: String(response.headers["content-type"] ?? "") };
+      return { bytes: Buffer.concat(chunks), contentType: String(response.headers["content-type"] ?? ""), url: response.resolvedUrl,
+        apiLocation: response.headers["x-authlib-injector-api-location"] as string | undefined, status: response.statusCode };
     } finally { response.destroy(); }
   };
 }

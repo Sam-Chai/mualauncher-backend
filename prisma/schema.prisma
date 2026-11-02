@@ -117,6 +117,9 @@ model Organization {
   displayName     String
   description     String               @default("")
   descriptionMode String               @default("AUTO")
+  launcherLoginEnabled Boolean          @default(false)
+  launcherLoginOverrides Json           @default("{}")
+  launcherLoginRevision Int             @default(0)
   avatarObjectKey String?
   avatarMode      String               @default("AUTO")
   avatarRevision  Int                  @default(0)
@@ -257,6 +260,8 @@ model PlatformSettings {
   maxUploadSizeMb Int @default(1024)
   executionMode String @default("DOCKER_GVISOR")
   executionRevision Int @default(0)
+  autoAuthorizeNewOrganizations Boolean @default(false)
+  unionAuthorizationRevision Int @default(0)
   updatedAt            DateTime @updatedAt @db.Timestamptz(6)
 }
 
@@ -648,11 +653,12 @@ model LauncherAuthProvider {
   revision Int @default(1)
   siteRevision Int
   verificationNote String
-  verifiedById String @db.Uuid
+  managedByOrganization Boolean @default(false)
+  verifiedById String? @db.Uuid
   verifiedAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
   site UnionSkinSite @relation(fields: [siteCode], references: [code], onDelete: Restrict)
-  verifiedBy Account @relation(fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedBy Account? @relation(fields: [verifiedById], references: [id], onDelete: Restrict)
   attempts LauncherGameLoginAttempt[]
   sessions Session[]
   @@unique([siteCode, bsRoot])

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "5.2.0",
+    "version": "6.1.0",
     "description": "后台完整规范包含 Launcher、客户端自动化、后台和认证接口。文档可见性不授予业务权限；每次业务请求仍检查范围、RBAC、修订和生命周期。按上传、审核、组包、发布顺序执行，读取真实进度后再推进。"
   },
   "servers": [
@@ -5020,6 +5020,13 @@
                     "null"
                   ]
                 },
+                "launcherLoginEnabled": {
+                  "type": "boolean"
+                },
+                "launcherLoginRevision": {
+                  "type": "integer",
+                  "minimum": 0
+                },
                 "skinSites": {
                   "type": "array",
                   "items": {
@@ -5031,11 +5038,15 @@
                       "url": {
                         "type": "string",
                         "format": "uri"
+                      },
+                      "launcherLoginEnabled": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
                       "code",
-                      "url"
+                      "url",
+                      "launcherLoginEnabled"
                     ],
                     "additionalProperties": false
                   }
@@ -5355,6 +5366,8 @@
                 "description",
                 "clientCount",
                 "avatarObjectKey",
+                "launcherLoginEnabled",
+                "launcherLoginRevision",
                 "archivedAt",
                 "permissions",
                 "servers",
@@ -28801,6 +28814,41 @@
                     "type": "string",
                     "minLength": 0,
                     "maxLength": 5000
+                  },
+                  "skinSiteAuthorizations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]{0,5}$"
+                        },
+                        "url": {
+                          "type": "string",
+                          "maxLength": 2048,
+                          "format": "uri"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "url",
+                        "enabled"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 1000
+                  },
+                  "launcherLoginEnabled": {
+                    "type": "boolean"
+                  },
+                  "launcherLoginRevision": {
+                    "type": "integer",
+                    "minimum": 0
                   }
                 },
                 "additionalProperties": false
@@ -36492,6 +36540,9 @@
                       "enabled": {
                         "type": "boolean"
                       },
+                      "managedByOrganization": {
+                        "type": "boolean"
+                      },
                       "adapter": {
                         "type": "string",
                         "enum": [
@@ -36502,7 +36553,10 @@
                         "type": "string"
                       },
                       "verifiedById": {
-                        "type": "string",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
                         "format": "uuid"
                       },
                       "verifiedAt": {
@@ -36523,6 +36577,7 @@
                       "revision",
                       "siteRevision",
                       "enabled",
+                      "managedByOrganization",
                       "adapter",
                       "verificationNote",
                       "verifiedById",
@@ -37083,7 +37138,7 @@
           "Administration"
         ],
         "summary": "超管核准或停用启动器认证来源",
-        "description": "仅超管 Cookie 且同源。新建使用随机 UUID 和 revision=0，修改携带当前 revision。来源必须对应目录主地址或别名，身份 CODE/地址创建后不能改写；认证根地址固定为 bsRoot + /api/yggdrasil。须确认实际 OAuth UID 对应关系和上游日志脱敏，并记录版本/验收说明。保存递增修订，使旧来源会话失效；目录变动须重新核准。",
+        "description": "仅超管 Cookie 且同源。新建使用随机 UUID 和 revision=0，修改携带当前 revision。来源必须对应目录主地址或别名，身份 CODE/地址创建后不能改写；后端从 bsRoot 按 ALI 标准发现 authApiRoot，跟随经逐跳安全校验的 HTTPS 重定向，支持相对或绝对 X-Authlib-Injector-API-Location；没有 ALI 时使用最终响应地址，不猜测路径。启用或重新核准时解析并保存地址，发现失败返回 502，不保存变更；已有来源停用不依赖上游连通。须确认实际 OAuth UID 对应关系和上游日志脱敏，并记录版本/验收说明。保存递增修订，使旧来源会话失效；目录变动须重新核准。",
         "security": [
           {
             "SessionCookie": []
@@ -37216,6 +37271,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "managedByOrganization": {
+                      "type": "boolean"
+                    },
                     "adapter": {
                       "type": "string",
                       "enum": [
@@ -37226,7 +37284,10 @@
                       "type": "string"
                     },
                     "verifiedById": {
-                      "type": "string",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     },
                     "verifiedAt": {
@@ -37247,6 +37308,7 @@
                     "revision",
                     "siteRevision",
                     "enabled",
+                    "managedByOrganization",
                     "adapter",
                     "verificationNote",
                     "verifiedById",
@@ -37842,6 +37904,13 @@
                         "STALE"
                       ]
                     },
+                    "autoAuthorizeNewOrganizations": {
+                      "type": "boolean"
+                    },
+                    "authorizationRevision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
                     "endpoint": {
                       "type": "string",
                       "enum": [
@@ -37939,6 +38008,8 @@
                   },
                   "required": [
                     "status",
+                    "autoAuthorizeNewOrganizations",
+                    "authorizationRevision",
                     "endpoint",
                     "intervalSeconds",
                     "attemptedAt",
@@ -38560,6 +38631,746 @@
                   "required": [
                     "ok"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "参数、身份、权限、资源状态或上游响应错误。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "code",
+                    "params"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateUnionAuthorization",
+        "tags": [
+          "Administration"
+        ],
+        "summary": "设置新组织的默认启动器登录授权",
+        "description": "仅超管 Cookie、同源。提交 autoAuthorizeNewOrganizations 和当前 revision；冲突返回 409。仅影响之后新建的组织，不修改现有授权；组织管理员可修改自己组织的 launcherLoginEnabled，必须携带 launcherLoginRevision。授权来源由 Worker 按 ALI 发现，网络或元数据失败不开放来源；取消授权立即阻止换票并失效旧来源会话。",
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "x-superadmin-only": true,
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "Origin",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "autoAuthorizeNewOrganizations": {
+                    "type": "boolean"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "autoAuthorizeNewOrganizations",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功响应；权限逐请求检查。",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "WAITING",
+                        "RUNNING",
+                        "SYNCED",
+                        "PARTIAL",
+                        "ERROR",
+                        "STALE"
+                      ]
+                    },
+                    "autoAuthorizeNewOrganizations": {
+                      "type": "boolean"
+                    },
+                    "authorizationRevision": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "endpoint": {
+                      "type": "string",
+                      "enum": [
+                        "https://skin.mualliance.ltd/api/union"
+                      ]
+                    },
+                    "intervalSeconds": {
+                      "type": "number",
+                      "enum": [
+                        60
+                      ]
+                    },
+                    "attemptedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "syncedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "nextSyncAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "upstreamVersion": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "receivedCount": {
+                      "type": "integer"
+                    },
+                    "syncedCount": {
+                      "type": "integer"
+                    },
+                    "createdCount": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "issue": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "issue"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "avatars": {
+                      "type": "object",
+                      "properties": {
+                        "imported": {
+                          "type": "integer"
+                        },
+                        "pending": {
+                          "type": "integer"
+                        },
+                        "failed": {
+                          "type": "integer"
+                        },
+                        "manual": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "imported",
+                        "pending",
+                        "failed",
+                        "manual"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "autoAuthorizeNewOrganizations",
+                    "authorizationRevision",
+                    "endpoint",
+                    "intervalSeconds",
+                    "attemptedAt",
+                    "syncedAt",
+                    "nextSyncAt",
+                    "upstreamVersion",
+                    "receivedCount",
+                    "syncedCount",
+                    "createdCount",
+                    "error",
+                    "issues",
+                    "avatars"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

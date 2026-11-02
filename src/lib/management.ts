@@ -11,6 +11,8 @@ import { maxUploadSizeMb } from "./upload-size-settings";
 import { accountDirectory, credentialCreate, credentialUpdate, revokeAccountCredentials, serverSummaries, securityFunction } from "./database-security";
 import { serverMottoUrl } from "./server-motto-contract";
 import { expandRoles, organizationScope, requireOrganization, requireClient, requireServer, reservedRoles, rolePermissions, superOnly } from "./rbac";
+import { organizationLauncherAllowed } from "./organization-launcher-policy";
+import { skinSiteAuthorizationsInput } from "./organization-launcher-contract";
 
 const accountSelect = { id: true, displayName: true, status: true, isSuperAdmin: true } as const;
 const accountDto = (account: { id: string; displayName: string; status: string; isSuperAdmin: boolean }, identity?: { username: string | null; unionSubject: string | null }) =>
@@ -63,7 +65,9 @@ export async function getState(db: Db, actor: Actor) {
       return !organization.archivedAt && !client.archivedAt && (rights.includes("DRAFT_READ") || rights.includes("RELEASE_READ"));
     }).length;
     organizationDtos.push({ id: organization.id, displayName: organization.displayName, description: organization.description, clientCount,
-      ...(organization.unionSites.length ? { skinSites: organization.unionSites.flatMap(site => [site.bsRoot, ...site.bsRootAliases].map(url => ({ code: site.code, url }))) } : {}),
+      launcherLoginEnabled: organization.launcherLoginEnabled, launcherLoginRevision: organization.launcherLoginRevision,
+      ...(organization.unionSites.length ? { skinSites: organization.unionSites.flatMap(site => [site.bsRoot, ...site.bsRootAliases].map(url => ({ code: site.code, url,
+        launcherLoginEnabled: organizationLauncherAllowed(organization, site.code, url) }))) } : {}),
       avatarObjectKey: organization.avatarObjectKey, archivedAt: organization.archivedAt, permissions: [...new Set(permissions)], servers, members });
   }
   const accounts = actor.isSuperAdmin ? directory.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).map(account => accountDto(account, account)) : [];
@@ -92,19 +96,39 @@ export async function getState(db: Db, actor: Actor) {
 export async function createOrganization(db: Db, actor: Actor, raw: unknown) {
   superOnly(actor);
   const data = input.fields(raw, ["displayName", "description"]);
+  const settings = await db.platformSettings.findUnique({ where: { id: "platform" } });
   const organization = await db.organization.create({ data: { displayName: input.text(data, "displayName"),
+    launcherLoginEnabled: settings?.autoAuthorizeNewOrganizations ?? false,
     description: data.description === undefined ? "" : input.text(data, "description", 5000, false) } });
   await audit(db, actor, "ORGANIZATION_CREATE", "Organization", organization.id, organization.id);
   return { id: organization.id };
 }
 
 export async function updateOrganization(db: Db, actor: Actor, id: string, raw: unknown) {
-  await requireOrganization(db, actor, id, "ORG_EDIT");
-  const data = input.fields(raw, ["displayName", "description"]);
+  const { organization } = await requireOrganization(db, actor, id, "ORG_EDIT");
+  const data = input.fields(raw, ["displayName", "description", "launcherLoginEnabled", "launcherLoginRevision", "skinSiteAuthorizations"]);
   const update: Prisma.OrganizationUpdateInput = {};
   if ("displayName" in data) update.displayName = input.text(data, "displayName");
   if ("description" in data) update.description = input.text(data, "description", 5000, false);
-  await db.organization.update({ where: { id }, data: update });
+  if ("launcherLoginEnabled" in data || "launcherLoginRevision" in data || "skinSiteAuthorizations" in data) {
+    invariant(!("launcherLoginEnabled" in data && "skinSiteAuthorizations" in data), 400, diagnosticText("diagnostics.route.invalidRequestParameters"));
+    if ("skinSiteAuthorizations" in data) {
+      const parsed = skinSiteAuthorizationsInput.safeParse(data.skinSiteAuthorizations);
+      invariant(parsed.success, 400, diagnosticText("diagnostics.route.invalidRequestParameters"));
+      const sites = await db.unionSkinSite.findMany({ where: { organizationId: id, enabled: true }, select: { code: true, bsRoot: true, bsRootAliases: true } });
+      const allowed = new Set(sites.flatMap(site => [site.bsRoot, ...site.bsRootAliases].map(root => `${site.code}:${root}`)));
+      invariant(parsed.data.every(row => allowed.has(`${row.code}:${row.url}`)), 409, diagnosticText("diagnostics.http.theResourceHasChangedRefreshAndRetry"));
+      const overrides = { ...(organization.launcherLoginOverrides as Record<string, boolean>) };
+      for (const row of parsed.data) overrides[`${row.code}:${row.url}`] = row.enabled;
+      update.launcherLoginOverrides = overrides;
+    } else {
+      update.launcherLoginEnabled = input.bool(data, "launcherLoginEnabled");
+      update.launcherLoginOverrides = {};
+    }
+    invariant(typeof data.launcherLoginRevision === "number" && Number.isSafeInteger(data.launcherLoginRevision) && data.launcherLoginRevision >= 0, 400, diagnosticText("diagnostics.route.invalidRequestParameters"));
+    const saved = await db.organization.updateMany({ where: { id, launcherLoginRevision: data.launcherLoginRevision }, data: update });
+    invariant(saved.count === 1, 409, diagnosticText("diagnostics.http.theResourceHasChangedRefreshAndRetry"));
+  } else await db.organization.update({ where: { id }, data: update });
   await audit(db, actor, "ORGANIZATION_EDIT", "Organization", id, id, undefined, { fields: Object.keys(data) });
   return { ok: true };
 }

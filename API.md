@@ -5,14 +5,14 @@
 | 项目 | 值 |
 | --- | --- |
 | OpenAPI 标准版本 | `3.1.0` |
-| API 文档版本 | `5.2.0` |
-| 应用版本 | `0.1.0` |
-| 完整操作数 | 93 |
+| API 文档版本 | `6.1.0` |
+| 应用版本 | `0.2.0` |
+| 完整操作数 | 94 |
 | 公开规范收录操作数 | 11 |
-| 生成日期 | 2026-10-26 |
+| 生成日期 | 2026-11-02 |
 | 完整规范来源 | [docs/openapi/union-link.admin.zh-CN.json](docs/openapi/union-link.admin.zh-CN.json) |
 | 公开规范来源 | [docs/openapi/union-link.zh-CN.json](docs/openapi/union-link.zh-CN.json) |
-| 完整规范 SHA-256 | `f7a9ed73af60f4c812e7c15dcc1ba7f4eb63f99418da874d6425594c12c216ff` |
+| 完整规范 SHA-256 | `6fc00c3ea5dba81d296ccbe503b558641d8fa733478fa3df62140d5adf26ac05` |
 
 本文件按本地已校验的 OpenAPI JSON 生成，包含后台完整接口。规范中的参数、约束、响应码及权限标识原样保留；未提供的业务示例不作推测。接口说明及运行时校验仍决定跨字段、RBAC、修订和生命周期规则。
 
@@ -54,8 +54,6 @@
 | `ApiToken` | HTTP / http | `mua_<64 lowercase hex characters>` | 客户端自动化接口使用 Bearer mua_…；不是 JWT。Token 受服务器范围、权限、有效期及账号当前 RBAC 限制，不能用于后台管理接口。 |
 
 认证规则中的“或”表示任选一套认证，“且”表示同一套要求须同时满足。Cookie 会话经网站登录建立；不要将真实账号、会话 Cookie、Token 或第三方密钥写入本文。
-
-`ApiToken` 通过 `Authorization: Bearer mua_<TOKEN>` 发送，`LauncherToken` 通过 `Authorization: Bearer mul_<TOKEN>` 发送。请将占位符替换为实际签发的 Token，保持前缀和完整值。
 
 <a id="operations"></a>
 
@@ -118,7 +116,7 @@
 | `POST` | [`/api/v1/clients/{clientId}/releases/{releaseId}/activate`](#operation-activateClientRelease) | 启用或回退已有发布 | `SessionCookie` 或 `ApiToken` | 否 |
 | `GET` | [`/api/v1/clients/{clientId}/releases/{releaseId}/package`](#operation-downloadReleasePackage) | 下载发布完整包 | `SessionCookie` 或 `ApiToken` | 否 |
 
-### 后台管理（47）
+### 后台管理（48）
 
 | 方法 | 路径 | 说明 | 认证 | 公开规范 |
 | --- | --- | --- | --- | --- |
@@ -159,6 +157,7 @@
 | `PUT` | [`/api/admin/launcher-providers`](#operation-saveLauncherProvider) | 超管核准或停用启动器认证来源 | `SessionCookie` | 否 |
 | `GET` | [`/api/admin/union-sync`](#operation-getUnionSync) | 读取联盟目录同步状态 | `SessionCookie` | 否 |
 | `POST` | [`/api/admin/union-sync`](#operation-requestUnionSync) | 安排立即同步联盟目录 | `SessionCookie` | 否 |
+| `PATCH` | [`/api/admin/union-sync`](#operation-updateUnionAuthorization) | 设置新组织的默认启动器登录授权 | `SessionCookie` | 否 |
 | `GET` | [`/api/admin/organizations/{organizationId}/avatar-image`](#operation-getOrganizationAvatar) | 读取组织头像、原图或裁剪资料 | `SessionCookie` | 否 |
 | `POST` | [`/api/admin/organizations/{organizationId}/avatar-image`](#operation-uploadOrganizationAvatar) | 上传或重新裁剪组织头像 | `SessionCookie` | 否 |
 | `DELETE` | [`/api/admin/organizations/{organizationId}/avatar-image`](#operation-removeOrganizationAvatar) | 移除组织头像并保留人工选择 | `SessionCookie` | 否 |
@@ -806,8 +805,6 @@ Cookie 写请求要求同源 Origin；Bearer 写请求不要求 Origin。Authori
 | 请求体上限 | 262144 字节 |
 
 上传完整 .zip／.mrpack，不上传差分 ZIP。固定客户端 baseReleaseId 与 basePublicationRevision；更新另需 DRAFT_EDIT。comparisonDraftId 仅比较／替代未发布草稿，另需 DRAFT_ARCHIVE。格式创建后锁定，省略为 1；关闭格式返回 409，超过实时上限返回 413，最多 20 个活动上传返回 429。每片 64 MiB、会话 24 小时；创建返回上传 ID 和 partSize。
-
-> 规范差异提示：上段保留了 JSON 中“省略为 1”的原始描述，但该请求的 JSON Schema 和当前服务校验均要求必填 `packageFormatVersion`，且没有默认值。调用时应显式传入 `1` 或 `2`。
 
 Cookie 写请求要求同源 Origin；Bearer 写请求不要求 Origin。Authorization 存在时只采用 Bearer，错误 Token 不回退 Cookie。请求必须包含 JSON，忽略正文的操作推荐 {}。
 
@@ -3126,7 +3123,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | 规范范围 | 完整规范 |
 | 仅超管 | 是 |
 
-仅超管 Cookie 且同源。新建使用随机 UUID 和 revision=0，修改携带当前 revision。来源必须对应目录主地址或别名，身份 CODE/地址创建后不能改写；认证根地址固定为 bsRoot + /api/yggdrasil。须确认实际 OAuth UID 对应关系和上游日志脱敏，并记录版本/验收说明。保存递增修订，使旧来源会话失效；目录变动须重新核准。
+仅超管 Cookie 且同源。新建使用随机 UUID 和 revision=0，修改携带当前 revision。来源必须对应目录主地址或别名，身份 CODE/地址创建后不能改写；后端从 bsRoot 按 ALI 标准发现 authApiRoot，跟随经逐跳安全校验的 HTTPS 重定向，支持相对或绝对 X-Authlib-Injector-API-Location；没有 ALI 时使用最终响应地址，不猜测路径。启用或重新核准时解析并保存地址，发现失败返回 502，不保存变更；已有来源停用不依赖上游连通。须确认实际 OAuth UID 对应关系和上游日志脱敏，并记录版本/验收说明。保存递增修订，使旧来源会话失效；目录变动须重新核准。
 
 ##### 参数
 
@@ -3240,6 +3237,49 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 
+<a id="operation-updateUnionAuthorization"></a>
+
+#### PATCH `/api/admin/union-sync` — 设置新组织的默认启动器登录授权
+
+| 项目 | 要求 |
+| --- | --- |
+| 操作 ID | `updateUnionAuthorization` |
+| 认证 | `SessionCookie` |
+| 规范范围 | 完整规范 |
+| 仅超管 | 是 |
+
+仅超管 Cookie、同源。提交 autoAuthorizeNewOrganizations 和当前 revision；冲突返回 409。仅影响之后新建的组织，不修改现有授权；组织管理员可修改自己组织的 launcherLoginEnabled，必须携带 launcherLoginRevision。授权来源由 Worker 按 ALI 发现，网络或元数据失败不开放来源；取消授权立即阻止换票并失效旧来源会话。
+
+##### 参数
+
+| 名称 | 位置 | 必填 | 类型 | 约束 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `Origin` | `header` | 是 | string |  |  |
+
+##### 请求体
+
+必填：是。
+
+- Content-Type：`application/json`；结构：[updateUnionAuthorization 请求体](#schema-inline-74)。
+
+##### 响应
+
+| HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
+| --- | --- | --- | --- |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getUnionSync 200 响应](#schema-inline-72) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
+
 <a id="operation-getOrganizationAvatar"></a>
 
 #### GET `/api/admin/organizations/{organizationId}/avatar-image` — 读取组织头像、原图或裁剪资料
@@ -3269,7 +3309,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getOrganizationAvatar 200 响应](#schema-inline-74)<br>`image/webp` → [getServerMotto 200 响应](#schema-inline-65) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getOrganizationAvatar 200 响应](#schema-inline-75)<br>`image/webp` → [getServerMotto 200 响应](#schema-inline-65) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3307,13 +3347,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`multipart/form-data`；结构：[uploadOrganizationAvatar 请求体](#schema-inline-75)。
+- Content-Type：`multipart/form-data`；结构：[uploadOrganizationAvatar 请求体](#schema-inline-76)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [uploadOrganizationAvatar 200 响应](#schema-inline-76) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [uploadOrganizationAvatar 200 响应](#schema-inline-77) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3351,13 +3391,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[removeOrganizationAvatar 请求体](#schema-inline-77)。
+- Content-Type：`application/json`；结构：[removeOrganizationAvatar 请求体](#schema-inline-78)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [uploadOrganizationAvatar 200 响应](#schema-inline-76) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [uploadOrganizationAvatar 200 响应](#schema-inline-77) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3396,7 +3436,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [listUnionSites 200 响应](#schema-inline-78) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [listUnionSites 200 响应](#schema-inline-79) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3433,13 +3473,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[saveUnionSite 请求体](#schema-inline-79)。
+- Content-Type：`application/json`；结构：[saveUnionSite 请求体](#schema-inline-80)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [saveUnionSite 200 响应](#schema-inline-80) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [saveUnionSite 200 响应](#schema-inline-81) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3481,7 +3521,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getAccessCandidates 200 响应](#schema-inline-81) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getAccessCandidates 200 响应](#schema-inline-82) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3520,7 +3560,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [listAccessRequests 200 响应](#schema-inline-82) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [listAccessRequests 200 响应](#schema-inline-83) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3557,7 +3597,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[submitAccessRequest 请求体](#schema-inline-83)。
+- Content-Type：`application/json`；结构：[submitAccessRequest 请求体](#schema-inline-84)。
 
 ##### 响应
 
@@ -3601,7 +3641,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[decideAccessRequest 请求体](#schema-inline-84)。
+- Content-Type：`application/json`；结构：[decideAccessRequest 请求体](#schema-inline-85)。
 
 ##### 响应
 
@@ -3645,7 +3685,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[revokeAccessGrant 请求体](#schema-inline-85)。
+- Content-Type：`application/json`；结构：[revokeAccessGrant 请求体](#schema-inline-86)。
 
 ##### 响应
 
@@ -3692,19 +3732,19 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [listLauncherProviders 200 响应](#schema-inline-86) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [listLauncherProviders 200 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
 
 <a id="operation-startLauncherGameLogin"></a>
 
@@ -3728,25 +3768,25 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[startLauncherGameLogin 请求体](#schema-inline-88)。
+- Content-Type：`application/json`；结构：[startLauncherGameLogin 请求体](#schema-inline-89)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `201` | 成功响应；权限逐请求检查。 | `application/json` → [startLauncherGameLogin 201 响应](#schema-inline-89) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `201` | 成功响应；权限逐请求检查。 | `application/json` → [startLauncherGameLogin 201 响应](#schema-inline-90) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
 
 <a id="operation-exchangeLauncherGameLogin"></a>
 
@@ -3770,25 +3810,25 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[exchangeLauncherGameLogin 请求体](#schema-inline-90)。
+- Content-Type：`application/json`；结构：[exchangeLauncherGameLogin 请求体](#schema-inline-91)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [exchangeLauncherGameLogin 200 响应](#schema-inline-91) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-87) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [exchangeLauncherGameLogin 200 响应](#schema-inline-92) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `404` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `409` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `413` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `415` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `422` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `429` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `500` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `502` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `503` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [listLauncherProviders 400 响应](#schema-inline-88) | `Cache-Control`：string；固定值：`"private, no-store"` |
 
 <a id="operation-startLauncherLogin"></a>
 
@@ -3811,13 +3851,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[startLauncherLogin 请求体](#schema-inline-92)。
+- Content-Type：`application/json`；结构：[startLauncherLogin 请求体](#schema-inline-93)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `201` | 成功响应；权限逐请求检查。 | `application/json` → [startLauncherLogin 201 响应](#schema-inline-93) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `201` | 成功响应；权限逐请求检查。 | `application/json` → [startLauncherLogin 201 响应](#schema-inline-94) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3852,14 +3892,14 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[claimLauncherLogin 请求体](#schema-inline-94)。
+- Content-Type：`application/json`；结构：[claimLauncherLogin 请求体](#schema-inline-95)。
 
 ##### 响应
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [claimLauncherLogin 200 响应](#schema-inline-95) | `Cache-Control`：string；固定值：`"private, no-store"` |
-| `202` | 成功响应；权限逐请求检查。 | `application/json` → [claimLauncherLogin 200 响应](#schema-inline-95) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [claimLauncherLogin 200 响应](#schema-inline-96) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `202` | 成功响应；权限逐请求检查。 | `application/json` → [claimLauncherLogin 200 响应](#schema-inline-96) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -3937,7 +3977,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | HTTP 状态 | 说明 | Content-Type / 数据模型 | 响应头 |
 | --- | --- | --- | --- |
-| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getMemberDirectory 200 响应](#schema-inline-96) | `Cache-Control`：string；固定值：`"private, no-store"` |
+| `200` | 成功响应；权限逐请求检查。 | `application/json` → [getMemberDirectory 200 响应](#schema-inline-97) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `400` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `401` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
 | `403` | 参数、身份、权限、资源状态或上游响应错误。 | `application/json` → [Error](#schema-error) | `Cache-Control`：string；固定值：`"private, no-store"` |
@@ -4024,7 +4064,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[login 请求体](#schema-inline-97)。
+- Content-Type：`application/json`；结构：[login 请求体](#schema-inline-98)。
 
 ##### 响应
 
@@ -4116,7 +4156,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 必填：是。
 
-- Content-Type：`application/json`；结构：[changePassword 请求体](#schema-inline-98)。
+- Content-Type：`application/json`；结构：[changePassword 请求体](#schema-inline-99)。
 
 ##### 响应
 
@@ -4276,7 +4316,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 | 模型 | 类型 | 直接引用接口数 |
 | --- | --- | --- |
-| [Error](#schema-error) | object | 90 |
+| [Error](#schema-error) | object | 91 |
 | [ServerDirectory](#schema-serverdirectory) | object | 1 |
 | [ClientManifest](#schema-clientmanifest) | object | 0 |
 | [RecipeManifest](#schema-recipemanifest) | object | 0 |
@@ -4347,33 +4387,34 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | [listLauncherProvidersAdmin 200 响应](#schema-inline-69) | array：object | 1 |
 | [saveLauncherProvider 请求体](#schema-inline-70) | object | 1 |
 | [saveLauncherProvider 200 响应](#schema-inline-71) | object | 1 |
-| [getUnionSync 200 响应](#schema-inline-72) | object | 1 |
+| [getUnionSync 200 响应](#schema-inline-72) | object | 2 |
 | [requestUnionSync 200 响应](#schema-inline-73) | object | 5 |
-| [getOrganizationAvatar 200 响应](#schema-inline-74) | object | 1 |
-| [uploadOrganizationAvatar 请求体](#schema-inline-75) | object | 1 |
-| [uploadOrganizationAvatar 200 响应](#schema-inline-76) | object | 2 |
-| [removeOrganizationAvatar 请求体](#schema-inline-77) | object | 1 |
-| [listUnionSites 200 响应](#schema-inline-78) | array：object | 1 |
-| [saveUnionSite 请求体](#schema-inline-79) | object | 1 |
-| [saveUnionSite 200 响应](#schema-inline-80) | object | 1 |
-| [getAccessCandidates 200 响应](#schema-inline-81) | anyOf（2 个分支） | 1 |
-| [listAccessRequests 200 响应](#schema-inline-82) | object | 1 |
-| [submitAccessRequest 请求体](#schema-inline-83) | object | 1 |
-| [decideAccessRequest 请求体](#schema-inline-84) | object | 1 |
-| [revokeAccessGrant 请求体](#schema-inline-85) | object | 1 |
-| [listLauncherProviders 200 响应](#schema-inline-86) | array：object | 1 |
-| [listLauncherProviders 400 响应](#schema-inline-87) | object | 3 |
-| [startLauncherGameLogin 请求体](#schema-inline-88) | object | 1 |
-| [startLauncherGameLogin 201 响应](#schema-inline-89) | object | 1 |
-| [exchangeLauncherGameLogin 请求体](#schema-inline-90) | object | 1 |
-| [exchangeLauncherGameLogin 200 响应](#schema-inline-91) | object | 1 |
-| [startLauncherLogin 请求体](#schema-inline-92) | object | 1 |
-| [startLauncherLogin 201 响应](#schema-inline-93) | object | 1 |
-| [claimLauncherLogin 请求体](#schema-inline-94) | object | 1 |
-| [claimLauncherLogin 200 响应](#schema-inline-95) | anyOf（2 个分支） | 1 |
-| [getMemberDirectory 200 响应](#schema-inline-96) | object | 1 |
-| [login 请求体](#schema-inline-97) | object | 1 |
-| [changePassword 请求体](#schema-inline-98) | object | 1 |
+| [updateUnionAuthorization 请求体](#schema-inline-74) | object | 1 |
+| [getOrganizationAvatar 200 响应](#schema-inline-75) | object | 1 |
+| [uploadOrganizationAvatar 请求体](#schema-inline-76) | object | 1 |
+| [uploadOrganizationAvatar 200 响应](#schema-inline-77) | object | 2 |
+| [removeOrganizationAvatar 请求体](#schema-inline-78) | object | 1 |
+| [listUnionSites 200 响应](#schema-inline-79) | array：object | 1 |
+| [saveUnionSite 请求体](#schema-inline-80) | object | 1 |
+| [saveUnionSite 200 响应](#schema-inline-81) | object | 1 |
+| [getAccessCandidates 200 响应](#schema-inline-82) | anyOf（2 个分支） | 1 |
+| [listAccessRequests 200 响应](#schema-inline-83) | object | 1 |
+| [submitAccessRequest 请求体](#schema-inline-84) | object | 1 |
+| [decideAccessRequest 请求体](#schema-inline-85) | object | 1 |
+| [revokeAccessGrant 请求体](#schema-inline-86) | object | 1 |
+| [listLauncherProviders 200 响应](#schema-inline-87) | array：object | 1 |
+| [listLauncherProviders 400 响应](#schema-inline-88) | object | 3 |
+| [startLauncherGameLogin 请求体](#schema-inline-89) | object | 1 |
+| [startLauncherGameLogin 201 响应](#schema-inline-90) | object | 1 |
+| [exchangeLauncherGameLogin 请求体](#schema-inline-91) | object | 1 |
+| [exchangeLauncherGameLogin 200 响应](#schema-inline-92) | object | 1 |
+| [startLauncherLogin 请求体](#schema-inline-93) | object | 1 |
+| [startLauncherLogin 201 响应](#schema-inline-94) | object | 1 |
+| [claimLauncherLogin 请求体](#schema-inline-95) | object | 1 |
+| [claimLauncherLogin 200 响应](#schema-inline-96) | anyOf（2 个分支） | 1 |
+| [getMemberDirectory 200 响应](#schema-inline-97) | object | 1 |
+| [login 请求体](#schema-inline-98) | object | 1 |
+| [changePassword 请求体](#schema-inline-99) | object | 1 |
 
 <a id="schema-error"></a>
 
@@ -10277,10 +10318,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | `organizations[].description` | string | 是 |  |  |
 | `organizations[].clientCount` | integer | 是 | 最小值（含）：`0` |  |
 | `organizations[].avatarObjectKey` | string / null | 是 |  |  |
+| `organizations[].launcherLoginEnabled` | boolean | 是 |  |  |
+| `organizations[].launcherLoginRevision` | integer | 是 | 最小值（含）：`0` |  |
 | `organizations[].skinSites` | array：object | 否 |  |  |
 | `organizations[].skinSites[]` | object | 每个元素 | 不接受额外字段 |  |
 | `organizations[].skinSites[].code` | string | 是 |  |  |
 | `organizations[].skinSites[].url` | string (uri) | 是 |  |  |
+| `organizations[].skinSites[].launcherLoginEnabled` | boolean | 是 |  |  |
 | `organizations[].archivedAt` | string / null (date-time) | 是 |  |  |
 | `organizations[].permissions` | array：string | 是 |  |  |
 | `organizations[].permissions[]` | string | 每个元素 | 可选值：`["SERVER_READ","SERVER_EDIT","DRAFT_READ","DRAFT_CREATE","DRAFT_EDIT","DRAFT_SUBMIT","DRAFT_ARCHIVE","RELEASE_READ","ORG_EDIT","ORG_MEMBERS_READ","ORG_MEMBERS_MANAGE","CLIENT_ARCHIVE","CLIENT_DELETE","CLIENT_BIND","DRAFT_REVIEW","RELEASE_PUBLISH","RELEASE_ACTIVATE"]` |  |
@@ -10418,6 +10462,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
               "null"
             ]
           },
+          "launcherLoginEnabled": {
+            "type": "boolean"
+          },
+          "launcherLoginRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
           "skinSites": {
             "type": "array",
             "items": {
@@ -10429,11 +10480,15 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
                 "url": {
                   "type": "string",
                   "format": "uri"
+                },
+                "launcherLoginEnabled": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "code",
-                "url"
+                "url",
+                "launcherLoginEnabled"
               ],
               "additionalProperties": false
             }
@@ -10753,6 +10808,8 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
           "description",
           "clientCount",
           "avatarObjectKey",
+          "launcherLoginEnabled",
+          "launcherLoginRevision",
           "archivedAt",
           "permissions",
           "servers",
@@ -18815,6 +18872,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | `$` | object | — | 不接受额外字段 |  |
 | `displayName` | string | 否 | 最短长度：`1`<br>最长长度：`200` |  |
 | `description` | string | 否 | 最短长度：`0`<br>最长长度：`5000` |  |
+| `skinSiteAuthorizations` | array：object | 否 | 最少元素：`1`<br>最多元素：`1000` |  |
+| `skinSiteAuthorizations[]` | object | 每个元素 | 不接受额外字段 |  |
+| `skinSiteAuthorizations[].code` | string | 是 | 正则：`"^[A-Z][A-Z0-9]{0,5}$"` |  |
+| `skinSiteAuthorizations[].url` | string (uri) | 是 | 最长长度：`2048` |  |
+| `skinSiteAuthorizations[].enabled` | boolean | 是 |  |  |
+| `launcherLoginEnabled` | boolean | 否 |  |  |
+| `launcherLoginRevision` | integer | 否 | 最小值（含）：`0` |  |
 
 <details>
 <summary>完整 JSON Schema</summary>
@@ -18832,6 +18896,41 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
       "type": "string",
       "minLength": 0,
       "maxLength": 5000
+    },
+    "skinSiteAuthorizations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{0,5}$"
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "uri"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "url",
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 1000
+    },
+    "launcherLoginEnabled": {
+      "type": "boolean"
+    },
+    "launcherLoginRevision": {
+      "type": "integer",
+      "minimum": 0
     }
   },
   "additionalProperties": false
@@ -19790,9 +19889,10 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | `$[].revision` | integer | 是 |  |  |
 | `$[].siteRevision` | integer | 是 |  |  |
 | `$[].enabled` | boolean | 是 |  |  |
+| `$[].managedByOrganization` | boolean | 是 |  |  |
 | `$[].adapter` | string | 是 | 可选值：`["MUA_YGGC_ONLINE_V1"]` |  |
 | `$[].verificationNote` | string | 是 |  |  |
-| `$[].verifiedById` | string (uuid) | 是 |  |  |
+| `$[].verifiedById` | string / null (uuid) | 是 |  |  |
 | `$[].verifiedAt` | string (date-time) | 是 |  |  |
 | `$[].updatedAt` | string (date-time) | 是 |  |  |
 
@@ -19832,6 +19932,9 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
       "enabled": {
         "type": "boolean"
       },
+      "managedByOrganization": {
+        "type": "boolean"
+      },
       "adapter": {
         "type": "string",
         "enum": [
@@ -19842,7 +19945,10 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
         "type": "string"
       },
       "verifiedById": {
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "format": "uuid"
       },
       "verifiedAt": {
@@ -19863,6 +19969,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
       "revision",
       "siteRevision",
       "enabled",
+      "managedByOrganization",
       "adapter",
       "verificationNote",
       "verifiedById",
@@ -19983,9 +20090,10 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | `revision` | integer | 是 |  |  |
 | `siteRevision` | integer | 是 |  |  |
 | `enabled` | boolean | 是 |  |  |
+| `managedByOrganization` | boolean | 是 |  |  |
 | `adapter` | string | 是 | 可选值：`["MUA_YGGC_ONLINE_V1"]` |  |
 | `verificationNote` | string | 是 |  |  |
-| `verifiedById` | string (uuid) | 是 |  |  |
+| `verifiedById` | string / null (uuid) | 是 |  |  |
 | `verifiedAt` | string (date-time) | 是 |  |  |
 | `updatedAt` | string (date-time) | 是 |  |  |
 
@@ -20023,6 +20131,9 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
     "enabled": {
       "type": "boolean"
     },
+    "managedByOrganization": {
+      "type": "boolean"
+    },
     "adapter": {
       "type": "string",
       "enum": [
@@ -20033,7 +20144,10 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
       "type": "string"
     },
     "verifiedById": {
-      "type": "string",
+      "type": [
+        "string",
+        "null"
+      ],
       "format": "uuid"
     },
     "verifiedAt": {
@@ -20054,6 +20168,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
     "revision",
     "siteRevision",
     "enabled",
+    "managedByOrganization",
     "adapter",
     "verificationNote",
     "verifiedById",
@@ -20074,6 +20189,8 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | --- | --- | --- | --- | --- |
 | `$` | object | — | 不接受额外字段 |  |
 | `status` | string | 是 | 可选值：`["WAITING","RUNNING","SYNCED","PARTIAL","ERROR","STALE"]` |  |
+| `autoAuthorizeNewOrganizations` | boolean | 是 |  |  |
+| `authorizationRevision` | integer | 是 | 最小值（含）：`0` |  |
 | `endpoint` | string | 是 | 可选值：`["https://skin.mualliance.ltd/api/union"]` |  |
 | `intervalSeconds` | number | 是 | 可选值：`[60]` |  |
 | `attemptedAt` | string / null | 是 |  |  |
@@ -20111,6 +20228,13 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
         "ERROR",
         "STALE"
       ]
+    },
+    "autoAuthorizeNewOrganizations": {
+      "type": "boolean"
+    },
+    "authorizationRevision": {
+      "type": "integer",
+      "minimum": 0
     },
     "endpoint": {
       "type": "string",
@@ -20209,6 +20333,8 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
   },
   "required": [
     "status",
+    "autoAuthorizeNewOrganizations",
+    "authorizationRevision",
     "endpoint",
     "intervalSeconds",
     "attemptedAt",
@@ -20260,6 +20386,41 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 </details>
 
 <a id="schema-inline-74"></a>
+
+### updateUnionAuthorization 请求体
+
+| 字段 | 类型 / 模型 | 必填 | 约束 | 说明 |
+| --- | --- | --- | --- | --- |
+| `$` | object | — | 不接受额外字段 |  |
+| `autoAuthorizeNewOrganizations` | boolean | 是 |  |  |
+| `revision` | integer | 是 | 最小值（含）：`0` |  |
+
+<details>
+<summary>完整 JSON Schema</summary>
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "autoAuthorizeNewOrganizations": {
+      "type": "boolean"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "autoAuthorizeNewOrganizations",
+    "revision"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+<a id="schema-inline-75"></a>
 
 ### getOrganizationAvatar 200 响应
 
@@ -20381,7 +20542,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-75"></a>
+<a id="schema-inline-76"></a>
 
 ### uploadOrganizationAvatar 请求体
 
@@ -20421,7 +20582,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-76"></a>
+<a id="schema-inline-77"></a>
 
 ### uploadOrganizationAvatar 200 响应
 
@@ -20458,7 +20619,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-77"></a>
+<a id="schema-inline-78"></a>
 
 ### removeOrganizationAvatar 请求体
 
@@ -20488,7 +20649,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-78"></a>
+<a id="schema-inline-79"></a>
 
 ### listUnionSites 200 响应
 
@@ -20550,7 +20711,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-79"></a>
+<a id="schema-inline-80"></a>
 
 ### saveUnionSite 请求体
 
@@ -20603,7 +20764,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-80"></a>
+<a id="schema-inline-81"></a>
 
 ### saveUnionSite 200 响应
 
@@ -20662,7 +20823,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-81"></a>
+<a id="schema-inline-82"></a>
 
 ### getAccessCandidates 200 响应
 
@@ -21035,7 +21196,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-82"></a>
+<a id="schema-inline-83"></a>
 
 ### listAccessRequests 200 响应
 
@@ -21287,7 +21448,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-83"></a>
+<a id="schema-inline-84"></a>
 
 ### submitAccessRequest 请求体
 
@@ -21353,7 +21514,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-84"></a>
+<a id="schema-inline-85"></a>
 
 ### decideAccessRequest 请求体
 
@@ -21399,7 +21560,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-85"></a>
+<a id="schema-inline-86"></a>
 
 ### revokeAccessGrant 请求体
 
@@ -21430,7 +21591,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-86"></a>
+<a id="schema-inline-87"></a>
 
 ### listLauncherProviders 200 响应
 
@@ -21507,7 +21668,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-87"></a>
+<a id="schema-inline-88"></a>
 
 ### listLauncherProviders 400 响应
 
@@ -21565,7 +21726,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-88"></a>
+<a id="schema-inline-89"></a>
 
 ### startLauncherGameLogin 请求体
 
@@ -21609,7 +21770,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-89"></a>
+<a id="schema-inline-90"></a>
 
 ### startLauncherGameLogin 201 响应
 
@@ -21663,7 +21824,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-90"></a>
+<a id="schema-inline-91"></a>
 
 ### exchangeLauncherGameLogin 请求体
 
@@ -21741,7 +21902,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-91"></a>
+<a id="schema-inline-92"></a>
 
 ### exchangeLauncherGameLogin 200 响应
 
@@ -21843,7 +22004,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-92"></a>
+<a id="schema-inline-93"></a>
 
 ### startLauncherLogin 请求体
 
@@ -21873,7 +22034,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-93"></a>
+<a id="schema-inline-94"></a>
 
 ### startLauncherLogin 201 响应
 
@@ -21915,7 +22076,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-94"></a>
+<a id="schema-inline-95"></a>
 
 ### claimLauncherLogin 请求体
 
@@ -21951,7 +22112,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-95"></a>
+<a id="schema-inline-96"></a>
 
 ### claimLauncherLogin 200 响应
 
@@ -22017,7 +22178,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-96"></a>
+<a id="schema-inline-97"></a>
 
 ### getMemberDirectory 200 响应
 
@@ -22422,7 +22583,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-97"></a>
+<a id="schema-inline-98"></a>
 
 ### login 请求体
 
@@ -22463,7 +22624,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 
 </details>
 
-<a id="schema-inline-98"></a>
+<a id="schema-inline-99"></a>
 
 ### changePassword 请求体
 

@@ -1,5 +1,17 @@
 # OpenAPI 兼容性记录
 
+## 6.1.0 · 2026-11-02 按皮肤站地址独立授权
+
+后台组织 skinSites 的每项增加 launcherLoginEnabled，组织 PATCH 增加可选 skinSiteAuthorizations（CODE／url／enabled 数组，配合 launcherLoginRevision）。旧组织开关写法继续作为全地址设置；不与新数组混用。YITUEM 两地址分别显示、修改与撤销，取消一个地址不影响另一个来源的会话，即使解析到同一 API。新迁移以原组织授权作为各地址初值，不批量改变授权；Worker、手动核准和 SQL 有效性查询使用同一地址规则，抓取快照仍按组织修订防止竞态。新增可选请求及 DTO 字段已审查，版本 6.1.0，保留 6.0.0 基线，完整 94／公开 11、34 张 FORCE RLS 表不变。仅本地实施，见 [组织授权](organization-launcher-authorization.md)。
+
+## 6.0.0 · 2026-11-02 组织启动器登录授权
+
+新增超管 Cookie 专用 `PATCH /api/admin/union-sync`（默认授权与乐观修订），GET 同步状态和后台组织 DTO 增加授权字段，组织 PATCH 可携带 launcherLoginEnabled＋launcherLoginRevision。组织管理员仅修改本组织，超管管理全局默认；默认只影响新建组织，取消授权立即失效来源会话且重新启用不恢复旧 Token。Worker 按 ALI 为授权组织维护自动来源，保留超管手动来源覆盖；自动记录的 verifiedById 可为 null，新增 managedByOrganization，明确不代表完整 UID／日志验收。以上后台响应及认证语义变化按大版本记录，完整 94／公开 11，保留全部历史基线。迁移 `202611020002_organization_launcher_authorization`，仍 34 张 FORCE RLS 表，历史发布签名不改。见 [组织授权](organization-launcher-authorization.md)。
+
+## 5.2.0 ALI 地址发现修正 · 2026-11-02
+
+核准换票来源改为从目录 bsRoot 按标准 ALI 发现认证根地址，支持 HTTPS 重定向及相对／绝对 ALI，不再猜测路径。已有来源停用仍无需访问上游；启用或重新核准发现失败返回现有 502 诊断且不保存。接口字段、认证及操作数不变（完整 93／公开 11），保持 5.2.0 和历史基线，更新中英文说明与源码指纹。Worker 名称同步共用解析器。新增迁移 `202611020001_yggdrasil_ali`：解除固定地址等式、停用并递增既有来源修订，待重新核准；不改变历史发布签名。此次仅本地实现，未部署远端。
+
 ## 5.2.0 依赖升级兼容 · 2026-10-25
 
 Zod 4 和新版生成器替换原依赖，修复注册时的扩展加载顺序及 RegExp 标志序列化问题；更新源码摘要和中英文产物。仅生成结构去除了重复的 anyOf null 分支，兼容性工具按等价语义归一化完全相同的 anyOf 分支；oneOf 及真实字段／nullable／认证／权限变化仍受检查。保留 5.2.0 和所有历史基线，完整 93／公开 11，无新增迁移或业务字段。现有共享配额不变，见 [整改与验收](dependency-security.md)。
