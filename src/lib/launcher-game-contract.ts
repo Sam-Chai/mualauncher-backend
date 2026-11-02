@@ -26,4 +26,18 @@ export const launcherProviderRecord = z.object({ id, siteCode: z.string(), displ
 export const gameLoginStartResult = z.object({ attemptId: id, nonce: z.string(), expiresIn: z.literal(120), providerId: id, providerRevision: z.number().int() }).strict();
 export const gameLoginExchangeResult = z.object({ tokenType: z.literal("Bearer"), token: z.string().regex(/^mul_[a-f0-9]{64}$/), expiresAt: z.string().datetime(), expiresIn: z.number().int().positive().max(900),
   account: z.object({ id, unionSubject: z.string() }).strict(), gameProfile: z.object({ id: z.string().regex(/^[a-f0-9]{32}$/), name: profileName }).strict(), providerId: id }).strict();
-export const gameLoginErrorSchema = z.object({ error: z.string(), code: z.string(), params: z.record(z.string(), z.union([z.string(), z.number()])), requestId: z.string().uuid() }).strict();
+export const gameTokenClaimErrorCodes = {
+  sub: "GAME_TOKEN_SUBJECT_UNSUPPORTED",
+  selectedProfile: "GAME_TOKEN_PROFILE_INVALID",
+  exp: "GAME_TOKEN_EXPIRY_INVALID",
+  nbf: "GAME_TOKEN_NOT_BEFORE_INVALID",
+  iat: "GAME_TOKEN_ISSUED_AT_INVALID",
+  aud: "GAME_TOKEN_AUDIENCE_INVALID",
+  jti: "GAME_TOKEN_ID_INVALID",
+} as const;
+export const gameIdentityErrorCodes = ["PROVIDER_ADAPTER_UNSUPPORTED", "GAME_TOKEN_FORMAT_UNSUPPORTED",
+  "GAME_TOKEN_ALGORITHM_UNSUPPORTED", "GAME_TOKEN_HEADER_UNSUPPORTED", "GAME_TOKEN_ISSUER_UNSUPPORTED",
+  ...Object.values(gameTokenClaimErrorCodes)] as const;
+export const gameLoginErrorSchema = z.object({ error: z.string(), code: z.string().describe(
+  `Stable diagnostics.game.* key. Identity proof failures: ${gameIdentityErrorCodes.join(", ")}.`),
+  params: z.record(z.string(), z.union([z.string(), z.number()])), requestId: z.string().uuid() }).strict();

@@ -268,7 +268,7 @@ attempt 状态：`PENDING → VERIFYING → CONSUMED`，失败进入 `FAILED`，
 | 409 | `PROFILE_MISMATCH` / `PROFILE_CHANGED` / `PROVIDER_CHANGED` / `LOGIN_ATTEMPT_USED` | 重新确认角色、站点或新建尝试 |
 | 413 / 415 | `REQUEST_TOO_LARGE` / `JSON_REQUIRED` | 修正客户端实现 |
 | 429 | `RATE_LIMITED` | 按 `Retry-After` 等待，停止高频重试 |
-| 502 / 503 | `UPSTREAM_UNAVAILABLE` / `IDENTITY_PROOF_UNSUPPORTED` | 保留游戏登录状态，显示本站登录失败及浏览器入口 |
+| 502 / 503 | `UPSTREAM_UNAVAILABLE` / [身份格式细分错误](launcher-game-token-exchange.md#身份格式错误) | 保留游戏登录状态，显示本站登录失败及浏览器入口 |
 
 统一 JSON 错误结构为 `{ "error": "可本地化提示", "code": "稳定错误码", "requestId": "随机追踪ID" }`；这是新接口合同，不据此宣称当前所有 API 已支持业务错误码。
 

@@ -139,6 +139,17 @@ test("exchange creates a PLAYER LAUNCHER session and preserves OAuth identity ac
   assert.equal(await owner.unionIdentity.count(), 1);
   assert(!JSON.stringify(second).includes("textures"));
 });
+test("fractional Passport dates survive exchange, short session expiry and database persistence", async () => {
+  const input = await attempt(), now = Math.floor(Date.now() / 1000), exp = now + 180.125;
+  input.gameAccessToken = await new SignJWT({ sub: "123", selectedProfile: profileA, aud: "passport-client", jti: randomUUID(),
+    exp, iat: now - 0.125, nbf: now - 0.125 }).setProtectedHeader({ alg: "RS256" }).sign(keys.privateKey);
+  const issued = await exchangeGameLogin(input, transport);
+  assert.equal(issued.expiresAt, new Date(exp * 1000 - 30_000).toISOString());
+  const session = await owner.session.findFirstOrThrow({ where: { gameLoginAttemptId: input.attemptId } });
+  assert.equal(session.upstreamExpiresAt?.getTime(), exp * 1000);
+  assert.equal(session.expiresAt.toISOString(), issued.expiresAt);
+});
+
 test("online validation rejects forged tokens and other-account profile ownership", async () => {
   const input = await attempt(); input.gameAccessToken = input.gameAccessToken.slice(0, -8) + "tampered";
   await assert.rejects(exchangeGameLogin(input, transport), (e: unknown) => e instanceof GameLoginError && e.code === "GAME_TOKEN_INVALID");
@@ -151,9 +162,9 @@ test("online validation rejects forged tokens and other-account profile ownershi
 test("claims, public profile and redirects alone never prove identity", async () => {
   const input = await attempt();
   await assert.rejects(verifyGameIdentity(provider, input, async () => ({ status: 302, bytes: Buffer.alloc(0), contentType: "" })), /UPSTREAM_UNAVAILABLE/);
-  await assert.rejects(verifyGameIdentity(provider, { ...input, gameAccessToken: "opaque-legacy-token" }, async () => ({ status: 204, bytes: Buffer.alloc(0), contentType: "" })), /IDENTITY_PROOF_UNSUPPORTED/);
-  await assert.rejects(verifyGameIdentity(provider, { ...input, gameAccessToken: await token(profileA, "123", { iss: "unapproved-issuer" }) }, transport), /IDENTITY_PROOF_UNSUPPORTED/);
-  await assert.rejects(verifyGameIdentity(provider, { ...input, gameAccessToken: await token(profileA, "derived-user-uuid") }, async () => ({ status: 204, bytes: Buffer.alloc(0), contentType: "" })), /IDENTITY_PROOF_UNSUPPORTED/);
+  await assert.rejects(verifyGameIdentity(provider, { ...input, gameAccessToken: "opaque-legacy-token" }, async () => ({ status: 204, bytes: Buffer.alloc(0), contentType: "" })), /GAME_TOKEN_FORMAT_UNSUPPORTED/);
+  await assert.rejects(verifyGameIdentity(provider, { ...input, gameAccessToken: await token(profileA, "123", { iss: "unapproved-issuer" }) }, transport), /GAME_TOKEN_ISSUER_UNSUPPORTED/);
+  await assert.rejects(verifyGameIdentity(provider, { ...input, gameAccessToken: await token(profileA, "derived-user-uuid") }, async () => ({ status: 204, bytes: Buffer.alloc(0), contentType: "" })), /GAME_TOKEN_SUBJECT_UNSUPPORTED/);
   const altered: GameTransport = async (u,b,s) => b ? transport(u,b,s) : { status: 200, bytes: Buffer.from(JSON.stringify({ id: other, name: "Other" })), contentType: "application/json" };
   await assert.rejects(verifyGameIdentity(provider, input, altered), /PROFILE_MISMATCH/);
   await assert.rejects(verifyGameIdentity(provider, { ...input, gameProfile: { ...input.gameProfile, name: "forged name" } }, transport), /PROFILE_CHANGED/);

@@ -10,6 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## MUA Launcher 项目约定
 
+- 2026-11-03 Launcher 身份校验：Passport JWT 的 exp／iat／nbf 接受有限小数秒 NumericDate，保留过期、时钟偏差及角色归属校验。原合并身份格式错误拆为 12 种固定诊断码，区分适配器、JWT 格式、算法、关键头、发行者及 sub／selectedProfile／exp／nbf／iat／aud／jti；HTTP 503 与结构化错误包络保留，不回显声明值、令牌或解析异常。启动器同步诊断白名单；OpenAPI 6.1.1，完整 94／公开 11，无迁移。见 [换票诊断](docs/launcher-game-token-exchange.md#身份格式错误)。
+
 - 2026-11-02 地址级授权：按 CODE＋登记地址保存独立 Launcher 授权，YITUEM 两地址的状态在表格按地址顺序上下对齐，编辑页分别勾选；相同 ALI API 不合并授权。组织 PATCH 的 skinSiteAuthorizations 只修改给定地址，必须携带 launcherLoginRevision 并校验归属／地址；原组织开关写法显式设置全部地址。只撤销变化来源的会话，不影响另一地址，重开不恢复旧 Token。迁移 `202611020003_skin_site_launcher_authorization` 保留原授权作为默认，无新增表；OpenAPI 6.1.0，完整 94／公开 11。仅本地，见 [组织授权](docs/organization-launcher-authorization.md)。
 
 - 2026-11-02 组织启动器登录授权：组织表格显示 launcherLoginEnabled，组织管理员／超管在编辑页修改并提交 launcherLoginRevision；取消与重新授权均使旧来源会话失效，重开不恢复旧 Token。系统 Union 同步面板的 autoAuthorizeNewOrganizations 默认关闭，仅超管 Cookie＋同源＋修订可改，仅影响新建组织，不覆盖已有选择。Worker 在目录租约内按标准 ALI 为授权组织维护自动来源，保存前复核授权／站点修订；保留手动来源停用，不扩大游戏 Token 适配范围，不伪造 UID／日志验收。迁移 `202611020002_organization_launcher_authorization`，仍 34 张 FORCE RLS 表；OpenAPI 6.0.0，完整 94／公开 11。仅本地实施，见 [组织授权](docs/organization-launcher-authorization.md)。

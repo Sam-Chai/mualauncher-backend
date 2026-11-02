@@ -1,7 +1,7 @@
 import "server-only";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { z } from "zod";
-import { gameUuid, profileName } from "./launcher-game-contract";
+import { gameUuid, profileName, gameTokenClaimErrorCodes } from "./launcher-game-contract";
 import { gameTransport, type GameTransport } from "./launcher-game-network";
 import { AppError } from "./errors";
 import { diagnosticText } from "./diagnostics";
@@ -21,13 +21,15 @@ export function gameCheck(condition: unknown, status: number, code: string): ass
 export type GameProvider = { id: string; siteCode: string; revision: number; authApiRoot: string; adapter: string };
 const verifiedIdentity = Symbol("verified-game-identity");
 export type VerifiedGameIdentity = { readonly [verifiedIdentity]: true; subject: string; profile: { id: string; name: string }; upstreamExpiresAt: Date };
+// RFC 7519 NumericDate permits fractional seconds; retain their precision in expiry checks.
+const numericDate = z.number().finite().min(-8640000000000).max(8640000000000);
 const claims = z.object({ sub: z.string().regex(/^[1-9][0-9]{0,19}$/), selectedProfile: gameUuid,
-  exp: z.number().int().positive().max(8640000000000), nbf: z.number().int().optional(), iat: z.number().int().optional(),
+  exp: numericDate.positive(), nbf: numericDate.optional(), iat: numericDate.optional(),
   aud: z.union([z.string().min(1).max(256), z.array(z.string().min(1).max(256)).min(1).max(8)]), jti: z.string().min(1).max(256) });
 
 // The only identity-producing entrypoint: full token online validation precedes use of its claims.
 export async function verifyGameIdentity(provider: GameProvider, input: { gameAccessToken: string; gameClientToken?: string; gameProfile: { id: string; name?: string } }, transport: GameTransport = gameTransport): Promise<VerifiedGameIdentity> {
-  gameCheck(provider.adapter === "MUA_YGGC_ONLINE_V1", 503, "IDENTITY_PROOF_UNSUPPORTED");
+  gameCheck(provider.adapter === "MUA_YGGC_ONLINE_V1", 503, "PROVIDER_ADAPTER_UNSUPPORTED");
   const signal = AbortSignal.timeout(10_000);
   try {
     const validation = await transport(yggdrasilEndpoint(provider.authApiRoot, "authserver/validate"), JSON.stringify({ accessToken: input.gameAccessToken,
@@ -36,11 +38,18 @@ export async function verifyGameIdentity(provider: GameProvider, input: { gameAc
     gameCheck(validation.status === 204 && validation.bytes.length === 0, 502, "UPSTREAM_UNAVAILABLE");
     let header: ReturnType<typeof decodeProtectedHeader>, payload: ReturnType<typeof decodeJwt>;
     try { header = decodeProtectedHeader(input.gameAccessToken); payload = decodeJwt(input.gameAccessToken); }
-    catch { throw new GameLoginError(503, "IDENTITY_PROOF_UNSUPPORTED"); }
+    catch { throw new GameLoginError(503, "GAME_TOKEN_FORMAT_UNSUPPORTED"); }
     // This adapter supports traditional Passport game tokens only, not Janus or arbitrary issuers.
-    gameCheck(header.alg === "RS256" && !header.crit && payload.iss === undefined, 503, "IDENTITY_PROOF_UNSUPPORTED");
+    gameCheck(header.alg === "RS256", 503, "GAME_TOKEN_ALGORITHM_UNSUPPORTED");
+    gameCheck(header.crit === undefined, 503, "GAME_TOKEN_HEADER_UNSUPPORTED");
+    gameCheck(payload.iss === undefined, 503, "GAME_TOKEN_ISSUER_UNSUPPORTED");
     const parsed = claims.safeParse(payload);
-    gameCheck(parsed.success, 503, "IDENTITY_PROOF_UNSUPPORTED");
+    if (!parsed.success) {
+      // Return only a fixed code. Zod issues and claim values may contain credentials or identity data.
+      const field = parsed.error.issues[0]?.path[0];
+      throw new GameLoginError(503, gameTokenClaimErrorCodes[field as keyof typeof gameTokenClaimErrorCodes]
+        ?? "GAME_TOKEN_FORMAT_UNSUPPORTED");
+    }
     const c = parsed.data, now = Date.now() / 1000;
     gameCheck(c.exp > now + 90, 401, "GAME_TOKEN_EXPIRING");
     gameCheck((c.nbf === undefined || c.nbf <= now + 30) && (c.iat === undefined || c.iat <= now + 30), 401, "GAME_TOKEN_INVALID");

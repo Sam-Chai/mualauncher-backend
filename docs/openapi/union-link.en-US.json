@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Union Link API",
-    "version": "6.1.0",
+    "version": "6.1.1",
     "description": "Public Launcher authentication, member directory and four distribution reads. Administrative and automation operations remain private. API routes, package formats and documentation versions are independent."
   },
   "servers": [
@@ -3018,7 +3018,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3068,7 +3069,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3118,7 +3120,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3168,7 +3171,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3218,7 +3222,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3268,7 +3273,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3318,7 +3324,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3368,7 +3375,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3418,7 +3426,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3468,7 +3477,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3518,7 +3528,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3568,7 +3579,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3713,7 +3725,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3763,7 +3776,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3813,7 +3827,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3863,7 +3878,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3913,7 +3929,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -3963,7 +3980,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4013,7 +4031,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4063,7 +4082,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4113,7 +4133,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4163,7 +4184,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4213,7 +4235,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4263,7 +4286,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4479,7 +4503,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4529,7 +4554,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4579,7 +4605,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4629,7 +4656,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4679,7 +4707,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4729,7 +4758,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4779,7 +4809,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4829,7 +4860,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4879,7 +4911,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4929,7 +4962,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -4979,7 +5013,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",
@@ -5029,7 +5064,8 @@
                       "type": "string"
                     },
                     "code": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
                     },
                     "params": {
                       "type": "object",

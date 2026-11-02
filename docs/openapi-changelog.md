@@ -1,5 +1,9 @@
 # OpenAPI 兼容性记录
 
+## 6.1.1 · 2026-11-03 Launcher JWT 时间精度与身份诊断
+
+直接换票接受 RFC 7519 允许的有限小数秒 NumericDate，保留 exp／iat／nbf 的时间比较精度及现有到期保护。原合并的 IDENTITY_PROOF_UNSUPPORTED 改为 12 种固定错误码，分别指示适配器、JWT 解析、算法、关键头、发行者和七个身份声明字段的问题；保持 HTTP 503 及 error／code／params／requestId 结构，code 继续使用 diagnostics.game.* 前缀。错误不含字段值、原始 JWT 或解码异常，旧翻译键保留兼容。启动器错误码白名单同步，否则旧版只会显示 UNRECOGNIZED_BACKEND_ERROR。响应结构及操作数不变，OpenAPI 6.1.1，保留 6.1.0 基线，完整 94／公开 11；无需迁移，不修改授权、角色或签名。见 [换票诊断](launcher-game-token-exchange.md#身份格式错误)。
+
 ## 6.1.0 · 2026-11-02 按皮肤站地址独立授权
 
 后台组织 skinSites 的每项增加 launcherLoginEnabled，组织 PATCH 增加可选 skinSiteAuthorizations（CODE／url／enabled 数组，配合 launcherLoginRevision）。旧组织开关写法继续作为全地址设置；不与新数组混用。YITUEM 两地址分别显示、修改与撤销，取消一个地址不影响另一个来源的会话，即使解析到同一 API。新迁移以原组织授权作为各地址初值，不批量改变授权；Worker、手动核准和 SQL 有效性查询使用同一地址规则，抓取快照仍按组织修订防止竞态。新增可选请求及 DTO 字段已审查，版本 6.1.0，保留 6.0.0 基线，完整 94／公开 11、34 张 FORCE RLS 表不变。仅本地实施，见 [组织授权](organization-launcher-authorization.md)。

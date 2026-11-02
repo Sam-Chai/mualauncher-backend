@@ -1,5 +1,7 @@
 # Launcher 游戏令牌换票
 
+2026-11-03 修复：传统 Passport JWT 的 exp／iat／nbf 接受 RFC 7519 NumericDate 的有限小数秒，保留比较精度及 90 秒剩余有效期、30 秒时钟偏差保护。格式拒绝改为独立固定诊断码，详见下方“身份格式错误”；不记录原始令牌、声明值或解析异常。无需数据库迁移，OpenAPI 6.1.1。
+
 2026-11-02 组织授权补充：组织管理员和超管现在可在组织编辑窗口允许／撤销 Launcher 直接换票。Worker 为授权组织按 ALI 自动维护来源；系统设置可选择仅对新建组织自动授权。原超管来源接口继续作为手动配置／停用入口，自动同步不覆盖手动来源。组织授权、网络可用性和 Token 兼容性为不同条件，自动发现不声明完成 UID／日志验收。完整规则见 [组织启动器登录授权](organization-launcher-authorization.md)。
 
 2026-10-22：后端已实现；原生启动器和真实皮肤站游戏令牌仍需联调。[设计方案](launcher-yggdrasil-token-exchange-plan.md) 保留完整原理、安全边界及验收矩阵。
@@ -89,6 +91,27 @@ Token 到期为 min(签发时间+15分钟, 上游exp-30秒)，扣除余量后不
 默认不信任 X-Forwarded-For。仅后端被可信反向代理隔离且代理**覆盖**客户端同名头时，配置 `LAUNCHER_AUTH_CLIENT_IP_HEADER`；必须单个 IP，缺失或列表拒绝。启用后每 IP 创建/换票各 20 次、每 IP+来源换票 10 次/5 分钟。校园 NAT 需压测调整。不保证代理隔离时留空，不能声称已启用按 IP 限流。
 
 ## 4. 错误与 API 文档
+
+### 身份格式错误
+
+以下结果均为 HTTP 503，JSON 的 `code` 为 `diagnostics.game.<错误码>`，`params` 为 `{}`，并携带独立 `requestId`。除适配器拒绝外，均先要求同一原始 Token 通过固定皮肤站的在线验证；不会因解码成功就认定身份。多个字段同时不合规时，按表中顺序返回首个失败类别。旧 `IDENTITY_PROOF_UNSUPPORTED` 不再由该验证路径返回。
+
+| 错误码 | 原因 |
+| --- | --- |
+| `PROVIDER_ADAPTER_UNSUPPORTED` | 来源适配器未受支持 |
+| `GAME_TOKEN_FORMAT_UNSUPPORTED` | JWT 头或载荷无法解析为有效对象 |
+| `GAME_TOKEN_ALGORITHM_UNSUPPORTED` | JWT 算法不是 RS256 |
+| `GAME_TOKEN_HEADER_UNSUPPORTED` | JWT 存在未支持的 crit 关键头 |
+| `GAME_TOKEN_ISSUER_UNSUPPORTED` | JWT 带有当前适配器不支持的 iss |
+| `GAME_TOKEN_SUBJECT_UNSUPPORTED` | sub 缺失，或不是受支持的数字 UID 字符串 |
+| `GAME_TOKEN_PROFILE_INVALID` | selectedProfile 缺失或不是有效 UUID |
+| `GAME_TOKEN_EXPIRY_INVALID` | exp 缺失、不是正有限数字或超出日期范围 |
+| `GAME_TOKEN_NOT_BEFORE_INVALID` | 可选 nbf 存在但不是受支持的有限数字日期 |
+| `GAME_TOKEN_ISSUED_AT_INVALID` | 可选 iat 存在但不是受支持的有限数字日期 |
+| `GAME_TOKEN_AUDIENCE_INVALID` | aud 缺失或不符合字符串／字符串数组要求 |
+| `GAME_TOKEN_ID_INVALID` | jti 缺失或不符合非空字符串要求 |
+
+小数秒本身不是格式错误。时间合法但已过期／临近到期仍返回 `GAME_TOKEN_EXPIRING`（401）；签发／生效时间超过时钟偏差仍返回 `GAME_TOKEN_INVALID`（401）。已验证的角色与所选角色不符仍返回 `PROFILE_MISMATCH`（409）。HTTP 503 在这里表示当前身份合同无法支持，不代表请求没有到达服务器。启动器应识别上述代码并只记录代码、阶段、状态和 requestId，不输出 Token 或上游响应。
 
 新公开接口错误为 `{error,code,requestId}`，429 附 Retry-After:300。INVALID_REQUEST/LOGIN_ATTEMPT_INVALID 为 400；GAME_TOKEN_INVALID/EXPIRING 为 401；PROVIDER_DISABLED/ACCOUNT_OR_PROVIDER_UNAVAILABLE/INVALID_ORIGIN 为 403；PROFILE_MISMATCH/CHANGED/LOGIN_ATTEMPT_USED 为 409；过大/类型错误为 413/415；限流 429；上游失败 502，不支持身份合同或服务异常 503。
 

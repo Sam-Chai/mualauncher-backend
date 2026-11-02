@@ -5,14 +5,14 @@
 | 项目 | 值 |
 | --- | --- |
 | OpenAPI 标准版本 | `3.1.0` |
-| API 文档版本 | `6.1.0` |
+| API 文档版本 | `6.1.1` |
 | 应用版本 | `0.2.0` |
 | 完整操作数 | 94 |
 | 公开规范收录操作数 | 11 |
 | 生成日期 | 2026-11-02 |
 | 完整规范来源 | [docs/openapi/union-link.admin.zh-CN.json](docs/openapi/union-link.admin.zh-CN.json) |
 | 公开规范来源 | [docs/openapi/union-link.zh-CN.json](docs/openapi/union-link.zh-CN.json) |
-| 完整规范 SHA-256 | `6fc00c3ea5dba81d296ccbe503b558641d8fa733478fa3df62140d5adf26ac05` |
+| 完整规范 SHA-256 | `ce0fb4380c0e42aa748eacc301a8f578f959258b5d4a796db6785bb3e1e79e24` |
 
 本文件按本地已校验的 OpenAPI JSON 生成，包含后台完整接口。规范中的参数、约束、响应码及权限标识原样保留；未提供的业务示例不作推测。接口说明及运行时校验仍决定跨字段、RBAC、修订和生命周期规则。
 
@@ -21676,7 +21676,7 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
 | --- | --- | --- | --- | --- |
 | `$` | object | — | 不接受额外字段 |  |
 | `error` | string | 是 |  |  |
-| `code` | string | 是 |  |  |
+| `code` | string | 是 |  | Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID. |
 | `params` | object | 是 | 动态字段值：anyOf（2 个分支） |  |
 | `params{key}` | anyOf（2 个分支） | 动态字段 |  |  |
 | `params{key}.anyOf[1]` | string | 分支内适用 |  |  |
@@ -21694,7 +21694,8 @@ OAuth 使用独立五分钟 Lax Cookie、一次性 state 和 S256 PKCE；Launche
       "type": "string"
     },
     "code": {
-      "type": "string"
+      "type": "string",
+      "description": "Stable diagnostics.game.* key. Identity proof failures: PROVIDER_ADAPTER_UNSUPPORTED, GAME_TOKEN_FORMAT_UNSUPPORTED, GAME_TOKEN_ALGORITHM_UNSUPPORTED, GAME_TOKEN_HEADER_UNSUPPORTED, GAME_TOKEN_ISSUER_UNSUPPORTED, GAME_TOKEN_SUBJECT_UNSUPPORTED, GAME_TOKEN_PROFILE_INVALID, GAME_TOKEN_EXPIRY_INVALID, GAME_TOKEN_NOT_BEFORE_INVALID, GAME_TOKEN_ISSUED_AT_INVALID, GAME_TOKEN_AUDIENCE_INVALID, GAME_TOKEN_ID_INVALID."
     },
     "params": {
       "type": "object",
